@@ -1,0 +1,76 @@
+{
+  "system": {
+    "project_name": "DSH 股票监控与量化分析系统",
+    "version": "v1.0.0",
+    "data_timeout_seconds": 5,
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  },
+  "indices": [
+    { "code": "sh000001", "name": "上证指数", "market": "CN" },
+    { "code": "sz399001", "name": "深证成指", "market": "CN" },
+    { "code": "sz399006", "name": "创业板指", "market": "CN" },
+    { "code": "hkHSI", "name": "恒生指数", "market": "HK" }
+  ],
+  "watchlist": [
+    { "code": "sh600519", "name": "贵州茅台", "category": "白酒龙头", "target_price": 1850.0 },
+    { "code": "sz300750", "name": "宁德时代", "category": "锂电储能", "target_price": 260.0 },
+    { "code": "sz002594", "name": "比亚迪", "category": "新能源整车", "target_price": 310.0 },
+    { "code": "sh601318", "name": "中国平安", "category": "金融蓝筹", "target_price": 55.0 },
+    { "code": "sh688981", "name": "中芯国际", "category": "半导体芯片", "target_price": 98.0 },
+    { "code": "sz000001", "name": "平安银行", "category": "股份制银行", "target_price": 14.5 }
+  ],
+  "portfolio": [
+    {
+      "code": "sh600519",
+      "name": "贵州茅台",
+      "shares": 100,
+      "cost_price": 1580.00,
+      "buy_date": "2026-06-15",
+      "notes": "高端白酒核心底仓"
+    },
+    {
+      "code": "sz300750",
+      "name": "宁德时代",
+      "shares": 300,
+      "cost_price": 192.50,
+      "buy_date": "2026-07-20",
+      "notes": "动力电池出海先锋"
+    },
+    {
+      "code": "sz002594",
+      "name": "比亚迪",
+      "shares": 200,
+      "cost_price": 255.00,
+      "buy_date": "2026-08-01",
+      "notes": "新能源渗透率提升主线"
+    }
+  ],
+  "alert_rules": {
+    "take_profit_ratio": 0.20,
+    "stop_loss_ratio": -0.08,
+    "daily_surge_ratio": 0.05,
+    "daily_plunge_ratio": -0.05,
+    "rsi_overbought": 80.0,
+    "rsi_oversold": 20.0
+  },
+  "indicator_params": {
+    "ma_periods": [5, 10, 20, 60],
+    "macd": { "fast": 12, "slow": 26, "signal": 9 },
+    "rsi_periods": [6, 12, 24],
+    "boll": { "period": 20, "std_dev_multiplier": 2.0 },
+    "kdj": { "n": 9, "m1": 3, "m2": 3 }
+  },
+  "scoring_weights": {
+    "trend_weight": 35,
+    "momentum_weight": 25,
+    "ma_support_weight": 20,
+    "volatility_weight": 20
+  },
+  "display": {
+    "svg_width": 960,
+    "svg_height": 520,
+    "theme": "dark",
+    "reports_dir": "reports",
+    "charts_dir": "reports/charts"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "dsh_stock_analysis",
+  "version": "1.0.0",
+  "description": "DSH 股票行情监控、多空量化评分、持仓诊断与矢量图表研报生成技能",
+  "author": "DSH Quant Ecosystem",
+  "entrypoint": "scripts/dsh_stock_cli.py",
+  "capabilities": [
+    {
+      "name": "get_stock_quote",
+      "description": "获取沪深A股、大盘指数或港美股单只或多只标的的最新实时行情（现价、涨跌幅、成交额、量比等）",
+      "when_to_use": "用户询问某股票价格、今日大盘点位、股票涨跌幅或批量对比股票行情时使用",
+      "when_not_to_use": "用户询问非金融行情信息、宏观政策长文解读或期货/外汇小众品种时切勿滥用",
+      "cli_command": "python3 scripts/dsh_stock_cli.py quote <codes...>"
+    },
+    {
+      "name": "analyze_stock_quant",
+      "description": "基于 100 分制多空量化模型深度评估单只股票的趋势、动量、支撑与风险，并输出具体操作指引",
+      "when_to_use": "用户询问'某股票现在能买吗'、'深度分析某股票走势'、'给某股票打分'时使用",
+      "when_not_to_use": "用户仅需要最新价格或单纯查询大盘时无需跑完整量化模型",
+      "cli_command": "python3 scripts/dsh_stock_cli.py analyze <code>"
+    },
+    {
+      "name": "check_portfolio_status",
+      "description": "体检当前投资组合持仓总市值、浮动盈亏额、各标的收益率分布与止盈止损风险预警",
+      "when_to_use": "用户询问持仓盈亏状况、组合风险评估或需要止盈止损建议时使用",
+      "when_not_to_use": "用户查询单只陌生未持仓股票时请使用 analyze 或 quote",
+      "cli_command": "python3 scripts/dsh_stock_cli.py portfolio"
+    },
+    {
+      "name": "generate_stock_chart",
+      "description": "生成指定股票的高颜值矢量 SVG 走势图表（含K线、MA均线与成交量副图）",
+      "when_to_use": "用户需要可视化走势图、K线图或图表文件直达链接时使用",
+      "when_not_to_use": "纯文本终端快速问答、低带宽或用户仅需数字指标时不需要生成图表",
+      "cli_command": "python3 scripts/dsh_stock_cli.py chart <code>"
+    },
+    {
+      "name": "generate_stock_daily_report",
+      "description": "一键拉取大盘、自选与持仓，生成 Markdown 综合研报并持久化到 reports 目录",
+      "when_to_use": "每日收盘复盘、早盘策略生成或一键输出完整监控总结时使用",
+      "when_not_to_use": "频繁的高频即时查询中切勿反复触发全量研报",
+      "cli_command": "python3 scripts/dsh_stock_cli.py report"
+    }
+  ]
+}
