@@ -482,10 +482,21 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(200, CRAWLER_JOB.get_snapshot())
             return
 
-        # 3.2 全市场宏观仪表盘聚合数据端点
+        # 3.2 全市场宏观仪表盘聚合数据端点 (支持 ?start_date=...&end_date=... 查询)
         if url_path == "/api/dashboard/overview":
+            query_params = {}
+            if "?" in self.path:
+                q_str = self.path.split("?", 1)[1]
+                for part in q_str.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        query_params[k.strip()] = v.strip()
+
+            s_date = query_params.get("start_date")
+            e_date = query_params.get("end_date")
+
             all_stocks = list(DATA_MANAGER.stocks_dict.values())
-            dashboard_data = compute_market_overview(all_stocks)
+            dashboard_data = compute_market_overview(all_stocks, start_date=s_date, end_date=e_date)
             self._send_json(200, {
                 "code": 200,
                 "version": APP_VERSION,

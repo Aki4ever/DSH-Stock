@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>【v1.6.1】A股多维量化筛选器 - DSH Stock Web</title>
+  <title>【v1.8.0】A股多维量化筛选器 - DSH Stock Web</title>
   <link rel="stylesheet" href="/web/style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v1.6.1</span>
+      <span id="appVersionBadge" class="version-badge">v1.8.0</span>
       <span class="brand-tag">全市场主板+创业板</span>
     </div>
 
@@ -384,21 +384,53 @@
     <div id="viewDashboardTab" class="tab-view hidden">
       <div class="macro-dashboard">
 
-        <!-- 宏观顶栏总览卡片 -->
+        <!-- 宏观顶栏总览与日期区间控件 -->
         <div class="macro-summary-card">
           <div class="macro-header-left">
             <h2 style="font-size: 1.35rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
               <span>📈 全市场 A 股宏观全景仪表盘</span>
-              <span class="version-badge" style="font-size: 0.75rem;">统计学分布中枢</span>
+              <span class="version-badge" style="font-size: 0.75rem;">动态时序中枢</span>
             </h2>
             <p style="color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.35rem;">
-              深度覆盖全市场全部主板与创业板标的。针对 10 大核心量化维度，严谨计算全市场<strong>最小值 (Min)</strong>、<strong>最大值 (Max)</strong>、<strong>平均值 (Mean)</strong>与<strong>中位数 (Median)</strong>，还原最真实的宏观全景水位。
+              支持选取<strong>开始日期</strong>与<strong>结束日期</strong>动态穿透统计。所有 10 大维度（Min/Max/Mean/Median）与 5 档涨跌幅阶梯全部随时间区间动态计算。
             </p>
           </div>
-          <div class="macro-header-right">
-            <button class="btn btn-secondary" onclick="loadDashboardOverview()" style="padding: 0.45rem 0.9rem; font-size: 0.85rem;">
-              🔄 实时刷新概览
-            </button>
+
+          <!-- 双日期区间选择控件组 -->
+          <div class="macro-date-control-box">
+            <div class="date-picker-group">
+              <span class="date-label">📅 统计区间:</span>
+              <input type="date" id="dashStartDate" class="date-input-mini" title="统计开始日期">
+              <span style="color: var(--text-muted);">➔</span>
+              <input type="date" id="dashEndDate" class="date-input-mini" title="统计结束日期">
+            </div>
+            <!-- 快速区间快捷键 -->
+            <div class="date-quick-presets">
+              <button class="btn-quick-date active" onclick="setDashboardDateRange('today')">单日(今天)</button>
+              <button class="btn-quick-date" onclick="setDashboardDateRange('5d')">近5日(周)</button>
+              <button class="btn-quick-date" onclick="setDashboardDateRange('20d')">近20日(月)</button>
+              <button class="btn btn-primary" onclick="loadDashboardOverview()" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;">
+                🔍 动态重算
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 核心新增：涨跌幅 5 档全覆盖严密阶梯看板 (总数恒等于 4,601 只，绝对闭环) -->
+        <div class="tiers5-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.7rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="font-weight: 700; font-size: 0.98rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>🎯 涨跌幅 5 档严密全覆盖统计阶梯</span>
+              <span class="brand-tag" style="font-size: 0.7rem;">100% 互斥闭环</span>
+            </div>
+            <div style="font-size: 0.82rem; color: var(--text-muted);">
+              区间标的校验: <span id="dashTiersSum" style="color: #38bdf8; font-weight: 700;">4,601</span> / 4,601 只 
+              <span id="dashTiersCompleteBadge" class="tag-badge" style="background-color: rgba(34, 197, 94, 0.2); color: #4ade80; margin-left: 0.3rem;">✅ 100% 无遗漏</span>
+            </div>
+          </div>
+
+          <div class="tiers5-grid" id="dashTiersGrid">
+            <!-- 由 JS 动态渲染 5 档卡片: 涨幅>5%、0~5%涨幅、平盘0%、0~5%跌幅、跌幅>5% -->
           </div>
         </div>
 

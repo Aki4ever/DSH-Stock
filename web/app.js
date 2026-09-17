@@ -55,10 +55,15 @@ const dom = {
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
 
   // 宏观仪表盘 DOM
+  dashStartDate: document.getElementById('dashStartDate'),
+  dashEndDate: document.getElementById('dashEndDate'),
   dashTotalStocks: document.getElementById('dashTotalStocks'),
   dashUpRatio: document.getElementById('dashUpRatio'),
   dashLimitUp: document.getElementById('dashLimitUp'),
   dashLimitDown: document.getElementById('dashLimitDown'),
+  dashTiersGrid: document.getElementById('dashTiersGrid'),
+  dashTiersSum: document.getElementById('dashTiersSum'),
+  dashTiersCompleteBadge: document.getElementById('dashTiersCompleteBadge'),
   breadthBarUp: document.getElementById('breadthBarUp'),
   breadthBarFlat: document.getElementById('breadthBarFlat'),
   breadthBarDown: document.getElementById('breadthBarDown'),
@@ -230,13 +235,54 @@ function initDateControl() {
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
-  dom.filterDateInput.value = `${yyyy}-${mm}-${dd}`;
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+
+  if (dom.filterDateInput) dom.filterDateInput.value = todayStr;
+  if (dom.dashStartDate) dom.dashStartDate.value = todayStr;
+  if (dom.dashEndDate) dom.dashEndDate.value = todayStr;
+}
+
+/**
+ * 仪表盘快速日期区间设定
+ */
+function setDashboardDateRange(rangeType) {
+  const today = new Date();
+  const formatDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const todayStr = formatDate(today);
+  dom.dashEndDate.value = todayStr;
+
+  if (rangeType === 'today') {
+    dom.dashStartDate.value = todayStr;
+  } else if (rangeType === '5d') {
+    const d5 = new Date();
+    d5.setDate(today.getDate() - 7);
+    dom.dashStartDate.value = formatDate(d5);
+  } else if (rangeType === '20d') {
+    const d20 = new Date();
+    d20.setDate(today.getDate() - 30);
+    dom.dashStartDate.value = formatDate(d20);
+  }
+
+  document.querySelectorAll('.btn-quick-date').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  if (event && event.target) {
+    event.target.classList.add('active');
+  }
+
+  loadDashboardOverview();
 }
 
 /**
  * 同步网页 Title 与 Header 版本号
  */
-function syncVersionAndTitle(version = 'v1.6.1') {
+function syncVersionAndTitle(version = 'v1.8.0') {
   appState.version = version;
   document.title = `【${version}】A股多维量化筛选器 - DSH Stock Web`;
   if (dom.appVersionBadge) {
@@ -697,11 +743,22 @@ function roundTo(num, decimals) {
 // ====================================================
 
 /**
- * 加载全市场宏观仪表盘数据
+ * 加载全市场宏观仪表盘数据 (带开始与结束日期区间参数)
  */
 async function loadDashboardOverview() {
+  const startDate = dom.dashStartDate ? dom.dashStartDate.value.trim() : '';
+  const endDate = dom.dashEndDate ? dom.dashEndDate.value.trim() : '';
+
+  let url = '/api/dashboard/overview';
+  const params = [];
+  if (startDate) params.push(`start_date=${encodeURIComponent(startDate)}`);
+  if (endDate) params.push(`end_date=${encodeURIComponent(endDate)}`);
+  if (params.length > 0) {
+    url += '?' + params.join('&');
+  }
+
   try {
-    const res = await fetch('/api/dashboard/overview', { cache: 'no-store' });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const data = json.data;
@@ -714,13 +771,45 @@ async function loadDashboardOverview() {
 }
 
 /**
- * 渲染全市场宏观仪表盘 UI (10 大维度 4 分位指标卡 + 宏观分布图谱)
+ * 渲染全市场宏观仪表盘 UI (5 档全覆盖阶梯 + 10 大维度 4 分位指标卡 + 宏观分布图谱)
  */
 function renderMacroDashboardUI(data) {
   if (!data) return;
 
   const sum = data.summary || {};
   const total = sum.total_stocks || 1;
+
+  // 0. 渲染 5 档严密互斥涨跌阶梯
+  const tiers5Data = (data.charts && data.charts.tiers_5) ? data.charts.tiers_5 : null;
+  if (tiers5Data && dom.dashTiersGrid) {
+    dom.dashTiersGrid.innerHTML = '';
+    const items = tiers5Data.items || [];
+    items.forEach(item => {
+      const col = document.createElement('div');
+      col.className = 'tier5-item';
+      col.style.borderColor = `rgba(${item.color === '#ef4444' || item.color === '#b91c1c' ? '239, 68, 68' : item.color === '#64748b' ? '100, 116, 139' : '16, 185, 129'}, 0.4)`;
+
+      col.innerHTML = `
+        <div class="tier5-header">
+          <span class="tier5-name" style="color: ${item.color};">${item.name}</span>
+          <span class="tier5-range" style="color: ${item.color}; border: 1px solid ${item.color}40;">${item.range}</span>
+        </div>
+        <div class="tier5-count-row">
+          <span class="tier5-count" style="color: ${item.color};">${item.count.toLocaleString()}</span>
+          <span class="tier5-unit">家 (${item.pct}%)</span>
+        </div>
+        <div class="tier5-pct-bar">
+          <div class="tier5-pct-fill" style="width: ${Math.max(2, item.pct)}%; background-color: ${item.color};"></div>
+        </div>
+      `;
+      dom.dashTiersGrid.appendChild(col);
+    });
+
+    if (dom.dashTiersSum) dom.dashTiersSum.textContent = (tiers5Data.verified_sum || total).toLocaleString();
+    if (dom.dashTiersCompleteBadge) {
+      dom.dashTiersCompleteBadge.style.display = tiers5Data.is_complete ? 'inline-block' : 'none';
+    }
+  }
 
   // 1. 晴雨表与胜率指标
   if (dom.dashTotalStocks) dom.dashTotalStocks.textContent = (sum.total_stocks || 0).toLocaleString();
@@ -791,6 +880,10 @@ function renderMacroDashboardUI(data) {
   }
 
   // 3. 渲染图形化图表 (涨跌梯度分布直方图 + 市值规模梯队金字塔)
+  const charts = data.charts || {};
+  renderChangeDistributionChart(charts.change_distribution);
+  renderCapTiersPyramidChart(charts.market_cap_tiers, total);
+}
   const charts = data.charts || {};
   renderChangeDistributionChart(charts.change_distribution);
   renderCapTiersPyramidChart(charts.market_cap_tiers, total);

@@ -940,7 +940,161 @@ body {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 1.2rem;
+}
+
+/* 仪表盘双日期区间选择控件 */
+.macro-date-control-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.date-picker-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: rgba(11, 19, 41, 0.7);
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.date-label {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.date-input-mini {
+  background-color: rgba(30, 41, 59, 0.8);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  outline: none;
+}
+
+.date-input-mini:focus {
+  border-color: var(--accent-blue);
+}
+
+.date-quick-presets {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.btn-quick-date {
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-quick-date:hover {
+  background-color: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.btn-quick-date.active {
+  background-color: var(--accent-blue);
+  color: #ffffff;
+  border-color: var(--accent-blue);
+  font-weight: 600;
+}
+
+/* 5 档严密互斥涨跌阶梯看板 */
+.tiers5-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.4rem;
+}
+
+.tiers5-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .tiers5-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.tier5-item {
+  background-color: rgba(15, 23, 42, 0.6);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid rgba(51, 65, 85, 0.4);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.tier5-item:hover {
+  transform: translateY(-2px);
+}
+
+.tier5-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tier5-name {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.tier5-range {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background-color: rgba(30, 41, 59, 0.6);
+}
+
+.tier5-count-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
+.tier5-count {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-family: monospace;
+}
+
+.tier5-unit {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.tier5-pct-bar {
+  height: 6px;
+  background-color: rgba(30, 41, 59, 0.8);
+  border-radius: 9999px;
+  overflow: hidden;
+  margin-top: 0.2rem;
+}
+
+.tier5-pct-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease;
 }
 
 .market-breadth-card {
