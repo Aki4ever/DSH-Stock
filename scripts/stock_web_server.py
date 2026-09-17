@@ -314,17 +314,18 @@ class StockDataManager:
                 continue
             elif constituent == "csi100" and not s["is_csi100"]:
                 continue
-            # 关键字智能规则检索 (代码/名称，全匹配优先，部分匹配兼容)
+            # 关键字智能规则检索 (代码/名称/首字母拼音，全匹配优先，部分匹配兼容)
             if keyword:
                 c_full = s["code"].lower()
                 c_raw = s["raw_code"].lower()
                 s_name = s["name"].lower()
+                p_abbr = str(s.get("pinyin_abbr") or "").lower()
 
-                # 1. 全匹配判定 (代码全等 或 名称全等)
-                is_exact_match = (keyword == c_raw) or (keyword == c_full) or (keyword == s_name)
+                # 1. 全匹配判定 (代码全等 或 名称全等 或 拼音缩写全等，如 GZMT)
+                is_exact_match = (keyword == c_raw) or (keyword == c_full) or (keyword == s_name) or (keyword == p_abbr)
 
-                # 2. 部分匹配判定 (包含或前缀)
-                is_partial_match = (keyword in c_raw) or (keyword in c_full) or (keyword in s_name)
+                # 2. 部分匹配判定 (包含或前缀，如 MT 匹配 GZMT)
+                is_partial_match = (keyword in c_raw) or (keyword in c_full) or (keyword in s_name) or (keyword in p_abbr)
 
                 if not (is_exact_match or is_partial_match):
                     continue
@@ -635,6 +636,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                     {"id": "circ_cap", "name": "流通市值区间", "type": "range", "unit": "亿元"},
                     {"id": "pe", "name": "市盈率 PE", "type": "range", "unit": "倍"},
                     {"id": "dividend_count", "name": "分红次数", "type": "range", "unit": "次"},
+                    {"id": "dividend_total_amount", "name": "累计分红总额", "type": "range", "unit": "亿元"},
                     {"id": "listing_years", "name": "上市时长", "type": "range", "unit": "年"},
                     {"id": "top10_circ", "name": "十大流通股东持股", "type": "range", "unit": "%"},
                     {"id": "top10_hold", "name": "十大股东持股", "type": "range", "unit": "%"},

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>【v2.0.0】A股多维量化筛选器 - DSH Stock Web</title>
+  <title>【v2.1.0】A股多维量化筛选器 - DSH Stock Web</title>
   <link rel="stylesheet" href="/web/style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v2.0.0</span>
+      <span id="appVersionBadge" class="version-badge">v2.1.0</span>
       <span class="brand-tag">全市场主板+创业板</span>
     </div>
 
@@ -97,26 +97,26 @@
         <!-- 核心多维筛选控件网格 (每个维度均配有单项即时重置按钮) -->
         <div class="filter-grid">
 
-          <!-- 控件 0: 标的搜索框 (代码/名称，全匹配/部分匹配) -->
+          <!-- 控件 0: 标的智能检索 (兼容中文名称、代码与拼音首字母缩写) -->
           <div class="filter-item" style="grid-column: span 2;">
             <div class="filter-label">
               <div class="label-left">
-                <span>🔎 标的智能检索 (代码/名称)</span>
-                <span class="filter-label-hint">全匹配(如600519/贵州茅台) ｜ 部分匹配(如300/银行)</span>
+                <span>🔎 标的智能检索 (代码 / 中文 / 拼音缩写)</span>
+                <span class="filter-label-hint">支持全拼缩写(GZMT/贵州茅台) ｜ 局部拼音(MT/BYD) ｜ 6位代码(600519)</span>
               </div>
               <div class="label-right">
                 <button type="button" class="btn-item-reset" onclick="resetSingleDimension('keyword')" title="清空搜索关键字">↺ 清空</button>
               </div>
             </div>
             <div style="display: flex; gap: 0.5rem;">
-              <input type="text" id="keywordInput" class="input-search" placeholder="输入股票名称、6位完整代码或前缀数字即搜 (回车快速确认)...">
+              <input type="text" id="keywordInput" class="input-search" placeholder="输入股票名称、6位代码或首字母缩写(如 GZMT/MT/BYD/PAYH/宁德)...">
               <button class="btn btn-secondary" style="padding: 0.4rem 0.9rem; font-size: 0.85rem;" onclick="triggerFilterSubmit()">
                 搜索
               </button>
             </div>
           </div>
 
-          <!-- 控件 1: 筛选基准日期 (附带休市日与开市日强视觉徽章) -->
+          <!-- 控件 1: 筛选基准日期 (统一配置快捷标签: 今天 / 近5日 / 近20天 与休市日强视觉) -->
           <div class="filter-item">
             <div class="filter-label">
               <div class="label-left">
@@ -127,7 +127,14 @@
               </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-              <input type="date" id="filterDateInput" class="input-date">
+              <div style="display: flex; gap: 0.4rem; align-items: center;">
+                <input type="date" id="filterDateInput" class="input-date" style="flex: 1;">
+                <div class="date-quick-presets" style="margin-left: 0;">
+                  <button type="button" class="btn-quick-date active" id="btnDateQuickToday" onclick="setQuickDateFilter('today', event)">今天</button>
+                  <button type="button" class="btn-quick-date" id="btnDateQuick5d" onclick="setQuickDateFilter('5d', event)">近5日(周)</button>
+                  <button type="button" class="btn-quick-date" id="btnDateQuick20d" onclick="setQuickDateFilter('20d', event)">近20天(月)</button>
+                </div>
+              </div>
               <div id="filterDateTradingStatus" class="trading-status-tip trading-status-open">
                 <span class="status-dot"></span>
                 <span id="filterDateStatusText">🟢 正常开市交易 (周四)</span>
@@ -350,6 +357,7 @@
               <th onclick="sortTable('circulating_cap')">流通市值 (亿) ⇅</th>
               <th onclick="sortTable('pe')">市盈率 PE ⇅</th>
               <th onclick="sortTable('dividend_count')">分红次数 ⇅</th>
+              <th onclick="sortTable('dividend_total_amount')">累计分红总额(亿) ⇅</th>
               <th onclick="sortTable('listing_years')">上市总时长 ⇅</th>
               <th onclick="sortTable('top10_circ_hold_pct')">十大流通股东 ⇅</th>
               <th onclick="sortTable('top10_hold_pct')">十大股东 ⇅</th>
@@ -529,6 +537,12 @@
               <input type="date" id="worldStartDate" class="date-input-mini" title="评估开始日期">
               <span style="color: var(--text-muted);">➔</span>
               <input type="date" id="worldEndDate" class="date-input-mini" title="评估结束日期">
+            </div>
+            <!-- 快捷日期胶囊标签: 今天 / 近5日(周) / 近20天(月) -->
+            <div class="date-quick-presets">
+              <button class="btn-quick-date" id="btnWorldQuickToday" onclick="setWorldQuickDateRange('today', event)">今天</button>
+              <button class="btn-quick-date" id="btnWorldQuick5d" onclick="setWorldQuickDateRange('5d', event)">近5日(周)</button>
+              <button class="btn-quick-date active" id="btnWorldQuick20d" onclick="setWorldQuickDateRange('20d', event)">近20天(月)</button>
               <button class="btn btn-primary" onclick="loadWorldMacroIntelligence()" style="padding: 0.25rem 0.65rem; font-size: 0.78rem;">
                 🔍 评估
               </button>

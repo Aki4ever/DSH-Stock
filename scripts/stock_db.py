@@ -240,6 +240,8 @@ def load_all_stocks_from_db() -> List[Dict[str, Any]]:
         SELECT
             m.code, m.raw_code, m.name, m.market, m.market_code, m.board, m.board_code,
             m.is_csi50, m.is_csi100, m.ipo_date, m.listing_years, m.dividend_count,
+            COALESCE(m.dividend_total_amount, 0.0) AS dividend_total_amount,
+            COALESCE(m.pinyin_abbr, '') AS pinyin_abbr,
             COALESCE(q.price, 0.0) AS price,
             COALESCE(q.change_val, 0.0) AS change_val,
             COALESCE(q.change_pct, 0.0) AS change_pct,

@@ -293,26 +293,81 @@ function initDateControl() {
 }
 
 /**
- * 实时核验日期是否为休市日并进行强视觉提醒
+ * 筛选器快速日期设定 (今天 / 近5日(周) / 近20天(月))
  */
-async function checkFilterDateTradingStatus(dateStr) {
-  if (!dom.filterDateTradingStatus || !dom.filterDateStatusText) return;
-  try {
-    const res = await fetch(`/api/calendar/check?date=${dateStr}`);
-    if (!res.ok) return;
-    const json = await res.json();
-    const cal = json.data;
+function setQuickDateFilter(rangeType, evt = null) {
+  const today = new Date();
+  const formatDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
-    if (cal.is_trading_day) {
-      dom.filterDateTradingStatus.className = 'trading-status-tip trading-status-open';
-      dom.filterDateStatusText.textContent = cal.badge_text;
-    } else {
-      dom.filterDateTradingStatus.className = 'trading-status-tip trading-status-closed';
-      dom.filterDateStatusText.textContent = `${cal.badge_text} - 非交易日`;
-    }
-  } catch (err) {
-    console.error('日历判定异常:', err);
+  let targetDate = today;
+  if (rangeType === '5d') {
+    targetDate = new Date();
+    targetDate.setDate(today.getDate() - 7);
+  } else if (rangeType === '20d') {
+    targetDate = new Date();
+    targetDate.setDate(today.getDate() - 30);
   }
+
+  const dtStr = formatDate(targetDate);
+  if (dom.filterDateInput) {
+    dom.filterDateInput.value = dtStr;
+    checkFilterDateTradingStatus(dtStr);
+  }
+
+  // 胶囊高亮状态
+  ['btnDateQuickToday', 'btnDateQuick5d', 'btnDateQuick20d'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  if (rangeType === 'today' && document.getElementById('btnDateQuickToday')) document.getElementById('btnDateQuickToday').classList.add('active');
+  if (rangeType === '5d' && document.getElementById('btnDateQuick5d')) document.getElementById('btnDateQuick5d').classList.add('active');
+  if (rangeType === '20d' && document.getElementById('btnDateQuick20d')) document.getElementById('btnDateQuick20d').classList.add('active');
+
+  appState.page = 1;
+  executeFilter();
+}
+
+/**
+ * 外部宏观环境快速日期区间设定 (今天 / 近5日(周) / 近20天(月))
+ */
+function setWorldQuickDateRange(rangeType, evt = null) {
+  const today = new Date();
+  const formatDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const todayStr = formatDate(today);
+  if (dom.worldEndDate) dom.worldEndDate.value = todayStr;
+
+  if (rangeType === 'today') {
+    if (dom.worldStartDate) dom.worldStartDate.value = todayStr;
+  } else if (rangeType === '5d') {
+    const d5 = new Date();
+    d5.setDate(today.getDate() - 7);
+    if (dom.worldStartDate) dom.worldStartDate.value = formatDate(d5);
+  } else if (rangeType === '20d') {
+    const d20 = new Date();
+    d20.setDate(today.getDate() - 30);
+    if (dom.worldStartDate) dom.worldStartDate.value = formatDate(d20);
+  }
+
+  ['btnWorldQuickToday', 'btnWorldQuick5d', 'btnWorldQuick20d'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  if (rangeType === 'today' && document.getElementById('btnWorldQuickToday')) document.getElementById('btnWorldQuickToday').classList.add('active');
+  if (rangeType === '5d' && document.getElementById('btnWorldQuick5d')) document.getElementById('btnWorldQuick5d').classList.add('active');
+  if (rangeType === '20d' && document.getElementById('btnWorldQuick20d')) document.getElementById('btnWorldQuick20d').classList.add('active');
+
+  loadWorldMacroIntelligence();
 }
 
 /**
@@ -356,7 +411,7 @@ function setDashboardDateRange(rangeType, evt = null) {
 /**
  * 同步网页 Title 与 Header 版本号
  */
-function syncVersionAndTitle(version = 'v2.0.0') {
+function syncVersionAndTitle(version = 'v2.1.0') {
   appState.version = version;
   document.title = `【${version}】A股多维量化筛选器 - DSH Stock Web`;
   if (dom.appVersionBadge) {
@@ -735,6 +790,8 @@ function renderStockTable() {
     }
 
     const dividendCount = stock.dividend_count !== undefined ? `${stock.dividend_count}次` : '0次';
+    const divTotalYi = Number(stock.dividend_total_amount || 0);
+    const divTotalStr = divTotalYi > 0 ? `¥${divTotalYi.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} 亿` : '<span style="color: var(--text-muted);">--</span>';
     const listingYears = stock.listing_years !== undefined ? `${Number(stock.listing_years).toFixed(1)}年` : '0.0年';
 
     // 股东持股真实累加占比 (杜绝 100%)
@@ -785,6 +842,9 @@ function renderStockTable() {
       </td>
       <td>
         <span style="color: #f59e0b; font-weight: 600;">${dividendCount}</span>
+      </td>
+      <td>
+        <span style="color: #fbbf24; font-weight: 700; font-family: monospace;">${divTotalStr}</span>
       </td>
       <td>
         <span style="color: #10b981; font-weight: 600;">${listingYears}</span>
