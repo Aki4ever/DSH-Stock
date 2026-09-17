@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>【v1.8.0】A股多维量化筛选器 - DSH Stock Web</title>
+  <title>【v1.8.1】A股多维量化筛选器 - DSH Stock Web</title>
   <link rel="stylesheet" href="/web/style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v1.8.0</span>
+      <span id="appVersionBadge" class="version-badge">v1.8.1</span>
       <span class="brand-tag">全市场主板+创业板</span>
     </div>
 
@@ -32,11 +32,11 @@
 
     <!-- 服务端运行状态常显中枢 -->
     <div class="server-status-box">
-      <div id="serverStatusBadge" class="status-badge offline">
+      <div id="serverStatusBadge" class="status-badge online">
         <div class="status-indicator"></div>
-        <span id="serverStatusText">检测服务中...</span>
+        <span id="serverStatusText">服务运行中</span>
       </div>
-      <span id="serverPingText" class="server-stats-text">延迟: -- ms</span>
+      <span id="serverPingText" class="server-stats-text">延迟: 1ms</span>
       <span id="serverStockCountText" class="server-stats-text">全量标的: 4,601</span>
       <button id="btnRefreshQuotes" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" title="刷新最新行情并入库">
         🔄 刷新
@@ -406,9 +406,9 @@
             </div>
             <!-- 快速区间快捷键 -->
             <div class="date-quick-presets">
-              <button class="btn-quick-date active" onclick="setDashboardDateRange('today')">单日(今天)</button>
-              <button class="btn-quick-date" onclick="setDashboardDateRange('5d')">近5日(周)</button>
-              <button class="btn-quick-date" onclick="setDashboardDateRange('20d')">近20日(月)</button>
+              <button class="btn-quick-date active" onclick="setDashboardDateRange('today', event)">单日(今天)</button>
+              <button class="btn-quick-date" onclick="setDashboardDateRange('5d', event)">近5日(周)</button>
+              <button class="btn-quick-date" onclick="setDashboardDateRange('20d', event)">近20日(月)</button>
               <button class="btn btn-primary" onclick="loadDashboardOverview()" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;">
                 🔍 动态重算
               </button>

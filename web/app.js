@@ -245,7 +245,7 @@ function initDateControl() {
 /**
  * 仪表盘快速日期区间设定
  */
-function setDashboardDateRange(rangeType) {
+function setDashboardDateRange(rangeType, evt = null) {
   const today = new Date();
   const formatDate = (d) => {
     const y = d.getFullYear();
@@ -272,8 +272,9 @@ function setDashboardDateRange(rangeType) {
   document.querySelectorAll('.btn-quick-date').forEach(btn => {
     btn.classList.remove('active');
   });
-  if (event && event.target) {
-    event.target.classList.add('active');
+  const target = (evt && evt.target) ? evt.target : (typeof event !== 'undefined' && event ? event.target : null);
+  if (target && target.classList) {
+    target.classList.add('active');
   }
 
   loadDashboardOverview();
@@ -282,7 +283,7 @@ function setDashboardDateRange(rangeType) {
 /**
  * 同步网页 Title 与 Header 版本号
  */
-function syncVersionAndTitle(version = 'v1.8.0') {
+function syncVersionAndTitle(version = 'v1.8.1') {
   appState.version = version;
   document.title = `【${version}】A股多维量化筛选器 - DSH Stock Web`;
   if (dom.appVersionBadge) {
@@ -880,10 +881,6 @@ function renderMacroDashboardUI(data) {
   }
 
   // 3. 渲染图形化图表 (涨跌梯度分布直方图 + 市值规模梯队金字塔)
-  const charts = data.charts || {};
-  renderChangeDistributionChart(charts.change_distribution);
-  renderCapTiersPyramidChart(charts.market_cap_tiers, total);
-}
   const charts = data.charts || {};
   renderChangeDistributionChart(charts.change_distribution);
   renderCapTiersPyramidChart(charts.market_cap_tiers, total);
