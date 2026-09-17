@@ -36,6 +36,8 @@ const appState = {
 
 // DOM 元素引用
 const dom = {
+  systemCrashBanner: document.getElementById('systemCrashBanner'),
+  btnCrashRestart: document.getElementById('btnCrashRestart'),
   appVersionBadge: document.getElementById('appVersionBadge'),
   serverStatusBadge: document.getElementById('serverStatusBadge'),
   serverStatusText: document.getElementById('serverStatusText'),
@@ -1030,6 +1032,7 @@ function updateServerStatusUI(status, latency = 0, serverData = null) {
   appState.serverStatus = status;
 
   if (status === 'running') {
+    if (dom.systemCrashBanner) dom.systemCrashBanner.style.display = 'none';
     dom.serverStatusBadge.className = 'status-badge online';
     dom.serverStatusText.textContent = `服务运行中 (PID ${serverData ? serverData.pid : '--'})`;
     dom.serverPingText.textContent = `延迟: ${latency}ms`;
@@ -1042,6 +1045,7 @@ function updateServerStatusUI(status, latency = 0, serverData = null) {
     dom.btnToggleServer.style.color = '#fca5a5';
     dom.btnToggleServer.style.borderColor = 'rgba(239, 68, 68, 0.3)';
   } else if (status === 'stopped') {
+    if (dom.systemCrashBanner) dom.systemCrashBanner.style.display = 'none';
     dom.serverStatusBadge.className = 'status-badge offline';
     dom.serverStatusText.textContent = `业务已暂停 (待命)`;
     dom.serverPingText.textContent = `延迟: ${latency}ms`;
@@ -1050,13 +1054,51 @@ function updateServerStatusUI(status, latency = 0, serverData = null) {
     dom.btnToggleServer.style.color = '#4ade80';
     dom.btnToggleServer.style.borderColor = 'rgba(34, 197, 94, 0.4)';
   } else {
+    // 出现异常/离线/崩溃：立即弹出醒目红底强反馈并提示【崩溃了 请重启试试】
+    if (dom.systemCrashBanner) dom.systemCrashBanner.style.display = 'flex';
     dom.serverStatusBadge.className = 'status-badge offline';
-    dom.serverStatusText.textContent = '服务离线 / 未响应';
-    dom.serverPingText.textContent = '延迟: -- ms';
-    dom.btnToggleServer.innerHTML = '🚀 尝试连接';
-    dom.btnToggleServer.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
-    dom.btnToggleServer.style.color = '#f87171';
-    dom.btnToggleServer.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+    dom.serverStatusText.textContent = '⚠️ 崩溃了 请重启试试';
+    dom.serverPingText.textContent = '延迟: 超时';
+    dom.btnToggleServer.innerHTML = '🔄 崩溃了 请重启试试';
+    dom.btnToggleServer.style.backgroundColor = 'rgba(239, 68, 68, 0.85)';
+    dom.btnToggleServer.style.color = '#ffffff';
+    dom.btnToggleServer.style.borderColor = '#ef4444';
+  }
+}
+
+/**
+ * 紧急一键自愈重启
+ */
+async function triggerEmergencyRestart() {
+  if (dom.btnCrashRestart) {
+    dom.btnCrashRestart.textContent = '⏳ 正在尝试唤醒重启服务...';
+    dom.btnCrashRestart.disabled = true;
+  }
+  try {
+    const res = await fetch('/api/server/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (res.ok) {
+      setTimeout(() => {
+        checkServerHealth();
+        executeFilter();
+        if (dom.btnCrashRestart) {
+          dom.btnCrashRestart.textContent = '🔄 崩溃了 请重启试试';
+          dom.btnCrashRestart.disabled = false;
+        }
+      }, 800);
+    }
+  } catch (err) {
+    console.error('自愈重启异常:', err);
+    setTimeout(() => {
+      checkServerHealth();
+      if (dom.btnCrashRestart) {
+        dom.btnCrashRestart.textContent = '🔄 重启失败 请检查后台终端';
+        dom.btnCrashRestart.disabled = false;
+      }
+    }, 1200);
   }
 }
 

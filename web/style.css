@@ -861,6 +861,69 @@ body {
   gap: 0.6rem;
 }
 
+/* 全局系统级崩溃警报横幅 (红底高亮，强反馈与自愈) */
+.system-crash-banner {
+  background: linear-gradient(135deg, rgba(185, 28, 28, 0.95), rgba(127, 29, 29, 0.95));
+  border: 1px solid #ef4444;
+  border-radius: var(--radius-md);
+  padding: 1rem 1.4rem;
+  margin-bottom: 1.2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.4);
+  animation: shakeAlert 0.4s ease;
+}
+
+@keyframes shakeAlert {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.crash-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.crash-banner-icon {
+  font-size: 2rem;
+}
+
+.crash-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 0.2rem;
+}
+
+.crash-desc {
+  font-size: 0.84rem;
+  color: #fecaca;
+  line-height: 1.4;
+}
+
+.btn-crash-restart {
+  background-color: #ffffff;
+  color: #b91c1c;
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-crash-restart:hover {
+  background-color: #fee2e2;
+  transform: scale(1.03);
+}
+
 /* 宏观全景仪表盘样式 (Macro Dashboard) */
 .macro-dashboard {
   display: flex;

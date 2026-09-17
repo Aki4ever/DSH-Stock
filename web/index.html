@@ -51,6 +51,22 @@
 
   <main class="container">
 
+    <!-- 全局系统级崩溃强反馈警示横幅 (平时隐藏，一旦崩溃或异常立即弹出红底提示并支持一键重启) -->
+    <div id="systemCrashBanner" class="system-crash-banner" style="display: none;">
+      <div class="crash-banner-content">
+        <div class="crash-banner-icon">💥</div>
+        <div class="crash-banner-text">
+          <div class="crash-title">⚠️ 服务端失去响应或可能崩溃了！请重启试试</div>
+          <div class="crash-desc">检测到后台服务进程未正常返回或发生网络中断。您可以点击右侧按钮尝试一键自动重启恢复，或检查本地日志。</div>
+        </div>
+      </div>
+      <div class="crash-banner-actions">
+        <button id="btnCrashRestart" class="btn btn-crash-restart" onclick="triggerEmergencyRestart()">
+          🔄 崩溃了 请重启试试
+        </button>
+      </div>
+    </div>
+
     <!-- ==================================================== -->
     <!-- 视图 1: 多维量化筛选中心 (Tab: filter)                -->
     <!-- ==================================================== -->
