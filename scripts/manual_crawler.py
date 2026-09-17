@@ -24,7 +24,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from scripts.anti_crawler import robust_fetch, parse_shareholder_data
-from scripts.stock_db import save_quotes_batch, save_shareholder_item
+from scripts.stock_db import save_quotes_batch, save_shareholder_item, check_and_update_fingerprint
 
 
 class ManualCrawlerJob:
@@ -41,6 +41,7 @@ class ManualCrawlerJob:
         self.end_time: float = 0.0
         self.elapsed_sec: float = 0.0
         self.updated_count: int = 0
+        self.skipped_count: int = 0  # 需求1: 幂等指纹拦截命中跳过的记录数
         self.error_message: str = ""
         self._cancel_requested: bool = False
         self._thread: Optional[threading.Thread] = None
@@ -58,6 +59,8 @@ class ManualCrawlerJob:
                 "phase_text": self.phase_text,
                 "elapsed_sec": round(elapsed, 1),
                 "updated_count": self.updated_count,
+                "skipped_count": self.skipped_count,
+                "idempotent_engine": "SHA-256 Active",
                 "error_message": self.error_message,
                 "is_running": self.status == "running"
             }
@@ -79,6 +82,7 @@ class ManualCrawlerJob:
             self.current_count = 0
             self.progress_pct = 0.0
             self.updated_count = 0
+            self.skipped_count = 0
             self.error_message = ""
             self._cancel_requested = False
             self.start_time = time.time()
@@ -134,22 +138,49 @@ class ManualCrawlerJob:
                     parts = val.strip('";\n').split("~")
                     if len(parts) >= 46 and norm_c in stock_dict:
                         item = stock_dict[norm_c]
+                        # 构造准备更新的行情数据包
+                        quote_dict = {
+                            "code": norm_c,
+                            "price": float(parts[3]),
+                            "prev_close": float(parts[4]),
+                            "open": float(parts[5]),
+                            "volume": float(parts[6]),
+                            "high": float(parts[33]) if parts[33] else float(parts[3]),
+                            "low": float(parts[34]) if parts[34] else float(parts[3]),
+                            "turnover": float(parts[37]) * 10000 if parts[37] else 0.0,
+                            "change": float(parts[31]) if parts[31] else round(float(parts[3]) - float(parts[4]), 2),
+                            "change_pct": float(parts[32]) if parts[32] else 0.0,
+                            "turnover_rate": float(parts[38]) if parts[38] else 0.0,
+                            "pe": float(parts[39]) if parts[39] else 0.0,
+                            "market_cap": float(parts[44]) if parts[44] else 0.0,
+                            "circulating_cap": float(parts[45]) if parts[45] else 0.0,
+                            "timestamp": parts[30]
+                        }
+
+                        # 需求1: 校验数据指纹，执行幂等判定拦截
+                        is_changed, _ = check_and_update_fingerprint("quote", norm_c, quote_dict)
+                        if not is_changed:
+                            # 数据未发生任何变化，直接命中指纹幂等缓存，无需写入 SQLite
+                            with self._lock:
+                                self.skipped_count += 1
+                            continue
+
                         item["name"] = parts[1]
-                        item["price"] = float(parts[3])
-                        item["prev_close"] = float(parts[4])
-                        item["open"] = float(parts[5])
-                        item["volume"] = float(parts[6])
-                        item["high"] = float(parts[33]) if parts[33] else item["price"]
-                        item["low"] = float(parts[34]) if parts[34] else item["price"]
-                        item["turnover"] = float(parts[37]) * 10000 if parts[37] else 0.0
+                        item["price"] = quote_dict["price"]
+                        item["prev_close"] = quote_dict["prev_close"]
+                        item["open"] = quote_dict["open"]
+                        item["volume"] = quote_dict["volume"]
+                        item["high"] = quote_dict["high"]
+                        item["low"] = quote_dict["low"]
+                        item["turnover"] = quote_dict["turnover"]
                         item["turnover_yi"] = round(item["turnover"] / 100000000.0, 2)
-                        item["change"] = float(parts[31]) if parts[31] else round(item["price"] - item["prev_close"], 2)
-                        item["change_pct"] = float(parts[32]) if parts[32] else 0.0
-                        item["turnover_rate"] = float(parts[38]) if parts[38] else 0.0
-                        item["pe"] = float(parts[39]) if parts[39] else 0.0
-                        item["market_cap"] = float(parts[44]) if parts[44] else 0.0
-                        item["circulating_cap"] = float(parts[45]) if parts[45] else 0.0
-                        item["timestamp"] = parts[30]
+                        item["change"] = quote_dict["change"]
+                        item["change_pct"] = quote_dict["change_pct"]
+                        item["turnover_rate"] = quote_dict["turnover_rate"]
+                        item["pe"] = quote_dict["pe"]
+                        item["market_cap"] = quote_dict["market_cap"]
+                        item["circulating_cap"] = quote_dict["circulating_cap"]
+                        item["timestamp"] = quote_dict["timestamp"]
                         item["is_mock"] = False
                         scraped_quotes.append(dict(item))
                         updated_so_far += 1
@@ -165,6 +196,7 @@ class ManualCrawlerJob:
                 self.current_count = processed
                 self.progress_pct = (processed / total) * 100.0
                 self.updated_count = updated_so_far
+                self.phase_text = f"正在分批抓取 [批次 {current_batch_num}/{total_batches}] (已更新: {updated_so_far}, 幂等跳过: {self.skipped_count})..."
 
             # 保持适度间隔，严防触发风控
             time.sleep(0.04)

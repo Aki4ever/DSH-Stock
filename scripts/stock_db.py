@@ -94,6 +94,20 @@ def init_db():
         );
         """)
 
+        # 4. 采集数据指纹与幂等校验表 (data_fingerprints - 需求1)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS data_fingerprints (
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            data_hash TEXT NOT NULL,
+            signature TEXT DEFAULT '',
+            payload TEXT DEFAULT '',
+            last_synced_at TEXT DEFAULT '',
+            PRIMARY KEY (entity_type, entity_id)
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_fp_hash ON data_fingerprints(data_hash);")
+
         conn.commit()
 
 
@@ -230,6 +244,73 @@ def update_ipo_and_dividend(code: str, ipo_date: str, listing_years: float, divi
         WHERE code = ?;
         """, (ipo_date, listing_years, dividend_count, now_str, code))
         conn.commit()
+
+
+def check_and_update_fingerprint(entity_type: str, entity_id: str, new_payload: Any) -> Tuple[bool, str]:
+    """
+    检查数据指纹是否发生实质性变动 (需求1: 幂等指纹框架)
+    :param entity_type: 实体类型 (quote / master / shareholder / finance / block / events)
+    :param entity_id: 实体唯一ID (如 stock code)
+    :param new_payload: 准备持久化的原始或清洗后数据结构
+    :return: (is_modified: bool, data_hash: str) - 若未改变返回 (False, hash)，需跳过写入
+    """
+    import hashlib
+    import json
+    
+    # 对 payload 采用确定性 JSON 序列化生成指纹
+    try:
+        raw_bytes = json.dumps(new_payload, sort_keys=True, ensure_ascii=False).encode('utf-8')
+    except Exception:
+        raw_bytes = str(new_payload).encode('utf-8')
+    
+    data_hash = hashlib.sha256(raw_bytes).hexdigest()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT data_hash FROM data_fingerprints
+        WHERE entity_type = ? AND entity_id = ?;
+        """, (entity_type, entity_id))
+        row = cursor.fetchone()
+        
+        if row and row["data_hash"] == data_hash:
+            # 数据完全一致，无需任何重复写入，直接命中指纹幂等
+            return False, data_hash
+
+        # 指纹不同或首次入库，更新指纹表
+        cursor.execute("""
+        INSERT INTO data_fingerprints (entity_type, entity_id, data_hash, signature, payload, last_synced_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+            data_hash = excluded.data_hash,
+            signature = excluded.signature,
+            last_synced_at = excluded.last_synced_at;
+        """, (entity_type, entity_id, data_hash, f"{entity_type}:{entity_id}:{now_str}", "", now_str))
+        conn.commit()
+        return True, data_hash
+
+
+def get_fingerprint_stats() -> Dict[str, Any]:
+    """获取数据指纹幂等系统的综合统计学指标"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) AS total_fp FROM data_fingerprints;")
+        total_fp = cursor.fetchone()["total_fp"]
+        
+        cursor.execute("""
+        SELECT entity_type, COUNT(*) AS count
+        FROM data_fingerprints
+        GROUP BY entity_type;
+        """)
+        breakdown = {row["entity_type"]: row["count"] for row in cursor.fetchall()}
+        
+        return {
+            "total_fingerprints": total_fp,
+            "entity_breakdown": breakdown,
+            "algorithm": "SHA-256",
+            "status": "active_idempotent"
+        }
 
 
 def load_all_stocks_from_db() -> List[Dict[str, Any]]:

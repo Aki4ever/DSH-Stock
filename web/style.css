@@ -1132,6 +1132,75 @@ body {
   transition: width 0.4s ease;
 }
 
+/* 需求5: 股票详情 8 大维度一级导航 Tab 栏 */
+.modal-dimension-tabs {
+  display: flex;
+  background-color: rgba(15, 23, 42, 0.95);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.5rem 1rem 0;
+  gap: 0.35rem;
+  overflow-x: auto;
+  position: sticky;
+  top: 65px;
+  z-index: 9;
+}
+
+.modal-dim-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #94a3b8;
+  font-size: 0.86rem;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.modal-dim-tab:hover {
+  color: #f8fafc;
+  background-color: rgba(56, 189, 248, 0.08);
+  border-radius: 4px 4px 0 0;
+}
+
+.modal-dim-tab.active {
+  color: #38bdf8;
+  border-bottom-color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.12);
+  border-radius: 4px 4px 0 0;
+}
+
+/* 详情维度容器 */
+.detail-view-pane {
+  display: block;
+}
+
+.detail-view-pane.hidden {
+  display: none !important;
+}
+
+/* 需求3: K线日期区间快速控制器 */
+.kline-date-control-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.kline-date-input {
+  background-color: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  color: #f8fafc;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
 /* 需求1: 画图工具箱按钮样式 */
 .chart-draw-toolbox {
   display: inline-flex;

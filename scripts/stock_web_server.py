@@ -483,6 +483,63 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(200, CRAWLER_JOB.get_snapshot())
             return
 
+        # 3.1.1 需求2: 独立数据采集中心导出端点 /api/crawler/export?format=json|csv
+        if url_path == "/api/crawler/export":
+            query_params = {}
+            if "?" in self.path:
+                q_str = self.path.split("?", 1)[1]
+                for part in q_str.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        query_params[k.strip()] = v.strip()
+            exp_format = query_params.get("format", "json").lower()
+            all_stocks = list(DATA_MANAGER.stocks_dict.values())
+            date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            if exp_format == "csv":
+                import csv
+                import io
+                out = io.StringIO()
+                # 确定 CSV 核心列
+                fieldnames = [
+                    "code", "name", "market", "board", "price", "change_pct", "change",
+                    "prev_close", "open", "high", "low", "volume", "turnover_yi",
+                    "turnover_rate", "pe", "market_cap", "circulating_cap",
+                    "dividend_count", "dividend_total_amount", "listing_years",
+                    "top10_hold_pct", "top10_circ_hold_pct", "pinyin_abbr"
+                ]
+                writer = csv.DictWriter(out, fieldnames=fieldnames, extrasaction='ignore')
+                writer.writeheader()
+                for s in all_stocks:
+                    writer.writerow(s)
+                csv_bytes = out.getvalue().encode("utf-8-sig")
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="stock_data_export_{date_str}.csv"')
+                self.send_header("Content-Length", str(len(csv_bytes)))
+                self.end_headers()
+                self.wfile.write(csv_bytes)
+                return
+            else:
+                # 默认导出 JSON
+                export_pack = {
+                    "export_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "version": APP_VERSION,
+                    "total_universe_count": len(all_stocks),
+                    "fingerprint_engine": "SHA-256 Idempotent Active",
+                    "crawler_snapshot": CRAWLER_JOB.get_snapshot(),
+                    "data": all_stocks
+                }
+                json_bytes = json.dumps(export_pack, ensure_ascii=False, indent=2).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="stock_data_export_{date_str}.json"')
+                self.send_header("Content-Length", str(len(json_bytes)))
+                self.end_headers()
+                self.wfile.write(json_bytes)
+                return
+
         # 3.2 全市场宏观仪表盘聚合数据端点 (支持 ?start_date=...&end_date=... 查询)
         if url_path == "/api/dashboard/overview":
             query_params = {}

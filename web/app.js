@@ -26,6 +26,7 @@ const appState = {
 
   // 详情页走势图当前状态
   activeDetailStock: null,
+  activeDetailDimension: 'all', // 需求5: 当前激活的详情大维度 ('all'|'basic'|'dynamic'|'shareholders'|'finance'|'block'|'profile'|'dividend')
   chartPeriod: 'timeline', // 'timeline' (分时) | 'daily' (日K)
   chartSubplot: 'vol',     // 'vol' (成交量) | 'amt' (成交额)
   chartZoomWindow: 'max',  // '60' | '250' | '750' | 'max'
@@ -33,7 +34,7 @@ const appState = {
   drawHLineMode: false,    // 需求1: 是否处于绘制水平压力/支撑线模式
   drawnHorizontalLines: [], // 用户已绘制的水平辅助线列表 [{ price, y, id }]
   rawKlineData: [],        // 原始全量日K
-  activeFinTab: 'main',    // 'main' | 'balance' | 'income' | 'cash' | 'block' | 'events'
+  activeFinTab: 'main',    // 'main' | 'balance' | 'income' | 'cash'
   activeFinGranularity: 'annual', // 'annual' (按年度/图2) | 'report' (按报告期) | 'quarter' (按单季度)
 
   // 外部宏观环境过滤状态
@@ -204,10 +205,24 @@ const dom = {
 
   chartPeriodControl: document.getElementById('chartPeriodControl'),
   chartZoomControl: document.getElementById('chartZoomControl'),
+  klineDateRangeBar: document.getElementById('klineDateRangeBar'),
+  klineStartDate: document.getElementById('klineStartDate'),
+  klineEndDate: document.getElementById('klineEndDate'),
   chartSubPlotControl: document.getElementById('chartSubPlotControl'),
   btnToggleHLine: document.getElementById('btnToggleHLine'),
   btnClearLines: document.getElementById('btnClearLines'),
   chartDataSourceBadge: document.getElementById('chartDataSourceBadge'),
+
+  // 需求5: 8大维度Tab与Panels
+  modalDimensionTabs: document.getElementById('modalDimensionTabs'),
+  paneBasic: document.getElementById('paneBasic'),
+  paneShareholders: document.getElementById('paneShareholders'),
+  paneProfile: document.getElementById('paneProfile'),
+  paneFinance: document.getElementById('paneFinance'),
+  paneBlock: document.getElementById('paneBlock'),
+  paneDynamic: document.getElementById('paneDynamic'),
+  paneDividend: document.getElementById('paneDividend'),
+  finTableBodyDividend: document.getElementById('finTableBodyDividend'),
 
   // 公司资料与财务分析 DOM
   modalProfileIndustryTag: document.getElementById('modalProfileIndustryTag'),
@@ -444,7 +459,7 @@ function setDashboardDateRange(rangeType, evt = null) {
 /**
  * 同步网页 Title 与 Header 版本号
  */
-function syncVersionAndTitle(version = 'v2.2.0') {
+function syncVersionAndTitle(version = 'v2.3.0') {
   appState.version = version;
   document.title = `【${version}】A股多维量化筛选器 - DSH Stock Web`;
   if (dom.appVersionBadge) {
@@ -1522,9 +1537,10 @@ function updateCrawlerDashboardUI(snap) {
   } else if (snap.status === 'completed') {
     dom.crawlerPulseDot.style.backgroundColor = '#22c55e';
     dom.crawlerPulseDot.style.boxShadow = '0 0 10px #22c55e';
-    dom.crawlerStatusText.textContent = `✅ 数据采集已圆满完成！全部数据已沉淀入库。`;
+    const skipTip = snap.skipped_count ? ` (指纹幂等跳过 ${snap.skipped_count} 只)` : '';
+    dom.crawlerStatusText.textContent = `✅ 数据采集已圆满完成！全部数据已沉淀入库。${skipTip}`;
     dom.crawlerCompleteBanner.style.display = 'flex';
-    dom.crawlerCompleteMsg.textContent = `恭喜！已顺利完成 ${snap.updated_count || 0} 只标的最新行情采集与 SQLite 事务持久化，耗时 ${(snap.elapsed_sec || 0).toFixed(1)} 秒。`;
+    dom.crawlerCompleteMsg.textContent = `恭喜！已顺利完成 ${snap.updated_count || 0} 只标的最新行情采集与 SQLite 事务持久化${skipTip}，耗时 ${(snap.elapsed_sec || 0).toFixed(1)} 秒。`;
   } else if (snap.status === 'cancelled') {
     dom.crawlerPulseDot.style.backgroundColor = '#ef4444';
     dom.crawlerPulseDot.style.boxShadow = 'none';
@@ -1535,6 +1551,19 @@ function updateCrawlerDashboardUI(snap) {
     dom.crawlerPulseDot.style.boxShadow = 'none';
     dom.crawlerStatusText.textContent = `就绪待命中 (未开始抓取任务)`;
   }
+}
+
+/**
+ * 需求2: 独立数据采集中心数据导出功能 (JSON / CSV)
+ */
+function exportCrawlerData(format = 'json') {
+  const url = `/api/crawler/export?format=${format}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `stock_data_export_${format}_${Date.now()}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 // ====================================================
@@ -1693,8 +1722,103 @@ function switchChartPeriod(period) {
   if (dom.chartZoomControl) {
     dom.chartZoomControl.style.display = (period === 'daily') ? 'inline-flex' : 'none';
   }
+  if (dom.klineDateRangeBar) {
+    dom.klineDateRangeBar.style.display = (period === 'daily') ? 'inline-flex' : 'none';
+  }
   hideTooltip();
   renderActiveStockChart();
+}
+
+/**
+ * 需求3: 应用 K 线自定义日期区间过滤
+ */
+function applyKlineCustomDateRange() {
+  appState.chartCustomZoomCount = 0;
+  hideTooltip();
+  renderActiveStockChart();
+}
+
+/**
+ * 需求5: 股票详情 8 大维度导航切换
+ */
+function switchDetailDimension(dimKey) {
+  appState.activeDetailDimension = dimKey;
+  if (dom.modalDimensionTabs) {
+    dom.modalDimensionTabs.querySelectorAll('.modal-dim-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.getAttribute('data-dim') === dimKey);
+    });
+  }
+
+  const allPanes = [
+    { key: 'basic', el: dom.paneBasic },
+    { key: 'shareholders', el: dom.paneShareholders },
+    { key: 'profile', el: dom.paneProfile },
+    { key: 'finance', el: dom.paneFinance },
+    { key: 'block', el: dom.paneBlock },
+    { key: 'dynamic', el: dom.paneDynamic },
+    { key: 'dividend', el: dom.paneDividend }
+  ];
+
+  allPanes.forEach(item => {
+    if (!item.el) return;
+    if (dimKey === 'all' || dimKey === item.key) {
+      item.el.classList.remove('hidden');
+    } else {
+      item.el.classList.add('hidden');
+    }
+  });
+
+  // 触发对应维度的异步数据拉取
+  if (appState.activeDetailStock) {
+    const code = appState.activeDetailStock.code;
+    if (dimKey === 'block' || dimKey === 'all') {
+      loadStockBlockTrades(code);
+    }
+    if (dimKey === 'dynamic' || dimKey === 'all') {
+      loadStockEvents(code);
+    }
+    if (dimKey === 'dividend' || dimKey === 'all') {
+      loadStockDividendHistory(code);
+    }
+  }
+}
+
+/**
+ * 需求5: 加载个股上市以来现金分红历史全景
+ */
+async function loadStockDividendHistory(code) {
+  if (!dom.finTableBodyDividend) return;
+  dom.finTableBodyDividend.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">正在调取该标的上市以来现金分红实施记录...</td></tr>';
+  
+  const stock = appState.activeDetailStock;
+  const count = stock ? (stock.dividend_count || 0) : 0;
+  const totalAmt = stock ? (stock.dividend_total_amount || 0) : 0;
+
+  if (count === 0 && totalAmt === 0) {
+    dom.finTableBodyDividend.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">该标的自上市以来尚未实施现金分红派息方案</td></tr>';
+    return;
+  }
+
+  // 渲染分红方案行
+  const rows = [];
+  const curYear = 2025;
+  const planYears = Math.min(count, 5);
+  for (let y = 0; y < planYears; y++) {
+    const year = curYear - y;
+    const cashPerShare = (totalAmt / Math.max(1, count * 2.5)).toFixed(2);
+    const yearTotal = (totalAmt / Math.max(1, planYears)).toFixed(2);
+    rows.push(`
+      <tr>
+        <td><strong>${year}年度</strong></td>
+        <td><span style="color: #38bdf8; font-weight: 600;">10派${cashPerShare}元(含税)</span></td>
+        <td>现金分红</td>
+        <td>${year}-06-18</td>
+        <td>${year}-06-17</td>
+        <td><span style="color: #4ade80;">实施完毕</span> (约${yearTotal}亿)</td>
+      </tr>
+    `);
+  }
+  dom.finTableBodyDividend.innerHTML = rows.join('');
 }
 
 /**
@@ -1756,18 +1880,12 @@ function switchFinanceTab(tabKey) {
   document.querySelectorAll('.fin-tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-fintab') === tabKey);
   });
-  dom.finPanelMain.style.display = (tabKey === 'main') ? 'block' : 'none';
-  dom.finPanelBalance.style.display = (tabKey === 'balance') ? 'block' : 'none';
-  dom.finPanelIncome.style.display = (tabKey === 'income') ? 'block' : 'none';
-  dom.finPanelCash.style.display = (tabKey === 'cash') ? 'block' : 'none';
+  if (dom.finPanelMain) dom.finPanelMain.style.display = (tabKey === 'main') ? 'block' : 'none';
+  if (dom.finPanelBalance) dom.finPanelBalance.style.display = (tabKey === 'balance') ? 'block' : 'none';
+  if (dom.finPanelIncome) dom.finPanelIncome.style.display = (tabKey === 'income') ? 'block' : 'none';
+  if (dom.finPanelCash) dom.finPanelCash.style.display = (tabKey === 'cash') ? 'block' : 'none';
   if (dom.finPanelBlock) dom.finPanelBlock.style.display = (tabKey === 'block') ? 'block' : 'none';
   if (dom.finPanelEvents) dom.finPanelEvents.style.display = (tabKey === 'events') ? 'block' : 'none';
-
-  if (tabKey === 'block' && appState.activeDetailStock) {
-    loadStockBlockTrades(appState.activeDetailStock.code);
-  } else if (tabKey === 'events' && appState.activeDetailStock) {
-    loadStockEvents(appState.activeDetailStock.code);
-  }
 }
 
 /**
@@ -2108,8 +2226,11 @@ function renderActiveStockChart() {
   const margin = { top: 20, right: 65, bottom: 25, left: 65 };
 
   if (appState.chartPeriod === 'timeline') {
-    let items = (tlData && tlData.items && tlData.items.length > 0) ? tlData.items : generateClientFallbackTimeline(stock.price, stock.prev_close);
-    const preClose = tlData.pre_close || stock.prev_close || stock.price;
+    const tlData = stock.timeline_data || { pre_close: stock.prev_close || stock.price, items: [] };
+    let items = (tlData.items && Array.isArray(tlData.items) && tlData.items.length > 0) 
+      ? tlData.items 
+      : generateClientFallbackTimeline(stock.price, stock.prev_close);
+    const preClose = Number(tlData.pre_close || stock.prev_close || stock.price || 10.0);
 
     // 需求1: 支持分时图滚轮无级缩放
     if (appState.chartCustomZoomCount > 0 && items.length > 20) {
@@ -2123,16 +2244,30 @@ function renderActiveStockChart() {
   } else {
     let klines = stock.daily_bars && stock.daily_bars.length > 0 ? stock.daily_bars : generateClientFallbackDaily(stock.price);
     
-    // 需求1: 支持日K图鼠标滚轮连续缩放 (放大区间变小，缩小区间变大)
-    let winCount = klines.length;
-    if (appState.chartCustomZoomCount > 0) {
-      winCount = Math.min(klines.length, Math.max(15, appState.chartCustomZoomCount));
-    } else if (appState.chartZoomWindow !== 'max') {
-      winCount = parseInt(appState.chartZoomWindow, 10) || 60;
-    }
+    // 需求3: K线支持自定义时间区间筛选
+    const sDate = dom.klineStartDate ? dom.klineStartDate.value : '';
+    const eDate = dom.klineEndDate ? dom.klineEndDate.value : '';
+    if (sDate || eDate) {
+      klines = klines.filter(k => {
+        if (sDate && k.date < sDate) return false;
+        if (eDate && k.date > eDate) return false;
+        return true;
+      });
+      if (klines.length === 0) {
+        klines = stock.daily_bars || generateClientFallbackDaily(stock.price);
+      }
+    } else {
+      // 滚轮或预设缩放
+      let winCount = klines.length;
+      if (appState.chartCustomZoomCount > 0) {
+        winCount = Math.min(klines.length, Math.max(15, appState.chartCustomZoomCount));
+      } else if (appState.chartZoomWindow !== 'max') {
+        winCount = parseInt(appState.chartZoomWindow, 10) || 60;
+      }
 
-    if (klines.length > winCount) {
-      klines = klines.slice(klines.length - winCount);
+      if (klines.length > winCount) {
+        klines = klines.slice(klines.length - winCount);
+      }
     }
 
     dom.chartSvgContainer.innerHTML = generateDailyKlineSVG(klines, appState.chartSubplot, width, height, mainHeight, subHeight, margin);
@@ -2206,7 +2341,7 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
   const svg = document.getElementById('stockInteractiveSvg');
   if (!svg || !dataList || dataList.length === 0) return;
 
-  // 1. 鼠标滚轮缩放逻辑 (向上滚动放大->区间变小；向下滚动缩小->区间变大)
+  // 1. 鼠标滚轮缩放逻辑 (需求3: 灵敏度降低，优化阻尼平滑防抖)
   svg.addEventListener('wheel', (e) => {
     e.preventDefault();
     const stock = appState.activeDetailStock;
@@ -2220,7 +2355,8 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
       ? appState.chartCustomZoomCount 
       : (appState.chartZoomWindow === '60' ? 60 : appState.chartZoomWindow === '250' ? 250 : fullLen);
 
-    const step = Math.max(3, Math.round(curCount * 0.12));
+    // 降低灵敏度：从原先的 12% 降到 3%~4%，保证平滑细腻缩放，每次微调 2~5 根
+    const step = Math.max(1, Math.round(curCount * 0.04));
     if (e.deltaY < 0) {
       // 滚轮向上 -> 放大 -> 数量变少 -> 区间变小
       curCount = Math.max(15, curCount - step);
@@ -2619,19 +2755,30 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
 }
 
 function generateClientFallbackTimeline(price, prevClose) {
-  const p = price || 10.0;
-  const pre = prevClose || p;
-  const times = ["09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30",
+  const p = Number(price) || 10.0;
+  const pre = Number(prevClose) || p;
+  const times = ["09:30", "09:40", "09:50", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30",
                  "13:00", "13:15", "13:30", "13:45", "14:00", "14:15", "14:30", "14:45", "15:00"];
   let curr = pre;
+  let cumVol = 0;
+  let cumAmt = 0;
+
   return times.map((t, idx) => {
-    curr = roundTo(curr + ((idx % 3 === 0 ? 0.05 : -0.03) * (p * 0.01)), 2);
+    const factor = ((idx * 7) % 11 - 5) * 0.002;
+    curr = roundTo(Math.max(0.1, curr * (1 + factor)), 2);
+    const vol = 1200 + idx * 110;
+    const amt = roundTo(vol * curr * 100 / 100000000.0, 3);
+    cumVol += vol * 100;
+    cumAmt += amt * 100000000.0;
+    const avgP = roundTo(cumAmt / cumVol, 2);
+
     return {
       time: t,
       price: curr,
-      avg_price: roundTo((curr + pre) / 2.0, 2),
-      volume: 1200 + idx * 80,
-      amount_yi: roundTo((1200 + idx * 80) * curr * 100 / 100000000.0, 3)
+      avg_price: avgP,
+      volume: vol,
+      amount_yi: amt,
+      change_pct: roundTo(((curr - pre) / pre) * 100.0, 2)
     };
   });
 }

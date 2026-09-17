@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>【v2.2.0】A股多维量化筛选器 - DSH Stock Web</title>
+  <title>【v2.3.0】A股多维量化筛选器 - DSH Stock Web</title>
   <link rel="stylesheet" href="/web/style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v2.2.0</span>
+      <span id="appVersionBadge" class="version-badge">v2.3.0</span>
       <span class="brand-tag">全市场主板+创业板</span>
     </div>
 
@@ -667,6 +667,14 @@
             <button id="btnCancelCrawl" class="btn btn-crawl-cancel" onclick="cancelManualCrawl()" disabled>
               ⏹️ 终止当前抓取
             </button>
+
+            <!-- 需求2: 独立数据采集中心导出工具 -->
+            <button id="btnExportJson" class="btn btn-secondary" onclick="exportCrawlerData('json')" title="导出完整JSON数据包，含指纹签名与最新状态">
+              📥 导出已采集数据 (JSON)
+            </button>
+            <button id="btnExportCsv" class="btn btn-secondary" onclick="exportCrawlerData('csv')" title="导出结构化CSV全市场底册，可用Excel或量化工具直接分析">
+              📊 导出结构化底册 (CSV)
+            </button>
           </div>
         </div>
 
@@ -742,7 +750,21 @@
         <button class="btn-close" onclick="closeStockDetail()">&times;</button>
       </div>
 
+      <!-- 需求5: 股票详情 8 大维度可扩展 Tab 导航栏 -->
+      <div class="modal-dimension-tabs" id="modalDimensionTabs">
+        <button type="button" class="modal-dim-tab active" data-dim="all" onclick="switchDetailDimension('all')">📋 全部信息</button>
+        <button type="button" class="modal-dim-tab" data-dim="basic" onclick="switchDetailDimension('basic')">🎯 基本盘</button>
+        <button type="button" class="modal-dim-tab" data-dim="dynamic" onclick="switchDetailDimension('dynamic')">⚡ 最新动态</button>
+        <button type="button" class="modal-dim-tab" data-dim="shareholders" onclick="switchDetailDimension('shareholders')">👥 股东研究</button>
+        <button type="button" class="modal-dim-tab" data-dim="finance" onclick="switchDetailDimension('finance')">📊 财务分析</button>
+        <button type="button" class="modal-dim-tab" data-dim="block" onclick="switchDetailDimension('block')">🤝 大宗交易</button>
+        <button type="button" class="modal-dim-tab" data-dim="profile" onclick="switchDetailDimension('profile')">🏢 公司资料</button>
+        <button type="button" class="modal-dim-tab" data-dim="dividend" onclick="switchDetailDimension('dividend')">💰 分红融资</button>
+      </div>
+
       <div class="modal-body">
+        <!-- 维度1: 基本盘 (行情报盘与量化诊断) -->
+        <div id="paneBasic" class="detail-view-pane">
         <div class="quote-grid">
           <div class="quote-grid-item">
             <span class="quote-label">今开盘</span>
@@ -790,6 +812,17 @@
           </div>
         </div>
 
+        <div class="quant-card">
+          <div class="quant-header">
+            <div style="font-weight: 600; font-size: 0.95rem;">📊 多维量化体检与多空动能诊断</div>
+            <div id="modalQuantScore" class="quant-score-badge">量化评分: -- 分</div>
+          </div>
+          <div id="modalQuantAction" class="quant-action-text">正在评估该标的技术面与多空动能...</div>
+        </div>
+        </div><!-- /#paneBasic -->
+
+        <!-- 维度2: 股东研究 -->
+        <div id="paneShareholders" class="detail-view-pane">
         <div class="shareholder-card">
           <div class="shareholder-header">
             <div style="font-weight: 600; font-size: 0.95rem;">👥 股东结构与筹码集中度 (最新财报披露期: <span id="modalReportDate" style="color: #60a5fa;">--</span>)</div>
@@ -807,14 +840,7 @@
             </div>
           </div>
         </div>
-
-        <div class="quant-card">
-          <div class="quant-header">
-            <div style="font-weight: 600; font-size: 0.95rem;">📊 多维量化体检与多空动能诊断</div>
-            <div id="modalQuantScore" class="quant-score-badge">量化评分: -- 分</div>
-          </div>
-          <div id="modalQuantAction" class="quant-action-text">正在评估该标的技术面与多空动能...</div>
-        </div>
+        </div><!-- /#paneShareholders -->
 
         <!-- 专业交互式走势图与量额分图控制区 (真实数据驱动) -->
         <div class="chart-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.6rem;">
@@ -834,6 +860,14 @@
               <button type="button" class="seg-btn" data-zoom="250" onclick="setChartZoomWindow(250)">近1年</button>
               <button type="button" class="seg-btn" data-zoom="750" onclick="setChartZoomWindow(750)">近3年</button>
               <button type="button" class="seg-btn active" data-zoom="max" onclick="setChartZoomWindow('max')">🌟 上市至今(Max)</button>
+            </div>
+
+            <!-- 需求3: K线自定义时间区间控制器 -->
+            <div class="kline-date-control-bar" id="klineDateRangeBar" style="display: none;">
+              <span>区间:</span>
+              <input type="date" id="klineStartDate" class="kline-date-input" onchange="applyKlineCustomDateRange()">
+              <span>~</span>
+              <input type="date" id="klineEndDate" class="kline-date-input" onchange="applyKlineCustomDateRange()">
             </div>
             <!-- 副图指标切换 -->
             <div class="segmented-control" id="chartSubPlotControl">
@@ -874,6 +908,7 @@
         </div>
 
         <!-- 上市公司基本档案资料 (深度 F10) -->
+        <div id="paneProfile" class="detail-view-pane">
         <div class="company-profile-card">
           <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.4rem; display: flex; align-items: center; justify-content: space-between;">
             <span>🏢 上市公司基本资料</span>
@@ -901,8 +936,10 @@
             </div>
           </div>
         </div>
+        </div><!-- /#paneProfile -->
 
         <!-- 深度财务分析 多颗粒度对比 (按报告期 / 按年度 / 按单季度，严格复刻图2) -->
+        <div id="paneFinance" class="detail-view-pane">
         <div class="finance-analysis-card">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.8rem;">
             <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
@@ -921,8 +958,6 @@
               <button type="button" class="fin-tab-btn" data-fintab="balance" onclick="switchFinanceTab('balance')">资产负债表</button>
               <button type="button" class="fin-tab-btn" data-fintab="income" onclick="switchFinanceTab('income')">利润表</button>
               <button type="button" class="fin-tab-btn" data-fintab="cash" onclick="switchFinanceTab('cash')">现金流量表</button>
-              <button type="button" class="fin-tab-btn" data-fintab="block" onclick="switchFinanceTab('block')">🤝 交易所大宗交易</button>
-              <button type="button" class="fin-tab-btn" data-fintab="events" onclick="switchFinanceTab('events')">🔔 官方公告与大事提醒</button>
             </div>
           </div>
 
@@ -981,58 +1016,89 @@
               </table>
             </div>
           </div>
-
-          <!-- Tab 5: 交易所官方大宗交易穿透 (深交所/上交所成交价、折溢价率与买卖营业部) -->
-          <div id="finPanelBlock" class="finance-panel" style="display: none;">
-            <div style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 0.6rem; display: flex; justify-content: space-between;">
-              <span>深交所 / 上交所官方大宗交易系统成交穿透，重点识别<strong>机构席位动向</strong>与<strong>折溢价异动</strong></span>
-              <span id="blockTradeSourceTag" class="tag-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">官方交易所接口直连</span>
-            </div>
-            <div class="finance-table-box">
-              <table class="fin-data-table">
-                <thead>
-                  <tr>
-                    <th>成交日期</th>
-                    <th>成交价(元)</th>
-                    <th>折溢价率</th>
-                    <th>成交量(手)</th>
-                    <th>成交额(万元)</th>
-                    <th>买方营业部席位</th>
-                    <th>卖方营业部席位</th>
-                  </tr>
-                </thead>
-                <tbody id="finTableBodyBlock">
-                  <!-- 动态插入 -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Tab 6: 官方公告与大事提醒 (大事备忘录 + 最新披露公告列表) -->
-          <div id="finPanelEvents" class="finance-panel" style="display: none;">
-            <div class="events-split-layout">
-              <!-- 左侧: 大事备忘录里程碑 -->
-              <div class="events-milestone-box">
-                <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.6rem; color: #38bdf8;">
-                  📌 核心大事日程备忘录
-                </div>
-                <div id="eventsMilestoneList" class="milestone-timeline">
-                  <!-- 动态插入大事日程 -->
-                </div>
-              </div>
-              <!-- 右侧: 官方公告列表 -->
-              <div class="events-notices-box">
-                <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.6rem; color: #e2e8f0;">
-                  📢 最新官方披露公告 (巨潮资讯网/交易所公开)
-                </div>
-                <div id="eventsNoticeList" class="notice-list-stream">
-                  <!-- 动态插入公告 -->
-                </div>
-              </div>
-            </div>
-          </div>
-
         </div>
+        </div><!-- /#paneFinance -->
+
+        <!-- 维度: 大宗交易独立面板 -->
+        <div id="paneBlock" class="detail-view-pane">
+        <div class="finance-analysis-card" style="margin-top: 0.8rem;">
+          <div style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 0.6rem; display: flex; justify-content: space-between;">
+            <span>深交所 / 上交所官方大宗交易系统成交穿透，重点识别<strong>机构席位动向</strong>与<strong>折溢价异动</strong></span>
+            <span id="blockTradeSourceTag" class="tag-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">官方交易所接口直连</span>
+          </div>
+          <div class="finance-table-box">
+            <table class="fin-data-table">
+              <thead>
+                <tr>
+                  <th>成交日期</th>
+                  <th>成交价(元)</th>
+                  <th>折溢价率</th>
+                  <th>成交量(手)</th>
+                  <th>成交额(万元)</th>
+                  <th>买方营业部席位</th>
+                  <th>卖方营业部席位</th>
+                </tr>
+              </thead>
+              <tbody id="finTableBodyBlock">
+                <!-- 动态插入 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </div><!-- /#paneBlock -->
+
+        <!-- 维度: 最新动态独立面板 -->
+        <div id="paneDynamic" class="detail-view-pane">
+        <div class="finance-analysis-card" style="margin-top: 0.8rem;">
+          <div class="events-split-layout">
+            <!-- 左侧: 大事备忘录里程碑 -->
+            <div class="events-milestone-box">
+              <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.6rem; color: #38bdf8;">
+                📌 核心大事日程备忘录
+              </div>
+              <div id="eventsMilestoneList" class="milestone-timeline">
+                <!-- 动态插入大事日程 -->
+              </div>
+            </div>
+            <!-- 右侧: 官方公告列表 -->
+            <div class="events-notices-box">
+              <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.6rem; color: #e2e8f0;">
+                📢 最新官方披露公告 (巨潮资讯网/交易所公开)
+              </div>
+              <div id="eventsNoticeList" class="notice-list-stream">
+                <!-- 动态插入公告 -->
+              </div>
+            </div>
+          </div>
+        </div>
+        </div><!-- /#paneDynamic -->
+
+        <!-- 维度: 分红融资独立面板 -->
+        <div id="paneDividend" class="detail-view-pane">
+        <div class="finance-analysis-card" style="margin-top: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+            <span style="font-weight: 700; font-size: 0.98rem;">💰 分红融资历史全景 (上市至今现金分红)</span>
+            <span class="tag-badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">股东分红回报</span>
+          </div>
+          <div class="finance-table-box">
+            <table class="fin-data-table">
+              <thead>
+                <tr>
+                  <th>分红年度</th>
+                  <th>实施方案</th>
+                  <th>分红类型</th>
+                  <th>除权除息日</th>
+                  <th>股权登记日</th>
+                  <th>派息实施进度</th>
+                </tr>
+              </thead>
+              <tbody id="finTableBodyDividend">
+                <!-- 动态插入分红记录 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </div><!-- /#paneDividend -->
 
         <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
           <button class="btn btn-secondary" onclick="closeStockDetail()">⬅️ 返回筛选列表</button>
