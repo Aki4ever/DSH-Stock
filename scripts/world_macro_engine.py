@@ -2,18 +2,21 @@
 # -*- coding: utf-8 -*-
 """
 全球外部宏观环境与国际大宗情报引擎 (Global Macro Environment & World Intelligence Engine)
-版本: v2.1.0
+版本: v2.2.0
 
 升级特性:
 1. 全球硬通货大宗商品看板 (外汇汇率、COMEX黄金、现货白银、布伦特原油、WTI原油、伦铜等)
+   - 需求2: 每张大宗卡片新增对 A 股的影响评分 quant_score (常显 -1000 ~ +1000 分)
 2. 外部宏观环境对 A 股冲击度量化模型 (-1000 ~ +1000 分)
-3. 全景重大事件库全面扩容 (涵盖金融、科技、军事、外贸、政治 5 大维度，美中欧中东亚太拉美全域覆盖)
-4. 支持自选起止日期区间，每条事件分数高亮显式输出，动态区间加总总分
+3. 需求3: 产生外部宏观对 A 股冲击总评分历史时序走势图数据 (score_timeline):
+   - 横坐标: 连续历史日期 (按日聚合)
+   - 纵坐标: 对 A 股冲击综合总评分 (当日净得分与累计趋势)
+   - 统计指标看板: 最高分(Max)、最低分(Min)、平均值(Mean)、最新值(Latest)
 """
 
 import json
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class WorldMacroEngine:
@@ -25,7 +28,7 @@ class WorldMacroEngine:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> Dict[str, Any]:
-        """聚合返回全球硬通货大宗行情与世界各国大事看板（带-1000~+1000打分与区间加总）"""
+        """聚合返回全球硬通货大宗行情与世界各国大事看板（带-1000~+1000打分、走势时序与区间加总）"""
         commodities = cls._get_commodities_and_forex()
         all_events = cls._get_world_classified_events()
 
@@ -64,6 +67,9 @@ class WorldMacroEngine:
             sentiment_color = "#059669"
             sentiment_icon = "🌪️"
 
+        # 需求3: 构建历史时序总评分走势图数据 (Timeline)
+        score_timeline = cls._build_score_timeline(all_events, start_date, end_date)
+
         return {
             "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "date_range": {
@@ -78,13 +84,74 @@ class WorldMacroEngine:
                 "sentiment_icon": sentiment_icon,
                 "max_possible_range": "[-1000, +1000] / 单事件"
             },
+            "score_timeline": score_timeline,
             "commodities": commodities,
             "world_events": filtered_events
         }
 
     @classmethod
+    def _build_score_timeline(cls, all_events: List[Dict[str, Any]], start_date: Optional[str], end_date: Optional[str]) -> Dict[str, Any]:
+        """构建按日期的宏观冲击综合得分时序与统计学指标"""
+        # 1. 提取全量事件日期范围
+        event_date_map: Dict[str, int] = {}
+        event_title_map: Dict[str, List[str]] = {}
+
+        for ev in all_events:
+            d = ev.get("date", "2026-09-17")
+            score = int(ev.get("quant_score", 0))
+            event_date_map[d] = event_date_map.get(d, 0) + score
+            if d not in event_title_map:
+                event_title_map[d] = []
+            event_title_map[d].append(f"{ev['title'][:16]} ({score:+d})")
+
+        # 2. 生成近 25 日连续交易日/日历时序点
+        base_date = datetime(2026, 9, 17)
+        points = []
+        running_total = 0
+        all_dates = []
+
+        for i in range(24, -1, -1):
+            cur_dt = base_date - timedelta(days=i)
+            cur_date_str = cur_dt.strftime("%Y-%m-%d")
+            
+            if start_date and cur_date_str < start_date:
+                continue
+            if end_date and cur_date_str > end_date:
+                continue
+
+            day_impact = event_date_map.get(cur_date_str, 0)
+            running_total += day_impact
+            titles = event_title_map.get(cur_date_str, ["宏观外部平稳震荡"])
+
+            points.append({
+                "date": cur_date_str,
+                "day_score": day_impact,
+                "total_score": running_total,
+                "events_desc": "；".join(titles[:2])
+            })
+            all_dates.append(cur_date_str)
+
+        # 3. 统计学分析指标
+        totals = [p["total_score"] for p in points] if points else [0]
+        max_score = max(totals)
+        min_score = min(totals)
+        avg_score = round(sum(totals) / max(1, len(totals)), 1)
+        latest_score = totals[-1] if totals else 0
+
+        return {
+            "dates": all_dates,
+            "points": points,
+            "stats": {
+                "max_score": max_score,
+                "min_score": min_score,
+                "avg_score": avg_score,
+                "latest_score": latest_score
+            }
+        }
+
+    @classmethod
     def _get_commodities_and_forex(cls) -> List[Dict[str, Any]]:
-        """获取核心大宗硬通货资产与外汇行情"""
+        """获取核心大宗硬通货资产与外汇行情（增加需求2: quant_score A股量化打分）"""
         items = [
             {
                 "symbol": "USD/CNH",
@@ -95,6 +162,8 @@ class WorldMacroEngine:
                 "change_pct": -0.17,
                 "unit": "CNH",
                 "signal": "稳健升值",
+                "quant_score": +380, # 人民币升值强力提振核心A股外资风险偏好
+                "score_badge": "+380分 强利好外资回流",
                 "impact": "人民币汇率保持坚挺，提振核心A股核心资产与外资风险偏好。"
             },
             {
@@ -106,6 +175,8 @@ class WorldMacroEngine:
                 "change_pct": -0.32,
                 "unit": "点",
                 "signal": "高位回落",
+                "quant_score": +260,
+                "score_badge": "+260分 拓宽央行宽松空间",
                 "impact": "美元走弱打开全球央行宽松空间，新兴市场流动性压力显著缓解。"
             },
             {
@@ -117,6 +188,8 @@ class WorldMacroEngine:
                 "change_pct": +0.72,
                 "unit": "美元/盎司",
                 "signal": "历史新高",
+                "quant_score": +210,
+                "score_badge": "+210分 催化贵金属与避险",
                 "impact": "全球央行购金热潮与中东地缘避险共振，强力催化A股贵金属与黄金开采板块。"
             },
             {
@@ -128,6 +201,8 @@ class WorldMacroEngine:
                 "change_pct": +1.88,
                 "unit": "美元/盎司",
                 "signal": "强劲上攻",
+                "quant_score": +190,
+                "score_badge": "+190分 光伏工业需求共振",
                 "impact": "光伏工业需求与货币避险属性双轮驱动，白银加工与工业金属受提振。"
             },
             {
@@ -139,6 +214,8 @@ class WorldMacroEngine:
                 "change_pct": +1.58,
                 "unit": "美元/桶",
                 "signal": "地缘反弹",
+                "quant_score": +120,
+                "score_badge": "+120分 利好油气与欧线油运",
                 "impact": "中东局势升级与原油供给扰动预期，直接支撑油气开采、油运海运产业链。"
             },
             {
@@ -150,6 +227,8 @@ class WorldMacroEngine:
                 "change_pct": +1.47,
                 "unit": "美元/桶",
                 "signal": "震荡企稳",
+                "quant_score": +110,
+                "score_badge": "+110分 能源化工成本支撑",
                 "impact": "美国战略石油储备（SPR）回补采购启动，能源化工成本端形成支撑。"
             },
             {
@@ -161,6 +240,8 @@ class WorldMacroEngine:
                 "change_pct": +0.91,
                 "unit": "美元/吨",
                 "signal": "铜博士走强",
+                "quant_score": +240,
+                "score_badge": "+240分 AI电网与工业复苏",
                 "impact": "全球AI算力电网建设与新能源需求爆发，铜产业链长期供需趋紧。"
             }
         ]
@@ -168,13 +249,9 @@ class WorldMacroEngine:
 
     @classmethod
     def _get_world_classified_events(cls) -> List[Dict[str, Any]]:
-        """
-        世界各国重大事件数据库 (全景扩充版: 覆盖美、中、欧、中东、日韩等全球核心枢纽，5大领域齐全)
-        """
+        """世界各国重大事件数据库"""
         events = [
-            # ----------------------------------------------------
             # 1. 美国 (金融/科技/军事/外贸/政治)
-            # ----------------------------------------------------
             {
                 "id": "us-01",
                 "country": "美国",
@@ -256,9 +333,7 @@ class WorldMacroEngine:
                 "impact_analysis": "红海绕航常态化支撑欧线集运运价（集运指数EC），全球油气运输风险溢价激增，推升国内军工防务与海运板块关注度。"
             },
 
-            # ----------------------------------------------------
             # 2. 中国 (金融/政治/科技/外贸)
-            # ----------------------------------------------------
             {
                 "id": "cn-01",
                 "country": "中国",
@@ -324,9 +399,7 @@ class WorldMacroEngine:
                 "impact_analysis": "高股息红利资产与核心蓝筹吸引社保、险资等长线增量资金加速配置，改善市场筹码结构。"
             },
 
-            # ----------------------------------------------------
             # 3. 欧洲与跨国 (政治/金融/外贸)
-            # ----------------------------------------------------
             {
                 "id": "eu-01",
                 "country": "欧洲",
@@ -360,9 +433,7 @@ class WorldMacroEngine:
                 "impact_analysis": "出海关税博弈出现缓和曙光，大幅降低了A股整车制造（比亚迪、吉利）及动力电池产业链的海外政策黑天鹅风险。"
             },
 
-            # ----------------------------------------------------
             # 4. 中东与地缘能源 (军事/能源)
-            # ----------------------------------------------------
             {
                 "id": "mideast-01",
                 "country": "中东",
@@ -396,9 +467,7 @@ class WorldMacroEngine:
                 "impact_analysis": "支撑上游油气开采、油田服务板块（中国海油、中海油服）的高股息分红稳定性。"
             },
 
-            # ----------------------------------------------------
             # 5. 亚太与日韩 (金融/科技)
-            # ----------------------------------------------------
             {
                 "id": "apac-01",
                 "country": "日韩亚太",
@@ -423,6 +492,7 @@ if __name__ == "__main__":
     res = WorldMacroEngine.get_world_macro_intelligence()
     agg = res["aggregate_score"]
     print("Aggregate Score:", agg["total_score"], agg["sentiment_label"])
-    print(f"Total events count: {len(res['world_events'])}")
-    for ev in res["world_events"]:
-        print(f" - [{ev['date']}] {ev['country']} | {ev['domain']} | 得分: {ev['quant_score']:+4d} | {ev['title'][:22]}...")
+    tl = res["score_timeline"]
+    print("Score Timeline points:", len(tl["points"]), "Stats:", tl["stats"])
+    c0 = res["commodities"][0]
+    print("Commodity sample with score:", c0["name"], c0["quant_score"], c0["score_badge"])

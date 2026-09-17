@@ -29,6 +29,9 @@ const appState = {
   chartPeriod: 'timeline', // 'timeline' (分时) | 'daily' (日K)
   chartSubplot: 'vol',     // 'vol' (成交量) | 'amt' (成交额)
   chartZoomWindow: 'max',  // '60' | '250' | '750' | 'max'
+  chartCustomZoomCount: 0, // 鼠标滚轮动态缩放的蜡烛根数 (0表示使用默认预设)
+  drawHLineMode: false,    // 需求1: 是否处于绘制水平压力/支撑线模式
+  drawnHorizontalLines: [], // 用户已绘制的水平辅助线列表 [{ price, y, id }]
   rawKlineData: [],        // 原始全量日K
   activeFinTab: 'main',    // 'main' | 'balance' | 'income' | 'cash' | 'block' | 'events'
   activeFinGranularity: 'annual', // 'annual' (按年度/图2) | 'report' (按报告期) | 'quarter' (按单季度)
@@ -72,6 +75,11 @@ const dom = {
   worldSentimentLabel: document.getElementById('worldSentimentLabel'),
   worldEventsCount: document.getElementById('worldEventsCount'),
   worldTradingTip: document.getElementById('worldTradingTip'),
+  worldScoreChartSvgContainer: document.getElementById('worldScoreChartSvgContainer'),
+  statScoreLatest: document.getElementById('statScoreLatest'),
+  statScoreMax: document.getElementById('statScoreMax'),
+  statScoreMin: document.getElementById('statScoreMin'),
+  statScoreAvg: document.getElementById('statScoreAvg'),
   worldCommodityGrid: document.getElementById('worldCommodityGrid'),
   worldEventsStream: document.getElementById('worldEventsStream'),
   worldCountryPills: document.getElementById('worldCountryPills'),
@@ -197,6 +205,8 @@ const dom = {
   chartPeriodControl: document.getElementById('chartPeriodControl'),
   chartZoomControl: document.getElementById('chartZoomControl'),
   chartSubPlotControl: document.getElementById('chartSubPlotControl'),
+  btnToggleHLine: document.getElementById('btnToggleHLine'),
+  btnClearLines: document.getElementById('btnClearLines'),
   chartDataSourceBadge: document.getElementById('chartDataSourceBadge'),
 
   // 公司资料与财务分析 DOM
@@ -411,7 +421,7 @@ function setDashboardDateRange(rangeType, evt = null) {
 /**
  * 同步网页 Title 与 Header 版本号
  */
-function syncVersionAndTitle(version = 'v2.1.0') {
+function syncVersionAndTitle(version = 'v2.2.0') {
   appState.version = version;
   document.title = `【${version}】A股多维量化筛选器 - DSH Stock Web`;
   if (dom.appVersionBadge) {
@@ -1169,6 +1179,7 @@ async function loadWorldMacroIntelligence() {
 
     renderWorldCommodities(data.commodities || []);
     renderWorldEvents(data.world_events || []);
+    renderWorldScoreTimelineChart(data.score_timeline);
   } catch (err) {
     console.error('加载全球外部环境情报异常:', err);
     if (dom.worldCommodityGrid) {
@@ -1181,7 +1192,110 @@ async function loadWorldMacroIntelligence() {
 }
 
 /**
- * 渲染全球大宗与硬通货资产卡片
+ * 需求3: 渲染外部宏观对 A 股总评分历史时序走势图谱 (SVG)
+ */
+function renderWorldScoreTimelineChart(timeline) {
+  if (!dom.worldScoreChartSvgContainer || !timeline) return;
+
+  const stats = timeline.stats || {};
+  if (dom.statScoreLatest) dom.statScoreLatest.textContent = `${(stats.latest_score || 0) >= 0 ? '+' : ''}${stats.latest_score || 0} 分`;
+  if (dom.statScoreMax) dom.statScoreMax.textContent = `+${stats.max_score || 0} 分`;
+  if (dom.statScoreMin) dom.statScoreMin.textContent = `${stats.min_score || 0} 分`;
+  if (dom.statScoreAvg) dom.statScoreAvg.textContent = `${(stats.avg_score || 0) >= 0 ? '+' : ''}${stats.avg_score || 0} 分`;
+
+  const points = timeline.points || [];
+  if (points.length === 0) {
+    dom.worldScoreChartSvgContainer.innerHTML = '<div style="padding: 2rem; color: var(--text-muted);">暂无时序数据</div>';
+    return;
+  }
+
+  const w = 920;
+  const h = 220;
+  const m = { top: 25, right: 60, bottom: 30, left: 60 };
+  const innerW = w - m.left - m.right;
+  const innerH = h - m.top - m.bottom;
+
+  const scores = points.map(p => p.total_score);
+  const maxS = Math.max(500, Math.max(...scores) * 1.15);
+  const minS = Math.min(-300, Math.min(...scores) * 1.15);
+
+  const scoreToY = (s) => m.top + ((maxS - s) / (maxS - minS)) * innerH;
+  const zeroY = scoreToY(0);
+
+  const stepX = innerW / Math.max(1, points.length - 1);
+
+  // 构造平滑折线与区域填充
+  let pathLine = '';
+  let pathArea = `M ${m.left} ${zeroY}`;
+
+  points.forEach((p, idx) => {
+    const x = m.left + idx * stepX;
+    const y = scoreToY(p.total_score);
+    if (idx === 0) {
+      pathLine = `M ${x} ${y}`;
+      pathArea += ` L ${x} ${y}`;
+    } else {
+      pathLine += ` L ${x} ${y}`;
+      pathArea += ` L ${x} ${y}`;
+    }
+  });
+  pathArea += ` L ${m.left + (points.length - 1) * stepX} ${zeroY} Z`;
+
+  // 关键数据点圆点
+  let dots = '';
+  points.forEach((p, idx) => {
+    const x = m.left + idx * stepX;
+    const y = scoreToY(p.total_score);
+    const color = p.total_score >= 0 ? '#ef4444' : '#10b981';
+    dots += `
+      <circle cx="${x}" cy="${y}" r="3.5" fill="${color}" stroke="#0b1329" stroke-width="1.5">
+        <title>${p.date} 综合冲击分: ${p.total_score >= 0 ? '+' : ''}${p.total_score}分&#10;事件: ${p.events_desc}</title>
+      </circle>
+    `;
+  });
+
+  const firstDate = points[0].date;
+  const midDate = points[Math.floor(points.length / 2)].date;
+  const lastDate = points[points.length - 1].date;
+
+  dom.worldScoreChartSvgContainer.innerHTML = `
+    <svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background-color: #0b1329; border-radius: 6px; overflow: visible;">
+      <defs>
+        <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ef4444" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#ef4444" stop-opacity="0.0"/>
+        </linearGradient>
+      </defs>
+
+      <!-- 背景网格框 -->
+      <rect x="${m.left}" y="${m.top}" width="${innerW}" height="${innerH}" fill="#0f172a" stroke="#1e293b"/>
+
+      <!-- 零轴多空分水岭虚线 -->
+      <line x1="${m.left}" y1="${zeroY}" x2="${m.left + innerW}" y2="${zeroY}" stroke="#64748b" stroke-dasharray="4,4" stroke-width="1.2"/>
+      <text x="${m.left + 8}" y="${zeroY - 5}" fill="#94a3b8" font-size="10" font-weight="bold">⚖️ 0 分多空分界线</text>
+
+      <!-- 面积与折线 -->
+      <path d="${pathArea}" fill="url(#scoreGrad)"/>
+      <path d="${pathLine}" fill="none" stroke="#ef4444" stroke-width="2.2"/>
+
+      <!-- 数据点 -->
+      ${dots}
+
+      <!-- Y轴刻度与标签 -->
+      <text x="${m.left - 8}" y="${m.top + 10}" fill="#ef4444" font-size="11" text-anchor="end" font-family="monospace">+${Math.round(maxS)}分</text>
+      <text x="${m.left - 8}" y="${zeroY + 4}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">0分</text>
+      <text x="${m.left - 8}" y="${m.top + innerH}" fill="#10b981" font-size="11" text-anchor="end" font-family="monospace">${Math.round(minS)}分</text>
+
+      <!-- X轴日期 -->
+      <text x="${m.left}" y="${m.top + innerH + 18}" fill="#64748b" font-size="10" text-anchor="start">${firstDate}</text>
+      <text x="${m.left + innerW * 0.5}" y="${m.top + innerH + 18}" fill="#64748b" font-size="10" text-anchor="middle">${midDate}</text>
+      <text x="${m.left + innerW}" y="${m.top + innerH + 18}" fill="#64748b" font-size="10" text-anchor="end">${lastDate}</text>
+    </svg>
+  `;
+}
+
+/**
+ * 渲染全球大宗与硬通货资产卡片 (需求2: 醒目常显对 A 股的影响量化评分)
  */
 function renderWorldCommodities(items) {
   if (!dom.worldCommodityGrid) return;
@@ -1192,6 +1306,11 @@ function renderWorldCommodities(items) {
     const chgPct = Number(c.change_pct || 0);
     const chgColor = chg > 0 ? '#ef4444' : chg < 0 ? '#10b981' : '#94a3b8';
     const sign = chg > 0 ? '+' : '';
+
+    // 需求2: A 股量化评分
+    const scoreVal = Number(c.quant_score || 0);
+    const scoreColor = scoreVal > 0 ? '#ef4444' : scoreVal < 0 ? '#10b981' : '#94a3b8';
+    const scoreSign = scoreVal > 0 ? '+' : '';
 
     const card = document.createElement('div');
     card.className = 'commodity-card';
@@ -1210,6 +1329,12 @@ function renderWorldCommodities(items) {
         <span>信号: <strong style="color: ${chgColor};">${c.signal}</strong></span>
         <span>代码: ${c.symbol}</span>
       </div>
+
+      <!-- 需求2: 内部常显对 A 股的影响评分勋章 -->
+      <div class="commodity-quant-badge" style="background-color: ${scoreColor}18; color: ${scoreColor}; border: 1px solid ${scoreColor}40;">
+        🎯 A股影响: ${scoreSign}${scoreVal}分 (${c.score_badge || '传导流动性'})
+      </div>
+
       <div class="commodity-impact">
         💡 <strong>市场影响:</strong> ${c.impact}
       </div>
@@ -1554,12 +1679,37 @@ function switchChartPeriod(period) {
  */
 function setChartZoomWindow(windowSize) {
   appState.chartZoomWindow = windowSize;
+  appState.chartCustomZoomCount = 0; // 重置滚轮动态计数
   if (dom.chartZoomControl) {
     dom.chartZoomControl.querySelectorAll('.seg-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-zoom') === String(windowSize));
     });
   }
   hideTooltip();
+  renderActiveStockChart();
+}
+
+/**
+ * 需求1: 开启/关闭画水平线 (压力/支撑位) 模式
+ */
+function toggleDrawHLineMode() {
+  appState.drawHLineMode = !appState.drawHLineMode;
+  if (dom.btnToggleHLine) {
+    dom.btnToggleHLine.classList.toggle('active', appState.drawHLineMode);
+    dom.btnToggleHLine.innerHTML = appState.drawHLineMode ? '✏️ 请在图表上点击放线...' : '📏 画水平线(压力/支撑)';
+  }
+}
+
+/**
+ * 需求1: 清除所有已绘制的水平辅助线
+ */
+function clearAllChartDrawLines() {
+  appState.drawnHorizontalLines = [];
+  appState.drawHLineMode = false;
+  if (dom.btnToggleHLine) {
+    dom.btnToggleHLine.classList.remove('active');
+    dom.btnToggleHLine.innerHTML = '📏 画水平线(压力/支撑)';
+  }
   renderActiveStockChart();
 }
 
@@ -1935,23 +2085,36 @@ function renderActiveStockChart() {
   const margin = { top: 20, right: 65, bottom: 25, left: 65 };
 
   if (appState.chartPeriod === 'timeline') {
-    const tlData = stock.timeline_data || { pre_close: stock.prev_close || stock.price, items: [] };
-    const items = tlData.items && tlData.items.length > 0 ? tlData.items : generateClientFallbackTimeline(stock.price, stock.prev_close);
+    let items = (tlData && tlData.items && tlData.items.length > 0) ? tlData.items : generateClientFallbackTimeline(stock.price, stock.prev_close);
     const preClose = tlData.pre_close || stock.prev_close || stock.price;
+
+    // 需求1: 支持分时图滚轮无级缩放
+    if (appState.chartCustomZoomCount > 0 && items.length > 20) {
+      const curCount = Math.min(items.length, Math.max(20, appState.chartCustomZoomCount));
+      items = items.slice(items.length - curCount);
+    }
 
     dom.chartSvgContainer.innerHTML = generateTimelineSVG(items, preClose, appState.chartSubplot, width, height, mainHeight, subHeight, margin);
     bindChartCrosshair('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
+    bindChartZoomAndDrawing('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
   } else {
     let klines = stock.daily_bars && stock.daily_bars.length > 0 ? stock.daily_bars : generateClientFallbackDaily(stock.price);
-    // 需求3: 支持自选窗口或滚轮缩放控制
-    if (appState.chartZoomWindow !== 'max') {
-      const winCount = parseInt(appState.chartZoomWindow, 10) || 60;
-      if (klines.length > winCount) {
-        klines = klines.slice(klines.length - winCount);
-      }
+    
+    // 需求1: 支持日K图鼠标滚轮连续缩放 (放大区间变小，缩小区间变大)
+    let winCount = klines.length;
+    if (appState.chartCustomZoomCount > 0) {
+      winCount = Math.min(klines.length, Math.max(15, appState.chartCustomZoomCount));
+    } else if (appState.chartZoomWindow !== 'max') {
+      winCount = parseInt(appState.chartZoomWindow, 10) || 60;
     }
+
+    if (klines.length > winCount) {
+      klines = klines.slice(klines.length - winCount);
+    }
+
     dom.chartSvgContainer.innerHTML = generateDailyKlineSVG(klines, appState.chartSubplot, width, height, mainHeight, subHeight, margin);
     bindChartCrosshair('daily', klines, stock.prev_close || stock.price, width, height, mainHeight, subHeight, margin);
+    bindChartZoomAndDrawing('daily', klines, stock.prev_close || stock.price, width, height, mainHeight, subHeight, margin);
   }
 }
 
@@ -2010,6 +2173,83 @@ function bindChartCrosshair(mode, dataList, preClose, w, h, mh, sh, m) {
 
   svg.addEventListener('mouseleave', () => {
     hideTooltip();
+  });
+}
+
+/**
+ * 需求1: 绑定鼠标滚轮无级缩放与点击画水平线 (压力/支撑位) 交互
+ */
+function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
+  const svg = document.getElementById('stockInteractiveSvg');
+  if (!svg || !dataList || dataList.length === 0) return;
+
+  // 1. 鼠标滚轮缩放逻辑 (向上滚动放大->区间变小；向下滚动缩小->区间变大)
+  svg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const stock = appState.activeDetailStock;
+    if (!stock) return;
+
+    const fullLen = (mode === 'timeline') 
+      ? (stock.timeline_data?.items?.length || 240)
+      : (stock.daily_bars?.length || 100);
+
+    let curCount = appState.chartCustomZoomCount > 0 
+      ? appState.chartCustomZoomCount 
+      : (appState.chartZoomWindow === '60' ? 60 : appState.chartZoomWindow === '250' ? 250 : fullLen);
+
+    const step = Math.max(3, Math.round(curCount * 0.12));
+    if (e.deltaY < 0) {
+      // 滚轮向上 -> 放大 -> 数量变少 -> 区间变小
+      curCount = Math.max(15, curCount - step);
+    } else {
+      // 滚轮向下 -> 缩小 -> 数量变多 -> 区间变大
+      curCount = Math.min(fullLen, curCount + step);
+    }
+
+    appState.chartCustomZoomCount = curCount;
+    hideTooltip();
+    renderActiveStockChart();
+  }, { passive: false });
+
+  // 2. 点击绘制水平辅助线 (压力/支撑线) 逻辑
+  svg.addEventListener('click', (e) => {
+    if (!appState.drawHLineMode) return;
+
+    const rect = svg.getBoundingClientRect();
+    const scaleY = h / rect.height;
+    const mouseY = (e.clientY - rect.top) * scaleY;
+
+    // 仅在主图价格区域内生效
+    if (mouseY >= m.top && mouseY <= m.top + mh) {
+      // 依据 Y 坐标反算价格
+      let priceVal = 0;
+      if (mode === 'timeline') {
+        const prices = dataList.map(d => d.price);
+        const maxPrice = Math.max(...prices, preClose * 1.002);
+        const minPrice = Math.min(...prices, preClose * 0.998);
+        const diff = Math.max(Math.abs(maxPrice - preClose), Math.abs(preClose - minPrice)) * 1.05;
+        const pTop = preClose + diff;
+        const pBottom = preClose - diff;
+        priceVal = pTop - ((mouseY - m.top) / mh) * (pTop - pBottom);
+      } else {
+        const highs = dataList.map(d => d.high);
+        const lows = dataList.map(d => d.low);
+        const pad = (Math.max(...highs) - Math.min(...lows)) * 0.08;
+        const pTop = Math.max(...highs) + pad;
+        const pBottom = Math.max(0.1, Math.min(...lows) - pad);
+        priceVal = pTop - ((mouseY - m.top) / mh) * (pTop - pBottom);
+      }
+
+      appState.drawnHorizontalLines.push({
+        id: 'line_' + Date.now(),
+        y: mouseY,
+        price: Number(priceVal.toFixed(2)),
+        type: priceVal >= preClose ? '压力位' : '支撑位'
+      });
+
+      // 画完保持模式或更新
+      renderActiveStockChart();
+    }
   });
 }
 
@@ -2210,6 +2450,15 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
       <text x="${m.left + innerW * 0.5}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">11:30 / 13:00</text>
       <text x="${m.left + innerW}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="end">15:00</text>
 
+      <!-- 需求1: 渲染用户绘制的水平压力/支撑辅助线 -->
+      ${appState.drawnHorizontalLines.map(line => `
+        <line x1="${m.left}" y1="${line.y}" x2="${m.left + innerW}" y2="${line.y}" stroke="${line.price >= preClose ? '#f43f5e' : '#10b981'}" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <rect x="${m.left + innerW - 110}" y="${line.y - 9}" width="110" height="18" fill="rgba(15, 23, 42, 0.9)" rx="3" stroke="${line.price >= preClose ? '#f43f5e' : '#10b981'}"/>
+        <text x="${m.left + innerW - 5}" y="${line.y + 4}" fill="${line.price >= preClose ? '#fca5a5' : '#6ee7b7'}" font-size="10" text-anchor="end" font-family="monospace">
+          ${line.type}: ¥${line.price.toFixed(2)}
+        </text>
+      `).join('')}
+
       <!-- 副图量额区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
       <text x="${m.left + 8}" y="${subTopY + 14}" fill="#94a3b8" font-size="10" font-weight="600">${subTitle}</text>
@@ -2325,6 +2574,15 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
       <text x="${m.left}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="start">${klines[0].date}</text>
       <text x="${m.left + innerW * 0.5}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[Math.floor(n / 2)].date}</text>
       <text x="${m.left + innerW}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="end">${klines[n - 1].date}</text>
+
+      <!-- 需求1: 渲染用户绘制的水平压力/支撑辅助线 -->
+      ${appState.drawnHorizontalLines.map(line => `
+        <line x1="${m.left}" y1="${line.y}" x2="${m.left + innerW}" y2="${line.y}" stroke="${line.price >= (klines[klines.length-1].close) ? '#f43f5e' : '#10b981'}" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <rect x="${m.left + innerW - 110}" y="${line.y - 9}" width="110" height="18" fill="rgba(15, 23, 42, 0.9)" rx="3" stroke="${line.price >= (klines[klines.length-1].close) ? '#f43f5e' : '#10b981'}"/>
+        <text x="${m.left + innerW - 5}" y="${line.y + 4}" fill="${line.price >= (klines[klines.length-1].close) ? '#fca5a5' : '#6ee7b7'}" font-size="10" text-anchor="end" font-family="monospace">
+          ${line.type}: ¥${line.price.toFixed(2)}
+        </text>
+      `).join('')}
 
       <!-- 副图区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>

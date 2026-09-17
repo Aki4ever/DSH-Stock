@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>【v2.1.0】A股多维量化筛选器 - DSH Stock Web</title>
+  <title>【v2.2.0】A股多维量化筛选器 - DSH Stock Web</title>
   <link rel="stylesheet" href="/web/style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v2.1.0</span>
+      <span id="appVersionBadge" class="version-badge">v2.2.0</span>
       <span class="brand-tag">全市场主板+创业板</span>
     </div>
 
@@ -578,6 +578,27 @@
           </div>
         </div>
 
+        <!-- 需求3: 外部宏观环境对 A 股影响总评分时序走势图谱与统计看板 -->
+        <div class="world-timeline-chart-card" style="margin-top: 1.2rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <span style="font-weight: 700; font-size: 1.05rem;">📉 外部宏观对 A 股影响总评分历史走势图谱</span>
+              <span class="brand-tag" style="font-size: 0.7rem;">时序量化分析</span>
+            </div>
+            <!-- 走势图统计指标胶囊 -->
+            <div class="score-stats-pills" id="worldScoreStatsPills">
+              <span class="score-stat-pill">最新总分: <strong id="statScoreLatest" style="color: #ef4444;">--</strong></span>
+              <span class="score-stat-pill">区间最高: <strong id="statScoreMax" style="color: #ef4444;">--</strong></span>
+              <span class="score-stat-pill">区间最低: <strong id="statScoreMin" style="color: #10b981;">--</strong></span>
+              <span class="score-stat-pill">平均偏好: <strong id="statScoreAvg" style="color: #38bdf8;">--</strong></span>
+            </div>
+          </div>
+          <!-- 矢量图表容器 -->
+          <div id="worldScoreChartSvgContainer" style="width: 100%; min-height: 220px; display: flex; justify-content: center; align-items: center;">
+            <div style="color: var(--text-muted); padding: 2rem;">正在绘制外部宏观时序走势图...</div>
+          </div>
+        </div>
+
         <!-- 1. 全球硬通货资产与大宗商品实时看板 (外汇 / 黄金 / 原油 / 贵金属) -->
         <div class="commodity-section">
           <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
@@ -818,6 +839,16 @@
             <div class="segmented-control" id="chartSubPlotControl">
               <button type="button" class="seg-btn active" data-subplot="vol" onclick="switchChartSubplot('vol')">📊 成交量(手)</button>
               <button type="button" class="seg-btn" data-subplot="amt" onclick="switchChartSubplot('amt')">💰 成交额(亿元)</button>
+            </div>
+
+            <!-- 需求1: 画图工具箱 (水平压力/支撑线与一键清除) -->
+            <div class="chart-draw-toolbox">
+              <button type="button" id="btnToggleHLine" class="btn-draw-tool" onclick="toggleDrawHLineMode()" title="开启画水平线模式后，在图表任意价格位置点击即可放置压力/支撑线">
+                📏 画水平线(压力/支撑)
+              </button>
+              <button type="button" id="btnClearLines" class="btn-draw-tool" onclick="clearAllChartDrawLines()" title="清除图表上所有辅助线">
+                🧹 清除辅助线
+              </button>
             </div>
           </div>
         </div>
