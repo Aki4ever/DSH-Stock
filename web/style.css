@@ -1585,6 +1585,343 @@ body {
   height: auto;
 }
 
+/* ==================================================== */
+/* 全球外部宏观环境看板样式 (World Intelligence Tab)   */
+/* ==================================================== */
+.world-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.world-header-card {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.85));
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.2rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+}
+
+.commodity-section {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.4rem;
+}
+
+.commodity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+
+.commodity-card {
+  background-color: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.commodity-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.commodity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.commodity-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.commodity-tag {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background-color: rgba(30, 41, 59, 0.8);
+  color: var(--text-secondary);
+}
+
+.commodity-price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 0.2rem;
+}
+
+.commodity-price {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-family: monospace;
+}
+
+.commodity-change {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.commodity-impact {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  border-top: 1px dashed rgba(51, 65, 85, 0.4);
+  padding-top: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+/* 世界各国大事分类情报库 */
+.world-events-section {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.4rem;
+}
+
+.events-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1rem;
+}
+
+.country-pill-group, .domain-pill-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.country-pill, .domain-pill {
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0.25rem 0.65rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.country-pill:hover, .domain-pill:hover {
+  background-color: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.country-pill.active, .domain-pill.active {
+  background-color: var(--accent-blue);
+  color: #ffffff;
+  border-color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.world-events-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.event-card {
+  background-color: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(51, 65, 85, 0.45);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.event-card:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.event-top-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.event-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.event-flag {
+  font-size: 1.1rem;
+}
+
+.event-domain-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  background-color: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.event-date {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.event-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.45;
+}
+
+.event-summary {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.event-impact-box {
+  background-color: rgba(30, 41, 59, 0.5);
+  border-left: 3px solid var(--accent-blue);
+  padding: 0.5rem 0.8rem;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+
+.event-source-link {
+  font-size: 0.75rem;
+  color: #60a5fa;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.event-source-link:hover {
+  text-decoration: underline;
+}
+
+/* ==================================================== */
+/* 个股大宗交易与公告大事提醒 Tab 样式                  */
+/* ==================================================== */
+.events-split-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+}
+
+@media (max-width: 800px) {
+  .events-split-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.events-milestone-box, .events-notices-box {
+  background-color: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(51, 65, 85, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1rem;
+}
+
+.milestone-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.milestone-item {
+  border-left: 2px solid var(--accent-blue);
+  padding-left: 0.8rem;
+  position: relative;
+}
+
+.milestone-item::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-blue);
+}
+
+.milestone-date-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.milestone-name {
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: #ffffff;
+  margin-bottom: 0.2rem;
+}
+
+.milestone-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.notice-list-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.notice-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  background-color: rgba(30, 41, 59, 0.35);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  transition: background-color 0.15s ease;
+}
+
+.notice-item-row:hover {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.notice-title-text {
+  color: #f1f5f9;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.notice-title-text:hover {
+  color: #38bdf8;
+}
+
 .empty-state, .loading-state {
   text-align: center;
   padding: 3.5rem 1rem;

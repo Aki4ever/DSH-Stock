@@ -28,7 +28,12 @@ const appState = {
   activeDetailStock: null,
   chartPeriod: 'timeline', // 'timeline' (分时) | 'daily' (日K)
   chartSubplot: 'vol',     // 'vol' (成交量) | 'amt' (成交额)
-  activeFinTab: 'main',    // 'main' | 'balance' | 'income' | 'cash'
+  activeFinTab: 'main',    // 'main' | 'balance' | 'income' | 'cash' | 'block' | 'events'
+
+  // 外部宏观环境过滤状态
+  worldFilterCountry: 'all',
+  worldFilterDomain: 'all',
+  worldMacroData: null,
 
   // 宏观仪表盘数据缓存
   dashboardData: null
@@ -49,10 +54,18 @@ const dom = {
   // Tabs
   tabBtnFilter: document.getElementById('tabBtnFilter'),
   tabBtnDashboard: document.getElementById('tabBtnDashboard'),
+  tabBtnWorld: document.getElementById('tabBtnWorld'),
   tabBtnCrawler: document.getElementById('tabBtnCrawler'),
   viewFilterTab: document.getElementById('viewFilterTab'),
   viewDashboardTab: document.getElementById('viewDashboardTab'),
+  viewWorldTab: document.getElementById('viewWorldTab'),
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
+
+  // 外部宏观环境 DOM
+  worldCommodityGrid: document.getElementById('worldCommodityGrid'),
+  worldEventsStream: document.getElementById('worldEventsStream'),
+  worldCountryPills: document.getElementById('worldCountryPills'),
+  worldDomainPills: document.getElementById('worldDomainPills'),
 
   // 宏观仪表盘 DOM
   dashStartDate: document.getElementById('dashStartDate'),
@@ -187,7 +200,12 @@ const dom = {
   finPanelMain: document.getElementById('finPanelMain'),
   finPanelBalance: document.getElementById('finPanelBalance'),
   finPanelIncome: document.getElementById('finPanelIncome'),
-  finPanelCash: document.getElementById('finPanelCash')
+  finPanelCash: document.getElementById('finPanelCash'),
+  finPanelBlock: document.getElementById('finPanelBlock'),
+  finPanelEvents: document.getElementById('finPanelEvents'),
+  finTableBodyBlock: document.getElementById('finTableBodyBlock'),
+  eventsMilestoneList: document.getElementById('eventsMilestoneList'),
+  eventsNoticeList: document.getElementById('eventsNoticeList')
 };
 
 // 页面初始化
@@ -207,21 +225,25 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * 顶栏 Tab 页面无缝切换 (三足鼎立: filter | dashboard | crawler)
+ * 顶栏 Tab 页面无缝切换 (四足鼎立: filter | dashboard | world | crawler)
  */
 function switchMainTab(tabId) {
   appState.currentTab = tabId;
 
   if (dom.tabBtnFilter) dom.tabBtnFilter.classList.toggle('active', tabId === 'filter');
   if (dom.tabBtnDashboard) dom.tabBtnDashboard.classList.toggle('active', tabId === 'dashboard');
+  if (dom.tabBtnWorld) dom.tabBtnWorld.classList.toggle('active', tabId === 'world');
   if (dom.tabBtnCrawler) dom.tabBtnCrawler.classList.toggle('active', tabId === 'crawler');
 
   if (dom.viewFilterTab) dom.viewFilterTab.classList.toggle('hidden', tabId !== 'filter');
   if (dom.viewDashboardTab) dom.viewDashboardTab.classList.toggle('hidden', tabId !== 'dashboard');
+  if (dom.viewWorldTab) dom.viewWorldTab.classList.toggle('hidden', tabId !== 'world');
   if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.toggle('hidden', tabId !== 'crawler');
 
   if (tabId === 'dashboard') {
     loadDashboardOverview();
+  } else if (tabId === 'world') {
+    loadWorldMacroIntelligence();
   } else if (tabId === 'crawler') {
     pollCrawlerStatus();
   }
@@ -283,7 +305,7 @@ function setDashboardDateRange(rangeType, evt = null) {
 /**
  * 同步网页 Title 与 Header 版本号
  */
-function syncVersionAndTitle(version = 'v1.8.1') {
+function syncVersionAndTitle(version = 'v1.9.0') {
   appState.version = version;
   document.title = `【${version}】A股多维量化筛选器 - DSH Stock Web`;
   if (dom.appVersionBadge) {
@@ -986,6 +1008,146 @@ function renderCapTiersPyramidChart(tiers, totalCount) {
 }
 
 // ====================================================
+// 全球外部宏观环境情报看板逻辑 (World Intelligence v1.9.0)
+// ====================================================
+
+/**
+ * 加载全球外部环境情报 (硬通货大宗 + 世界大事)
+ */
+async function loadWorldMacroIntelligence() {
+  if (dom.worldCommodityGrid) {
+    dom.worldCommodityGrid.innerHTML = '<div style="padding: 1.5rem; color: var(--text-muted);">正在同步全球大宗资产与外汇行情...</div>';
+  }
+  if (dom.worldEventsStream) {
+    dom.worldEventsStream.innerHTML = '<div style="padding: 1.5rem; color: var(--text-muted);">正在连接多国官方情报中枢检索大事...</div>';
+  }
+
+  try {
+    const res = await fetch('/api/macro/world', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const data = json.data || {};
+    appState.worldMacroData = data;
+
+    renderWorldCommodities(data.commodities || []);
+    renderWorldEvents(data.world_events || []);
+  } catch (err) {
+    console.error('加载全球外部环境情报异常:', err);
+    if (dom.worldCommodityGrid) {
+      dom.worldCommodityGrid.innerHTML = '<div style="padding: 1.5rem; color: var(--text-muted);">全球大宗商品连接暂时受阻，请稍后刷新</div>';
+    }
+    if (dom.worldEventsStream) {
+      dom.worldEventsStream.innerHTML = '<div style="padding: 1.5rem; color: var(--text-muted);">世界大事情报网关响应超时</div>';
+    }
+  }
+}
+
+/**
+ * 渲染全球大宗与硬通货资产卡片
+ */
+function renderWorldCommodities(items) {
+  if (!dom.worldCommodityGrid) return;
+  dom.worldCommodityGrid.innerHTML = '';
+
+  items.forEach(c => {
+    const chg = Number(c.change || 0);
+    const chgPct = Number(c.change_pct || 0);
+    const chgColor = chg > 0 ? '#ef4444' : chg < 0 ? '#10b981' : '#94a3b8';
+    const sign = chg > 0 ? '+' : '';
+
+    const card = document.createElement('div');
+    card.className = 'commodity-card';
+    card.innerHTML = `
+      <div class="commodity-header">
+        <span class="commodity-name">${c.name}</span>
+        <span class="commodity-tag">${c.category}</span>
+      </div>
+      <div class="commodity-price-row">
+        <span class="commodity-price">${c.price.toLocaleString()}</span>
+        <span class="commodity-change" style="color: ${chgColor};">
+          ${sign}${chgPct.toFixed(2)}% (${sign}${chg.toFixed(2)})
+        </span>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem;">
+        <span>信号: <strong style="color: ${chgColor};">${c.signal}</strong></span>
+        <span>代码: ${c.symbol}</span>
+      </div>
+      <div class="commodity-impact">
+        💡 <strong>市场影响:</strong> ${c.impact}
+      </div>
+    `;
+    dom.worldCommodityGrid.appendChild(card);
+  });
+}
+
+/**
+ * 过滤与渲染世界大事列表
+ */
+function filterWorldEvents(type, val) {
+  if (type === 'country') {
+    appState.worldFilterCountry = val;
+    document.querySelectorAll('.country-pill').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-country') === val);
+    });
+  } else if (type === 'domain') {
+    appState.worldFilterDomain = val;
+    document.querySelectorAll('.domain-pill').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-domain') === val);
+    });
+  }
+
+  const allEvents = (appState.worldMacroData && appState.worldMacroData.world_events) ? appState.worldMacroData.world_events : [];
+  renderWorldEvents(allEvents);
+}
+
+function renderWorldEvents(events) {
+  if (!dom.worldEventsStream) return;
+  dom.worldEventsStream.innerHTML = '';
+
+  const country = appState.worldFilterCountry;
+  const domain = appState.worldFilterDomain;
+
+  const filtered = events.filter(e => {
+    const matchC = (country === 'all' || e.country_code === country);
+    const matchD = (domain === 'all' || e.domain === domain);
+    return matchC && matchD;
+  });
+
+  if (filtered.length === 0) {
+    dom.worldEventsStream.innerHTML = '<div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">暂无符合该筛选条件的世界大事情报</div>';
+    return;
+  }
+
+  filtered.forEach(e => {
+    const card = document.createElement('div');
+    card.className = 'event-card';
+    card.innerHTML = `
+      <div class="event-top-line">
+        <div class="event-meta-left">
+          <span class="event-flag">${e.flag}</span>
+          <span style="font-weight: 700; font-size: 0.88rem;">${e.country}</span>
+          <span class="event-domain-tag">${e.domain_icon} ${e.domain}</span>
+        </div>
+        <span class="event-date">📅 发生日期: ${e.date}</span>
+      </div>
+
+      <div class="event-title">${e.title}</div>
+      <div class="event-summary">${e.summary}</div>
+
+      <div class="event-impact-box">
+        🎯 <strong>金融与地缘影响深度研判:</strong> ${e.impact_analysis}
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.2rem; flex-wrap: wrap; gap: 0.4rem;">
+        <span style="font-size: 0.75rem; color: var(--text-muted);">🏛️ 官方认证信源: ${e.official_source}</span>
+        <a href="${e.source_url}" target="_blank" class="event-source-link">🔗 查看官方原始通告 ↗</a>
+      </div>
+    `;
+    dom.worldEventsStream.appendChild(card);
+  });
+}
+
+// ====================================================
 // 独立手动数据采集控制中心逻辑
 // ====================================================
 
@@ -1251,7 +1413,7 @@ function switchChartSubplot(subplot) {
 }
 
 /**
- * 切换财务分析 4 个 Tab
+ * 切换财务分析 / 大宗交易 / 公告大事 Tab
  */
 function switchFinanceTab(tabKey) {
   appState.activeFinTab = tabKey;
@@ -1262,6 +1424,114 @@ function switchFinanceTab(tabKey) {
   dom.finPanelBalance.style.display = (tabKey === 'balance') ? 'block' : 'none';
   dom.finPanelIncome.style.display = (tabKey === 'income') ? 'block' : 'none';
   dom.finPanelCash.style.display = (tabKey === 'cash') ? 'block' : 'none';
+  if (dom.finPanelBlock) dom.finPanelBlock.style.display = (tabKey === 'block') ? 'block' : 'none';
+  if (dom.finPanelEvents) dom.finPanelEvents.style.display = (tabKey === 'events') ? 'block' : 'none';
+
+  if (tabKey === 'block' && appState.activeDetailStock) {
+    loadStockBlockTrades(appState.activeDetailStock.code);
+  } else if (tabKey === 'events' && appState.activeDetailStock) {
+    loadStockEvents(appState.activeDetailStock.code);
+  }
+}
+
+/**
+ * 穿透加载个股大宗交易
+ */
+async function loadStockBlockTrades(code) {
+  if (!dom.finTableBodyBlock) return;
+  dom.finTableBodyBlock.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">正在从深交所/上交所官方系统稳健调取大宗交易数据...</td></tr>';
+  try {
+    const res = await fetch(`/api/stock/${code}/block`);
+    if (!res.ok) throw new Error('拉取大宗交易失败');
+    const json = await res.json();
+    const trades = json.data || [];
+    renderBlockTradesTable(trades);
+  } catch (err) {
+    dom.finTableBodyBlock.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">暂未查询到该标的近期大宗交易公开成交记录</td></tr>';
+  }
+}
+
+function renderBlockTradesTable(trades) {
+  if (!dom.finTableBodyBlock) return;
+  if (!trades || trades.length === 0) {
+    dom.finTableBodyBlock.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">近期无官方大宗交易成交异动</td></tr>';
+    return;
+  }
+  dom.finTableBodyBlock.innerHTML = '';
+  trades.forEach(t => {
+    const prem = Number(t.premium_ratio || 0);
+    const premColor = prem > 0 ? '#ef4444' : prem < 0 ? '#10b981' : '#94a3b8';
+    const premSign = prem > 0 ? '+' : '';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${t.trade_date || '--'}</td>
+      <td style="font-weight: 700; color: #ffffff;">¥${(t.deal_price || 0).toFixed(2)}</td>
+      <td style="font-weight: 700; color: ${premColor};">${premSign}${prem.toFixed(2)}%</td>
+      <td>${(t.volume_hand || 0).toLocaleString()}</td>
+      <td style="color: #38bdf8; font-weight: 600;">${(t.amount_wan || 0).toLocaleString()}</td>
+      <td><span class="${t.is_buyer_org ? 'tag-badge tag-csi50' : ''}">${t.buyer || '--'}</span></td>
+      <td><span class="${t.is_seller_org ? 'tag-badge tag-market-sz' : ''}">${t.seller || '--'}</span></td>
+    `;
+    dom.finTableBodyBlock.appendChild(tr);
+  });
+}
+
+/**
+ * 穿透加载个股公告与大事提醒
+ */
+async function loadStockEvents(code) {
+  if (!dom.eventsMilestoneList || !dom.eventsNoticeList) return;
+  dom.eventsMilestoneList.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">正在整理大事提醒日程...</div>';
+  dom.eventsNoticeList.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">正在穿透官方公告披露源...</div>';
+  try {
+    const res = await fetch(`/api/stock/${code}/events`);
+    if (!res.ok) throw new Error('拉取公告大事失败');
+    const json = await res.json();
+    const data = json.data || {};
+    renderStockEventsUI(data);
+  } catch (err) {
+    dom.eventsMilestoneList.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">近期暂无重大备忘事件</div>';
+    dom.eventsNoticeList.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">近期暂无披露公告</div>';
+  }
+}
+
+function renderStockEventsUI(data) {
+  const milestones = data.milestones || [];
+  const notices = data.notices || [];
+
+  // 1. 渲染大事日程
+  if (dom.eventsMilestoneList) {
+    dom.eventsMilestoneList.innerHTML = '';
+    milestones.forEach(m => {
+      const item = document.createElement('div');
+      item.className = 'milestone-item';
+      item.innerHTML = `
+        <div class="milestone-date-row">
+          <span>📅 ${m.date}</span>
+          <span class="tag-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">${m.badge}</span>
+        </div>
+        <div class="milestone-name">${m.event}</div>
+        <div class="milestone-desc">${m.desc}</div>
+      `;
+      dom.eventsMilestoneList.appendChild(item);
+    });
+  }
+
+  // 2. 渲染官方公告列表
+  if (dom.eventsNoticeList) {
+    dom.eventsNoticeList.innerHTML = '';
+    notices.forEach(n => {
+      const row = document.createElement('div');
+      row.className = 'notice-item-row';
+      row.innerHTML = `
+        <span class="tag-badge" style="background: ${n.tag_color}25; color: ${n.tag_color}; font-size: 0.7rem;">${n.tag}</span>
+        <a href="${n.url}" target="_blank" class="notice-title-text" title="${n.title}">${n.title}</a>
+        <span style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">${n.date}</span>
+      `;
+      dom.eventsNoticeList.appendChild(row);
+    });
+  }
 }
 
 /**

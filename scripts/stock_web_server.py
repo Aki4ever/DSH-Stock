@@ -504,6 +504,47 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        # 3.3 全球外部宏观环境与国际大宗情报端点
+        if url_path == "/api/macro/world":
+            from scripts.world_macro_engine import WorldMacroEngine
+            world_data = WorldMacroEngine.get_world_macro_intelligence()
+            self._send_json(200, {
+                "code": 200,
+                "version": APP_VERSION,
+                "data": world_data
+            })
+            return
+
+        # 3.4 单只股票大宗交易官方穿透端点 /api/stock/<code/block
+        if url_path.startswith("/api/stock/") and url_path.endswith("/block"):
+            parts = url_path.split("/")
+            symbol = parts[3] if len(parts) >= 4 else ""
+            stock_info = DATA_MANAGER.get_stock_detail(symbol) or {}
+            curr_p = float(stock_info.get("price") or 0.0)
+            from scripts.official_block_trade_engine import OfficialBlockTradeEngine
+            trades = OfficialBlockTradeEngine.get_stock_block_trades(symbol, curr_p)
+            self._send_json(200, {
+                "code": 200,
+                "symbol": symbol,
+                "data": trades
+            })
+            return
+
+        # 3.5 单只股票官方公告与大事提醒端点 /api/stock/<code/events
+        if url_path.startswith("/api/stock/") and url_path.endswith("/events"):
+            parts = url_path.split("/")
+            symbol = parts[3] if len(parts) >= 4 else ""
+            stock_info = DATA_MANAGER.get_stock_detail(symbol) or {}
+            stk_name = str(stock_info.get("name") or "")
+            from scripts.stock_events_engine import StockEventsEngine
+            events_data = StockEventsEngine.get_stock_events_and_notices(symbol, stk_name)
+            self._send_json(200, {
+                "code": 200,
+                "symbol": symbol,
+                "data": events_data
+            })
+            return
+
         # 4. 服务端状态端点 (常显心跳检查)
         if url_path == "/api/status":
             with SERVER_STATE_LOCK:

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>【v1.8.1】A股多维量化筛选器 - DSH Stock Web</title>
+  <title>【v1.9.0】A股多维量化筛选器 - DSH Stock Web</title>
   <link rel="stylesheet" href="/web/style.css">
 </head>
 <body>
@@ -13,17 +13,20 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v1.8.1</span>
+      <span id="appVersionBadge" class="version-badge">v1.9.0</span>
       <span class="brand-tag">全市场主板+创业板</span>
     </div>
 
-    <!-- 顶栏页面 Tab 切换器 (新增全市场宏观仪表盘) -->
+    <!-- 顶栏页面 Tab 切换器 (四足鼎立: 筛选 | 仪表盘 | 外部宏观环境 | 采集中心) -->
     <nav class="nav-tabs">
       <button id="tabBtnFilter" class="nav-tab-btn active" onclick="switchMainTab('filter')">
         <span>📊 行情与量化筛选</span>
       </button>
       <button id="tabBtnDashboard" class="nav-tab-btn" onclick="switchMainTab('dashboard')">
         <span>📈 全市场全景仪表盘</span>
+      </button>
+      <button id="tabBtnWorld" class="nav-tab-btn" onclick="switchMainTab('world')">
+        <span>🌍 外部宏观环境</span>
       </button>
       <button id="tabBtnCrawler" class="nav-tab-btn" onclick="switchMainTab('crawler')">
         <span>🕷️ 独立数据采集中心</span>
@@ -494,7 +497,77 @@
     </div>
 
     <!-- ==================================================== -->
-    <!-- 视图 3: 独立数据采集控制中心 (Tab: crawler)          -->
+    <!-- 视图 3: 全球外部宏观环境情报看板 (Tab: world)         -->
+    <!-- ==================================================== -->
+    <div id="viewWorldTab" class="tab-view hidden">
+      <div class="world-dashboard">
+
+        <!-- 外部宏观环境顶栏 -->
+        <div class="world-header-card">
+          <div class="world-title-area">
+            <h2 style="font-size: 1.35rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+              <span>🌍 全球外部宏观环境与国际大宗情报</span>
+              <span class="version-badge" style="font-size: 0.75rem;">官方信源直连</span>
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.35rem;">
+              穿透全球各大经济体官方信源，涵盖<strong>外汇汇率、COMEX黄金、布伦特原油、贵金属</strong>等硬通货资产变动；系统分类透视对金融、政治、科技、外贸、军事产生深远影响的全球大事。
+            </p>
+          </div>
+          <div class="world-btn-group">
+            <button class="btn btn-secondary" onclick="loadWorldMacroIntelligence()" style="padding: 0.45rem 0.9rem; font-size: 0.85rem;">
+              🔄 刷新全球情报
+            </button>
+          </div>
+        </div>
+
+        <!-- 1. 全球硬通货资产与大宗商品实时看板 (外汇 / 黄金 / 原油 / 贵金属) -->
+        <div class="commodity-section">
+          <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
+            <span>🪙 全球硬通货与国际大宗商品实时看板</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">(离岸人民币、美元指数、黄金、白银、布伦特原油、期铜等)</span>
+          </div>
+          <div class="commodity-grid" id="worldCommodityGrid">
+            <!-- 由 JS 动态渲染各商品卡片 -->
+          </div>
+        </div>
+
+        <!-- 2. 世界各国重大事件分类情报库 (国家与领域双重过滤) -->
+        <div class="world-events-section" style="margin-top: 1.4rem;">
+          <div class="events-filter-bar">
+            <div class="events-filter-left">
+              <span style="font-weight: 700; font-size: 1.05rem;">🌐 世界各国大事分类情报库</span>
+            </div>
+            
+            <!-- 国家标签过滤 -->
+            <div class="country-pill-group" id="worldCountryPills">
+              <button class="country-pill active" data-country="all" onclick="filterWorldEvents('country', 'all')">全部国家</button>
+              <button class="country-pill" data-country="us" onclick="filterWorldEvents('country', 'us')">🇺🇸 美国</button>
+              <button class="country-pill" data-country="cn" onclick="filterWorldEvents('country', 'cn')">🇨🇳 中国</button>
+              <button class="country-pill" data-country="eu" onclick="filterWorldEvents('country', 'eu')">🇪🇺 欧洲</button>
+              <button class="country-pill" data-country="mideast" onclick="filterWorldEvents('country', 'mideast')">🌍 中东与其它</button>
+            </div>
+
+            <!-- 5 大领域标签过滤 -->
+            <div class="domain-pill-group" id="worldDomainPills">
+              <button class="domain-pill active" data-domain="all" onclick="filterWorldEvents('domain', 'all')">全部领域</button>
+              <button class="domain-pill" data-domain="金融" onclick="filterWorldEvents('domain', '金融')">🏦 金融</button>
+              <button class="domain-pill" data-domain="科技" onclick="filterWorldEvents('domain', '科技')">🔬 科技</button>
+              <button class="domain-pill" data-domain="军事" onclick="filterWorldEvents('domain', '军事')">⚔️ 军事</button>
+              <button class="domain-pill" data-domain="外贸" onclick="filterWorldEvents('domain', '外贸')">🚢 外贸</button>
+            </div>
+          </div>
+
+          <!-- 事件卡片信息流 -->
+          <div class="world-events-stream" id="worldEventsStream">
+            <!-- 由 JS 动态渲染各重大事件卡片 -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- 视图 4: 独立数据采集控制中心 (Tab: crawler)          -->
     <!-- ==================================================== -->
     <div id="viewCrawlerTab" class="tab-view hidden">
       <div class="crawler-dashboard">
@@ -733,18 +806,20 @@
           </div>
         </div>
 
-        <!-- 深度财务分析 4 个 Tab 页面 (主要指标、资产负债表、利润表、现金流量表) -->
+        <!-- 深度财务分析 4 个 Tab 页面 (主要指标、资产负债表、利润表、现金流量表) 与新增大宗交易、公告大事 -->
         <div class="finance-analysis-card">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.5rem;">
             <div style="font-weight: 700; font-size: 0.95rem;">
-              📊 深度财务分析 <span id="modalFinancePeriod" style="font-size: 0.8rem; color: #60a5fa; font-weight: normal;">(最新披露期)</span>
+              📊 深度财务分析、大宗交易与重大公告 <span id="modalFinancePeriod" style="font-size: 0.8rem; color: #60a5fa; font-weight: normal;">(全维度穿透)</span>
             </div>
-            <!-- 4 Tab 切换按钮 -->
+            <!-- 6 Tab 切换按钮: 包含新增的 大宗交易与官方公告大事 -->
             <div class="finance-nav-tabs" style="margin-bottom: 0;">
-              <button type="button" class="fin-tab-btn active" data-fintab="main" onclick="switchFinanceTab('main')">主要指标</button>
+              <button type="button" class="fin-tab-btn active" data-fintab="main" onclick="switchFinanceTab('main')">主要财务指标</button>
               <button type="button" class="fin-tab-btn" data-fintab="balance" onclick="switchFinanceTab('balance')">资产负债表</button>
               <button type="button" class="fin-tab-btn" data-fintab="income" onclick="switchFinanceTab('income')">利润表</button>
               <button type="button" class="fin-tab-btn" data-fintab="cash" onclick="switchFinanceTab('cash')">现金流量表</button>
+              <button type="button" class="fin-tab-btn" data-fintab="block" onclick="switchFinanceTab('block')">🤝 交易所大宗交易</button>
+              <button type="button" class="fin-tab-btn" data-fintab="events" onclick="switchFinanceTab('events')">🔔 官方公告与大事提醒</button>
             </div>
           </div>
 
@@ -819,6 +894,57 @@
               </table>
             </div>
           </div>
+
+          <!-- Tab 5: 交易所官方大宗交易穿透 (深交所/上交所成交价、折溢价率与买卖营业部) -->
+          <div id="finPanelBlock" class="finance-panel" style="display: none;">
+            <div style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 0.6rem; display: flex; justify-content: space-between;">
+              <span>深交所 / 上交所官方大宗交易系统成交穿透，重点识别<strong>机构席位动向</strong>与<strong>折溢价异动</strong></span>
+              <span id="blockTradeSourceTag" class="tag-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">官方交易所接口直连</span>
+            </div>
+            <div class="finance-table-box">
+              <table class="fin-data-table">
+                <thead>
+                  <tr>
+                    <th>成交日期</th>
+                    <th>成交价(元)</th>
+                    <th>折溢价率</th>
+                    <th>成交量(手)</th>
+                    <th>成交额(万元)</th>
+                    <th>买方营业部席位</th>
+                    <th>卖方营业部席位</th>
+                  </tr>
+                </thead>
+                <tbody id="finTableBodyBlock">
+                  <!-- 动态插入 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab 6: 官方公告与大事提醒 (大事备忘录 + 最新披露公告列表) -->
+          <div id="finPanelEvents" class="finance-panel" style="display: none;">
+            <div class="events-split-layout">
+              <!-- 左侧: 大事备忘录里程碑 -->
+              <div class="events-milestone-box">
+                <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.6rem; color: #38bdf8;">
+                  📌 核心大事日程备忘录
+                </div>
+                <div id="eventsMilestoneList" class="milestone-timeline">
+                  <!-- 动态插入大事日程 -->
+                </div>
+              </div>
+              <!-- 右侧: 官方公告列表 -->
+              <div class="events-notices-box">
+                <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.6rem; color: #e2e8f0;">
+                  📢 最新官方披露公告 (巨潮资讯网/交易所公开)
+                </div>
+                <div id="eventsNoticeList" class="notice-list-stream">
+                  <!-- 动态插入公告 -->
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
