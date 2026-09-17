@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>【v1.9.0】A股多维量化筛选器 - DSH Stock Web</title>
+  <title>【v2.0.0】A股多维量化筛选器 - DSH Stock Web</title>
   <link rel="stylesheet" href="/web/style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v1.9.0</span>
+      <span id="appVersionBadge" class="version-badge">v2.0.0</span>
       <span class="brand-tag">全市场主板+创业板</span>
     </div>
 
@@ -116,7 +116,7 @@
             </div>
           </div>
 
-          <!-- 控件 1: 筛选基准日期 -->
+          <!-- 控件 1: 筛选基准日期 (附带休市日与开市日强视觉徽章) -->
           <div class="filter-item">
             <div class="filter-label">
               <div class="label-left">
@@ -126,7 +126,13 @@
                 <button type="button" class="btn-item-reset" onclick="resetSingleDimension('date')" title="重置日期为今天">↺ 默认今天</button>
               </div>
             </div>
-            <input type="date" id="filterDateInput" class="input-date">
+            <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+              <input type="date" id="filterDateInput" class="input-date">
+              <div id="filterDateTradingStatus" class="trading-status-tip trading-status-open">
+                <span class="status-dot"></span>
+                <span id="filterDateStatusText">🟢 正常开市交易 (周四)</span>
+              </div>
+            </div>
           </div>
 
           <!-- 控件 2: 股市分类 -->
@@ -399,13 +405,17 @@
             </p>
           </div>
 
-          <!-- 双日期区间选择控件组 -->
+          <!-- 双日期区间选择控件组 (附带休市日检测提示) -->
           <div class="macro-date-control-box">
             <div class="date-picker-group">
               <span class="date-label">📅 统计区间:</span>
               <input type="date" id="dashStartDate" class="date-input-mini" title="统计开始日期">
               <span style="color: var(--text-muted);">➔</span>
               <input type="date" id="dashEndDate" class="date-input-mini" title="统计结束日期">
+            </div>
+            <!-- 交易日状态提示 -->
+            <div id="dashDateTradingTip" style="font-size: 0.76rem; color: #4ade80; font-weight: 600;">
+              🟢 起止交易日正常开市
             </div>
             <!-- 快速区间快捷键 -->
             <div class="date-quick-presets">
@@ -502,21 +512,55 @@
     <div id="viewWorldTab" class="tab-view hidden">
       <div class="world-dashboard">
 
-        <!-- 外部宏观环境顶栏 -->
+        <!-- 外部宏观环境顶栏 (支持日期区间选择与 [-1000, +1000] 综合量化总分看板) -->
         <div class="world-header-card">
           <div class="world-title-area">
             <h2 style="font-size: 1.35rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
               <span>🌍 全球外部宏观环境与国际大宗情报</span>
-              <span class="version-badge" style="font-size: 0.75rem;">官方信源直连</span>
+              <span class="version-badge" style="font-size: 0.75rem;">A股量化冲击评估</span>
             </h2>
             <p style="color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.35rem;">
-              穿透全球各大经济体官方信源，涵盖<strong>外汇汇率、COMEX黄金、布伦特原油、贵金属</strong>等硬通货资产变动；系统分类透视对金融、政治、科技、外贸、军事产生深远影响的全球大事。
+              穿透全球官方信源，每条大事均提供 <strong>[-1000, +1000]</strong> 的 A 股量化冲击打分。支持自选起止日期区间，动态加总综合总分与多空风险偏好评级。
             </p>
           </div>
-          <div class="world-btn-group">
-            <button class="btn btn-secondary" onclick="loadWorldMacroIntelligence()" style="padding: 0.45rem 0.9rem; font-size: 0.85rem;">
-              🔄 刷新全球情报
-            </button>
+          <div class="world-date-control-box">
+            <div class="date-picker-group">
+              <span class="date-label">📅 评估区间:</span>
+              <input type="date" id="worldStartDate" class="date-input-mini" title="评估开始日期">
+              <span style="color: var(--text-muted);">➔</span>
+              <input type="date" id="worldEndDate" class="date-input-mini" title="评估结束日期">
+              <button class="btn btn-primary" onclick="loadWorldMacroIntelligence()" style="padding: 0.25rem 0.65rem; font-size: 0.78rem;">
+                🔍 评估
+              </button>
+            </div>
+            <div id="worldTradingTip" style="font-size: 0.76rem; color: #4ade80; font-weight: 600;">
+              🟢 评估区间交易日已核验
+            </div>
+          </div>
+        </div>
+
+        <!-- 外部宏观对 A 股综合量化得分总览大卡 -->
+        <div class="world-score-card">
+          <div class="score-card-left">
+            <div class="score-main-val">
+              <span id="worldScoreIcon" style="font-size: 2.2rem;">🔥</span>
+              <div>
+                <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">外部宏观环境对 A 股综合量化总分 (单项 -1000 ~ +1000 动态加总)</div>
+                <div style="display: flex; align-items: baseline; gap: 0.6rem;">
+                  <span id="worldTotalScore" class="score-number price-up">+1,880</span>
+                  <span id="worldSentimentLabel" class="score-sentiment-badge" style="background-color: rgba(239, 68, 68, 0.2); color: #ef4444;">
+                    🔥 强力看多 / 风险偏好极度扩张
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="score-card-right">
+            <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5;">
+              当前区间评估事件数: <strong id="worldEventsCount" style="color: #38bdf8;">10</strong> 件 ｜ 
+              涵盖领域: <strong>金融、科技、军事、外贸</strong><br>
+              <span style="color: var(--text-muted); font-size: 0.75rem;">* 得分基于全球流动性传导、中美利差、供应链订单、地缘风险溢价加权量化测算</span>
+            </div>
           </div>
         </div>
 
@@ -744,10 +788,17 @@
             <span id="chartDataSourceBadge" class="brand-tag" style="font-size: 0.7rem;">官方实时行情源</span>
           </div>
           <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
-            <!-- 主图时段切换 -->
+            <!-- 主图时段切换 (分时 / 日K) -->
             <div class="segmented-control" id="chartPeriodControl">
-              <button type="button" class="seg-btn active" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 分时走势</button>
-              <button type="button" class="seg-btn" data-period="daily" onclick="switchChartPeriod('daily')">📊 60日 K线</button>
+              <button type="button" class="seg-btn active" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 当日分时 (11:30中枢)</button>
+              <button type="button" class="seg-btn" data-period="daily" onclick="switchChartPeriod('daily')">📊 上市全景K线 (缩放控制)</button>
+            </div>
+            <!-- K线缩放区间控制 -->
+            <div class="segmented-control" id="chartZoomControl" style="display: none;">
+              <button type="button" class="seg-btn" data-zoom="60" onclick="setChartZoomWindow(60)">近60日</button>
+              <button type="button" class="seg-btn" data-zoom="250" onclick="setChartZoomWindow(250)">近1年</button>
+              <button type="button" class="seg-btn" data-zoom="750" onclick="setChartZoomWindow(750)">近3年</button>
+              <button type="button" class="seg-btn active" data-zoom="max" onclick="setChartZoomWindow('max')">🌟 上市至今(Max)</button>
             </div>
             <!-- 副图指标切换 -->
             <div class="segmented-control" id="chartSubPlotControl">
@@ -806,13 +857,20 @@
           </div>
         </div>
 
-        <!-- 深度财务分析 4 个 Tab 页面 (主要指标、资产负债表、利润表、现金流量表) 与新增大宗交易、公告大事 -->
+        <!-- 深度财务分析 多颗粒度对比 (按报告期 / 按年度 / 按单季度，严格复刻图2) -->
         <div class="finance-analysis-card">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.5rem;">
-            <div style="font-weight: 700; font-size: 0.95rem;">
-              📊 深度财务分析、大宗交易与重大公告 <span id="modalFinancePeriod" style="font-size: 0.8rem; color: #60a5fa; font-weight: normal;">(全维度穿透)</span>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.8rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+              <span style="font-weight: 700; font-size: 0.98rem;">📊 深度财务分析 (同花顺/东财级多期矩阵)</span>
+              <!-- 图2样式: 时间颗粒度切换 Tab (按报告期 / 按年度 / 按单季度) -->
+              <div class="granularity-control">
+                <button type="button" class="gran-btn" data-gran="report" onclick="switchFinanceGranularity('report')">按报告期</button>
+                <button type="button" class="gran-btn active" data-gran="annual" onclick="switchFinanceGranularity('annual')">按年度</button>
+                <button type="button" class="gran-btn" data-gran="quarter" onclick="switchFinanceGranularity('quarter')">按单季度</button>
+              </div>
             </div>
-            <!-- 6 Tab 切换按钮: 包含新增的 大宗交易与官方公告大事 -->
+
+            <!-- 6 Tab 切换按钮: 包含四大表与大宗交易、公告大事 -->
             <div class="finance-nav-tabs" style="margin-bottom: 0;">
               <button type="button" class="fin-tab-btn active" data-fintab="main" onclick="switchFinanceTab('main')">主要财务指标</button>
               <button type="button" class="fin-tab-btn" data-fintab="balance" onclick="switchFinanceTab('balance')">资产负债表</button>
@@ -823,16 +881,12 @@
             </div>
           </div>
 
-          <!-- Tab 1: 主要指标 -->
+          <!-- Tab 1: 主要财务指标矩阵 (严格对齐图2多列头) -->
           <div id="finPanelMain" class="finance-panel">
             <div class="finance-table-box">
               <table class="fin-data-table">
-                <thead>
-                  <tr>
-                    <th>财务关键指标</th>
-                    <th>数值</th>
-                    <th>指标含义与投资参考</th>
-                  </tr>
+                <thead id="finTheadMain">
+                  <!-- 动态插入: 科目\年度 及 各年度列 -->
                 </thead>
                 <tbody id="finTableBodyMain">
                   <!-- 动态插入 -->
@@ -841,16 +895,12 @@
             </div>
           </div>
 
-          <!-- Tab 2: 资产负债表 -->
+          <!-- Tab 2: 资产负债表多期对比 -->
           <div id="finPanelBalance" class="finance-panel" style="display: none;">
             <div class="finance-table-box">
               <table class="fin-data-table">
-                <thead>
-                  <tr>
-                    <th>科目名称</th>
-                    <th>期末金额 (亿元)</th>
-                    <th>结构分类</th>
-                  </tr>
+                <thead id="finTheadBalance">
+                  <!-- 动态插入 -->
                 </thead>
                 <tbody id="finTableBodyBalance">
                   <!-- 动态插入 -->
@@ -859,16 +909,12 @@
             </div>
           </div>
 
-          <!-- Tab 3: 利润表 -->
+          <!-- Tab 3: 利润表多期对比 -->
           <div id="finPanelIncome" class="finance-panel" style="display: none;">
             <div class="finance-table-box">
               <table class="fin-data-table">
-                <thead>
-                  <tr>
-                    <th>利润表核心科目</th>
-                    <th>金额 (亿元)</th>
-                    <th>核算项目</th>
-                  </tr>
+                <thead id="finTheadIncome">
+                  <!-- 动态插入 -->
                 </thead>
                 <tbody id="finTableBodyIncome">
                   <!-- 动态插入 -->
@@ -877,16 +923,12 @@
             </div>
           </div>
 
-          <!-- Tab 4: 现金流量表 -->
+          <!-- Tab 4: 现金流量表多期对比 -->
           <div id="finPanelCash" class="finance-panel" style="display: none;">
             <div class="finance-table-box">
               <table class="fin-data-table">
-                <thead>
-                  <tr>
-                    <th>现金流量表科目</th>
-                    <th>净流入/流出 (亿元)</th>
-                    <th>资金属性</th>
-                  </tr>
+                <thead id="finTheadCash">
+                  <!-- 动态插入 -->
                 </thead>
                 <tbody id="finTableBodyCash">
                   <!-- 动态插入 -->

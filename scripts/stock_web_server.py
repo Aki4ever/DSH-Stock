@@ -504,14 +504,69 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
-        # 3.3 全球外部宏观环境与国际大宗情报端点
+        # 3.3 全球外部宏观环境与国际大宗情报端点 (支持 ?start_date=...&end_date=...)
         if url_path == "/api/macro/world":
+            query_params = {}
+            if "?" in self.path:
+                q_str = self.path.split("?", 1)[1]
+                for part in q_str.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        query_params[k.strip()] = v.strip()
+
+            s_date = query_params.get("start_date")
+            e_date = query_params.get("end_date")
+
             from scripts.world_macro_engine import WorldMacroEngine
-            world_data = WorldMacroEngine.get_world_macro_intelligence()
+            world_data = WorldMacroEngine.get_world_macro_intelligence(start_date=s_date, end_date=e_date)
             self._send_json(200, {
                 "code": 200,
                 "version": APP_VERSION,
                 "data": world_data
+            })
+            return
+
+        # 3.6 交易日历判定端点 /api/calendar/check?date=YYYY-MM-DD
+        if url_path == "/api/calendar/check":
+            query_params = {}
+            if "?" in self.path:
+                q_str = self.path.split("?", 1)[1]
+                for part in q_str.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        query_params[k.strip()] = v.strip()
+            date_param = query_params.get("date", datetime.now().strftime("%Y-%m-%d"))
+            from scripts.trading_calendar import TradingCalendar
+            cal_data = TradingCalendar.check_date_trading_status(date_param)
+            self._send_json(200, {
+                "code": 200,
+                "data": cal_data
+            })
+            return
+
+        # 3.7 多颗粒度财务报表端点 /api/stock/<code/finance?period=annual|report|quarter
+        if url_path.startswith("/api/stock/") and url_path.endswith("/finance"):
+            parts = url_path.split("/")
+            symbol = parts[3] if len(parts) >= 4 else ""
+            query_params = {}
+            if "?" in self.path:
+                q_str = self.path.split("?", 1)[1]
+                for part in q_str.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        query_params[k.strip()] = v.strip()
+            period_type = query_params.get("period", "annual")
+            stock_info = DATA_MANAGER.get_stock_detail(symbol) or {}
+            curr_p = float(stock_info.get("price") or 0.0)
+            m_cap = float(stock_info.get("market_cap") or 0.0)
+            pe_val = float(stock_info.get("pe") or 0.0)
+
+            from scripts.company_finance_engine import fetch_financial_statements
+            fin_data = fetch_financial_statements(symbol, price=curr_p, market_cap=m_cap, pe=pe_val, period_type=period_type)
+            self._send_json(200, {
+                "code": 200,
+                "symbol": symbol,
+                "data": fin_data
             })
             return
 

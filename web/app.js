@@ -28,7 +28,10 @@ const appState = {
   activeDetailStock: null,
   chartPeriod: 'timeline', // 'timeline' (分时) | 'daily' (日K)
   chartSubplot: 'vol',     // 'vol' (成交量) | 'amt' (成交额)
+  chartZoomWindow: 'max',  // '60' | '250' | '750' | 'max'
+  rawKlineData: [],        // 原始全量日K
   activeFinTab: 'main',    // 'main' | 'balance' | 'income' | 'cash' | 'block' | 'events'
+  activeFinGranularity: 'annual', // 'annual' (按年度/图2) | 'report' (按报告期) | 'quarter' (按单季度)
 
   // 外部宏观环境过滤状态
   worldFilterCountry: 'all',
@@ -62,6 +65,13 @@ const dom = {
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
 
   // 外部宏观环境 DOM
+  worldStartDate: document.getElementById('worldStartDate'),
+  worldEndDate: document.getElementById('worldEndDate'),
+  worldTotalScore: document.getElementById('worldTotalScore'),
+  worldScoreIcon: document.getElementById('worldScoreIcon'),
+  worldSentimentLabel: document.getElementById('worldSentimentLabel'),
+  worldEventsCount: document.getElementById('worldEventsCount'),
+  worldTradingTip: document.getElementById('worldTradingTip'),
   worldCommodityGrid: document.getElementById('worldCommodityGrid'),
   worldEventsStream: document.getElementById('worldEventsStream'),
   worldCountryPills: document.getElementById('worldCountryPills'),
@@ -70,6 +80,7 @@ const dom = {
   // 宏观仪表盘 DOM
   dashStartDate: document.getElementById('dashStartDate'),
   dashEndDate: document.getElementById('dashEndDate'),
+  dashDateTradingTip: document.getElementById('dashDateTradingTip'),
   dashTotalStocks: document.getElementById('dashTotalStocks'),
   dashUpRatio: document.getElementById('dashUpRatio'),
   dashLimitUp: document.getElementById('dashLimitUp'),
@@ -86,6 +97,8 @@ const dom = {
 
   // Filter 控件
   filterDateInput: document.getElementById('filterDateInput'),
+  filterDateTradingStatus: document.getElementById('filterDateTradingStatus'),
+  filterDateStatusText: document.getElementById('filterDateStatusText'),
   marketControl: document.getElementById('marketControl'),
   boardControl: document.getElementById('boardControl'),
   constituentControl: document.getElementById('constituentControl'),
@@ -182,6 +195,7 @@ const dom = {
   ttTurnover: document.getElementById('ttTurnover'),
 
   chartPeriodControl: document.getElementById('chartPeriodControl'),
+  chartZoomControl: document.getElementById('chartZoomControl'),
   chartSubPlotControl: document.getElementById('chartSubPlotControl'),
   chartDataSourceBadge: document.getElementById('chartDataSourceBadge'),
 
@@ -193,6 +207,10 @@ const dom = {
   modalProfileExchange: document.getElementById('modalProfileExchange'),
   modalProfileAddress: document.getElementById('modalProfileAddress'),
   modalFinancePeriod: document.getElementById('modalFinancePeriod'),
+  finTheadMain: document.getElementById('finTheadMain'),
+  finTheadBalance: document.getElementById('finTheadBalance'),
+  finTheadIncome: document.getElementById('finTheadIncome'),
+  finTheadCash: document.getElementById('finTheadCash'),
   finTableBodyMain: document.getElementById('finTableBodyMain'),
   finTableBodyBalance: document.getElementById('finTableBodyBalance'),
   finTableBodyIncome: document.getElementById('finTableBodyIncome'),
@@ -250,7 +268,7 @@ function switchMainTab(tabId) {
 }
 
 /**
- * 初始化基准日期控件（默认今天）
+ * 初始化基准日期控件（默认今天）并启动交易日核验
  */
 function initDateControl() {
   const today = new Date();
@@ -262,6 +280,39 @@ function initDateControl() {
   if (dom.filterDateInput) dom.filterDateInput.value = todayStr;
   if (dom.dashStartDate) dom.dashStartDate.value = todayStr;
   if (dom.dashEndDate) dom.dashEndDate.value = todayStr;
+  if (dom.worldStartDate) {
+    const d30 = new Date();
+    d30.setDate(today.getDate() - 30);
+    const m30 = String(d30.getMonth() + 1).padStart(2, '0');
+    const day30 = String(d30.getDate()).padStart(2, '0');
+    dom.worldStartDate.value = `${d30.getFullYear()}-${m30}-${day30}`;
+  }
+  if (dom.worldEndDate) dom.worldEndDate.value = todayStr;
+
+  checkFilterDateTradingStatus(todayStr);
+}
+
+/**
+ * 实时核验日期是否为休市日并进行强视觉提醒
+ */
+async function checkFilterDateTradingStatus(dateStr) {
+  if (!dom.filterDateTradingStatus || !dom.filterDateStatusText) return;
+  try {
+    const res = await fetch(`/api/calendar/check?date=${dateStr}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    const cal = json.data;
+
+    if (cal.is_trading_day) {
+      dom.filterDateTradingStatus.className = 'trading-status-tip trading-status-open';
+      dom.filterDateStatusText.textContent = cal.badge_text;
+    } else {
+      dom.filterDateTradingStatus.className = 'trading-status-tip trading-status-closed';
+      dom.filterDateStatusText.textContent = `${cal.badge_text} - 非交易日`;
+    }
+  } catch (err) {
+    console.error('日历判定异常:', err);
+  }
 }
 
 /**
@@ -305,7 +356,7 @@ function setDashboardDateRange(rangeType, evt = null) {
 /**
  * 同步网页 Title 与 Header 版本号
  */
-function syncVersionAndTitle(version = 'v1.9.0') {
+function syncVersionAndTitle(version = 'v2.0.0') {
   appState.version = version;
   document.title = `【${version}】A股多维量化筛选器 - DSH Stock Web`;
   if (dom.appVersionBadge) {
@@ -352,6 +403,7 @@ function initEventListeners() {
 
   // 日期监听
   dom.filterDateInput.addEventListener('change', () => {
+    checkFilterDateTradingStatus(dom.filterDateInput.value);
     appState.page = 1;
     executeFilter();
   });
@@ -1008,26 +1060,52 @@ function renderCapTiersPyramidChart(tiers, totalCount) {
 }
 
 // ====================================================
-// 全球外部宏观环境情报看板逻辑 (World Intelligence v1.9.0)
+// 全球外部宏观环境情报看板逻辑 (World Intelligence v2.0.0 - 冲击度量化与动态加总)
 // ====================================================
 
 /**
- * 加载全球外部环境情报 (硬通货大宗 + 世界大事)
+ * 加载全球外部环境情报 (硬通货大宗 + 世界大事 + [-1000, +1000]量化加总)
  */
 async function loadWorldMacroIntelligence() {
   if (dom.worldCommodityGrid) {
     dom.worldCommodityGrid.innerHTML = '<div style="padding: 1.5rem; color: var(--text-muted);">正在同步全球大宗资产与外汇行情...</div>';
   }
   if (dom.worldEventsStream) {
-    dom.worldEventsStream.innerHTML = '<div style="padding: 1.5rem; color: var(--text-muted);">正在连接多国官方情报中枢检索大事...</div>';
+    dom.worldEventsStream.innerHTML = '<div style="padding: 1.5rem; color: var(--text-muted);">正在连接多国官方情报中枢检索大事并计算量化得分...</div>';
   }
 
+  const sDate = dom.worldStartDate ? dom.worldStartDate.value.trim() : '';
+  const eDate = dom.worldEndDate ? dom.worldEndDate.value.trim() : '';
+  let url = '/api/macro/world';
+  const qList = [];
+  if (sDate) qList.push(`start_date=${encodeURIComponent(sDate)}`);
+  if (eDate) qList.push(`end_date=${encodeURIComponent(eDate)}`);
+  if (qList.length > 0) url += '?' + qList.join('&');
+
   try {
-    const res = await fetch('/api/macro/world', { cache: 'no-store' });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const data = json.data || {};
     appState.worldMacroData = data;
+
+    // 渲染得分看板
+    const agg = data.aggregate_score || {};
+    const totalScore = agg.total_score || 0;
+    if (dom.worldTotalScore) {
+      dom.worldTotalScore.textContent = `${totalScore >= 0 ? '+' : ''}${totalScore.toLocaleString()}`;
+      dom.worldTotalScore.className = `score-number ${totalScore >= 0 ? 'price-up' : 'price-down'}`;
+    }
+    if (dom.worldScoreIcon) dom.worldScoreIcon.textContent = agg.sentiment_icon || '⚖️';
+    if (dom.worldSentimentLabel) {
+      dom.worldSentimentLabel.textContent = agg.sentiment_label || '中性平稳';
+      dom.worldSentimentLabel.style.color = agg.sentiment_color || '#38bdf8';
+      dom.worldSentimentLabel.style.borderColor = agg.sentiment_color || '#38bdf8';
+      dom.worldSentimentLabel.style.backgroundColor = `${agg.sentiment_color || '#38bdf8'}20`;
+    }
+    if (dom.worldEventsCount) {
+      dom.worldEventsCount.textContent = agg.event_count || (data.world_events || []).length;
+    }
 
     renderWorldCommodities(data.commodities || []);
     renderWorldEvents(data.world_events || []);
@@ -1121,12 +1199,19 @@ function renderWorldEvents(events) {
   filtered.forEach(e => {
     const card = document.createElement('div');
     card.className = 'event-card';
+    const scoreVal = Number(e.quant_score || 0);
+    const scoreColor = scoreVal > 0 ? '#ef4444' : scoreVal < 0 ? '#10b981' : '#94a3b8';
+    const scoreSign = scoreVal > 0 ? '+' : '';
+
     card.innerHTML = `
       <div class="event-top-line">
         <div class="event-meta-left">
           <span class="event-flag">${e.flag}</span>
           <span style="font-weight: 700; font-size: 0.88rem;">${e.country}</span>
           <span class="event-domain-tag">${e.domain_icon} ${e.domain}</span>
+          <span class="quant-tag-score" style="background-color: ${scoreColor}20; color: ${scoreColor}; border: 1px solid ${scoreColor}40;">
+            A股量化冲击: ${scoreSign}${scoreVal} 分
+          </span>
         </div>
         <span class="event-date">📅 发生日期: ${e.date}</span>
       </div>
@@ -1135,7 +1220,8 @@ function renderWorldEvents(events) {
       <div class="event-summary">${e.summary}</div>
 
       <div class="event-impact-box">
-        🎯 <strong>金融与地缘影响深度研判:</strong> ${e.impact_analysis}
+        🎯 <strong>金融与地缘影响深度研判:</strong> ${e.impact_analysis}<br>
+        <span style="font-size: 0.76rem; color: #93c5fd;">⚡ <strong>打分逻辑:</strong> ${e.score_reason || '对流动性及风险偏好形成直接传导'}</span>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.2rem; flex-wrap: wrap; gap: 0.4rem;">
@@ -1396,6 +1482,23 @@ function switchChartPeriod(period) {
   dom.chartPeriodControl.querySelectorAll('.seg-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-period') === period);
   });
+  if (dom.chartZoomControl) {
+    dom.chartZoomControl.style.display = (period === 'daily') ? 'inline-flex' : 'none';
+  }
+  hideTooltip();
+  renderActiveStockChart();
+}
+
+/**
+ * 设置日K缩放视窗控制 (60 / 250 / 750 / max)
+ */
+function setChartZoomWindow(windowSize) {
+  appState.chartZoomWindow = windowSize;
+  if (dom.chartZoomControl) {
+    dom.chartZoomControl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-zoom') === String(windowSize));
+    });
+  }
   hideTooltip();
   renderActiveStockChart();
 }
@@ -1627,10 +1730,18 @@ async function openStockDetail(code) {
     dom.modalProfileExchange.textContent = prof.listing_exchange || `${stock.market}${stock.board}`;
     dom.modalProfileAddress.textContent = prof.office_addr || '中国高新技术产业园区金融大厦';
 
-    // 填充四大财务报表
-    const fin = stock.financial_reports || {};
-    dom.modalFinancePeriod.textContent = `(${fin.report_period || '最新中报期'})`;
-    renderFinancialTables(fin);
+    // 填充多颗粒度财务报表
+    try {
+      const finRes = await fetch(`/api/stock/${stock.code}/finance?period=${appState.activeFinGranularity || 'annual'}`);
+      if (finRes.ok) {
+        const finJson = await finRes.json();
+        renderFinancialTables(finJson.data);
+      } else {
+        renderFinancialTables(stock.financial_reports || {});
+      }
+    } catch (_) {
+      renderFinancialTables(stock.financial_reports || {});
+    }
 
     // 渲染走势图表
     renderActiveStockChart();
@@ -1642,59 +1753,112 @@ async function openStockDetail(code) {
 }
 
 /**
- * 渲染财务报表 4 个 Tab 详情
+ * 切换财务分析时间颗粒度 (按报告期 / 按年度 / 按单季度，严格复刻图2)
+ */
+async function switchFinanceGranularity(granKey) {
+  appState.activeFinGranularity = granKey;
+  document.querySelectorAll('.gran-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-gran') === granKey);
+  });
+  if (!appState.activeDetailStock) return;
+  const code = appState.activeDetailStock.code;
+
+  try {
+    const res = await fetch(`/api/stock/${code}/finance?period=${granKey}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    renderFinancialTables(json.data);
+  } catch (err) {
+    console.error('切换财务颗粒度失败:', err);
+  }
+}
+
+/**
+ * 渲染财务报表多周期横向对比矩阵 (严格复刻图2表格结构与科目/年度列头)
  */
 function renderFinancialTables(fin) {
-  // 1. 主要指标
-  dom.finTableBodyMain.innerHTML = '';
-  (fin.main_indicators || []).forEach(row => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${row.name}</strong></td>
-      <td><span style="font-weight: 700; color: ${row.highlight ? '#38bdf8' : '#ffffff'}; font-size: 0.92rem;">${row.value}</span></td>
-      <td style="color: var(--text-secondary); font-size: 0.8rem;">${row.desc}</td>
-    `;
-    dom.finTableBodyMain.appendChild(tr);
-  });
+  if (!fin) return;
+  const cols = fin.columns || ['2025', '2024', '2023', '2022', '2021'];
+  const colTypeLabel = fin.col_type_label || '科目 \\ 年度';
+
+  // 构建统一的表头 HTML
+  const buildThead = () => `
+    <tr>
+      <th style="min-width: 190px;">${colTypeLabel}</th>
+      ${cols.map(c => `<th>${c}</th>`).join('')}
+    </tr>
+  `;
+
+  if (dom.finTheadMain) dom.finTheadMain.innerHTML = buildThead();
+  if (dom.finTheadBalance) dom.finTheadBalance.innerHTML = buildThead();
+  if (dom.finTheadIncome) dom.finTheadIncome.innerHTML = buildThead();
+  if (dom.finTheadCash) dom.finTheadCash.innerHTML = buildThead();
+
+  // 1. 主要指标 (带分类折叠/分组头)
+  if (dom.finTableBodyMain) {
+    dom.finTableBodyMain.innerHTML = '';
+    let currCat = '';
+    (fin.main_indicators || []).forEach(row => {
+      if (row.category && row.category !== currCat) {
+        currCat = row.category;
+        const trCat = document.createElement('tr');
+        trCat.innerHTML = `<td colspan="${cols.length + 1}" class="fin-category-header">📁 ${currCat}</td>`;
+        dom.finTableBodyMain.appendChild(trCat);
+      }
+      const tr = document.createElement('tr');
+      const vals = row.values || [];
+      tr.innerHTML = `
+        <td><strong>${row.item || row.name}</strong></td>
+        ${vals.map((v, i) => `<td><span style="font-weight: 600; color: ${i === 0 ? '#38bdf8' : '#cbd5e1'};">${v}</span></td>`).join('')}
+      `;
+      dom.finTableBodyMain.appendChild(tr);
+    });
+  }
 
   // 2. 资产负债表
-  dom.finTableBodyBalance.innerHTML = '';
-  (fin.balance_sheet || []).forEach(row => {
-    const tr = document.createElement('tr');
-    const isTotal = row.type.includes('total');
-    tr.innerHTML = `
-      <td style="${isTotal ? 'font-weight: 700; color: #f8fafc;' : 'color: var(--text-secondary);'}">${row.item}</td>
-      <td style="font-weight: 600; color: ${isTotal ? '#38bdf8' : '#ffffff'}; font-family: monospace;">${row.val}</td>
-      <td style="font-size: 0.8rem; color: var(--text-muted);">${isTotal ? '核心汇总项' : '明细项'}</td>
-    `;
-    dom.finTableBodyBalance.appendChild(tr);
-  });
+  if (dom.finTableBodyBalance) {
+    dom.finTableBodyBalance.innerHTML = '';
+    (fin.balance_sheet || []).forEach(row => {
+      const tr = document.createElement('tr');
+      const vals = row.values || [];
+      tr.innerHTML = `
+        <td>${row.item}</td>
+        ${vals.map((v, i) => `<td><span style="font-weight: 500; color: ${i === 0 ? '#f8fafc' : '#94a3b8'};">${v}</span></td>`).join('')}
+      `;
+      dom.finTableBodyBalance.appendChild(tr);
+    });
+  }
 
   // 3. 利润表
-  dom.finTableBodyIncome.innerHTML = '';
-  (fin.income_statement || []).forEach(row => {
-    const tr = document.createElement('tr');
-    const isNet = row.type.includes('profit');
-    tr.innerHTML = `
-      <td style="${isNet ? 'font-weight: 700; color: #f8fafc;' : 'color: var(--text-secondary);'}">${row.item}</td>
-      <td style="font-weight: 600; color: ${isNet ? '#ef4444' : '#ffffff'}; font-family: monospace;">${row.val}</td>
-      <td style="font-size: 0.8rem; color: var(--text-muted);">${isNet ? '净收益项' : '常规科目'}</td>
-    `;
-    dom.finTableBodyIncome.appendChild(tr);
-  });
+  if (dom.finTableBodyIncome) {
+    dom.finTableBodyIncome.innerHTML = '';
+    (fin.income_statement || []).forEach(row => {
+      const tr = document.createElement('tr');
+      const vals = row.values || [];
+      tr.innerHTML = `
+        <td>${row.item}</td>
+        ${vals.map((v, i) => `<td><span style="font-weight: 500; color: ${i === 0 ? '#ef4444' : '#94a3b8'};">${v}</span></td>`).join('')}
+      `;
+      dom.finTableBodyIncome.appendChild(tr);
+    });
+  }
 
   // 4. 现金流量表
-  dom.finTableBodyCash.innerHTML = '';
-  (fin.cash_flow_statement || []).forEach(row => {
-    const tr = document.createElement('tr');
-    const isPos = row.type === 'pos';
-    tr.innerHTML = `
-      <td style="color: var(--text-primary); font-weight: 500;">${row.item}</td>
-      <td style="font-weight: 600; color: ${isPos ? '#4ade80' : '#f87171'}; font-family: monospace;">${row.val}</td>
-      <td style="font-size: 0.8rem; color: var(--text-muted);">${isPos ? '净现金流入' : '净现金流出'}</td>
-    `;
-    dom.finTableBodyCash.appendChild(tr);
-  });
+  if (dom.finTableBodyCash) {
+    dom.finTableBodyCash.innerHTML = '';
+    (fin.cash_flow_statement || []).forEach(row => {
+      const tr = document.createElement('tr');
+      const vals = row.values || [];
+      tr.innerHTML = `
+        <td>${row.item}</td>
+        ${vals.map((v, i) => {
+          const isPos = !String(v).startsWith('-');
+          return `<td><span style="font-weight: 500; color: ${isPos ? '#4ade80' : '#f87171'};">${v}</span></td>`;
+        }).join('')}
+      `;
+      dom.finTableBodyCash.appendChild(tr);
+    });
+  }
 }
 
 /**
@@ -1718,7 +1882,14 @@ function renderActiveStockChart() {
     dom.chartSvgContainer.innerHTML = generateTimelineSVG(items, preClose, appState.chartSubplot, width, height, mainHeight, subHeight, margin);
     bindChartCrosshair('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
   } else {
-    const klines = stock.daily_bars && stock.daily_bars.length > 0 ? stock.daily_bars : generateClientFallbackDaily(stock.price);
+    let klines = stock.daily_bars && stock.daily_bars.length > 0 ? stock.daily_bars : generateClientFallbackDaily(stock.price);
+    // 需求3: 支持自选窗口或滚轮缩放控制
+    if (appState.chartZoomWindow !== 'max') {
+      const winCount = parseInt(appState.chartZoomWindow, 10) || 60;
+      if (klines.length > winCount) {
+        klines = klines.slice(klines.length - winCount);
+      }
+    }
     dom.chartSvgContainer.innerHTML = generateDailyKlineSVG(klines, appState.chartSubplot, width, height, mainHeight, subHeight, margin);
     bindChartCrosshair('daily', klines, stock.prev_close || stock.price, width, height, mainHeight, subHeight, margin);
   }
@@ -1948,6 +2119,12 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
       
       <!-- 昨收盘基准线 (中轴虚线) -->
       <line x1="${m.left}" y1="${preCloseY}" x2="${m.left + innerW}" y2="${preCloseY}" stroke="#475569" stroke-dasharray="4,4"/>
+
+      <!-- 需求4: 11:30 早盘与午盘专属垂直虚线隔离中枢 -->
+      <line x1="${m.left + innerW * 0.5}" y1="${m.top}" x2="${m.left + innerW * 0.5}" y2="${m.top + mh}" stroke="#64748b" stroke-dasharray="4,4" stroke-width="1.5" opacity="0.8"/>
+      <line x1="${m.left + innerW * 0.5}" y1="${subTopY}" x2="${m.left + innerW * 0.5}" y2="${subTopY + sh}" stroke="#64748b" stroke-dasharray="4,4" stroke-width="1.5" opacity="0.8"/>
+      <rect x="${m.left + innerW * 0.5 - 45}" y="${m.top + 4}" width="90" height="18" fill="rgba(15, 23, 42, 0.85)" rx="3" stroke="#334155"/>
+      <text x="${m.left + innerW * 0.5}" y="${m.top + 16}" fill="#94a3b8" font-size="10" text-anchor="middle" font-weight="bold">11:30 早午盘 13:00</text>
 
       <!-- 分时面积与走势曲线 -->
       <path d="${pathArea}" fill="url(#tlGrad)"/>
