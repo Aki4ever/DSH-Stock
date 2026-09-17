@@ -22,6 +22,7 @@ from scripts.stock_indicators import evaluate_stock
 from scripts.stock_portfolio import build_portfolio_summary, load_config
 from scripts.stock_chart_svg import generate_stock_svg
 from scripts.stock_reporter import generate_daily_report
+from scripts.data_sources import StockDataHub
 
 # 终端 ANSI 彩色样式常量
 C_RESET = "\033[0m"
@@ -198,6 +199,98 @@ def cmd_chart(code: str, output: str = ""):
     return 0
 
 
+def cmd_holder(code: str):
+    """查询指定股票的十大股东及股东户数变动"""
+    clean_code = code.lower().replace("sh", "").replace("sz", "").replace("bj", "")
+    print(f"\n{C_CYAN}⏳ 正在拉取股票 [{clean_code}] 最新十大股东与股东户数历史...{C_RESET}")
+    res = StockDataHub.get_holders(clean_code)
+    top10 = res.get("top10", {})
+    history = res.get("history_count", [])
+
+    stock_name = top10.get("name") or clean_code
+    period = top10.get("period") or "最新报告期"
+    print(f"\n{C_BOLD}👥 [{clean_code} {stock_name}] 十大股东明细 (报告期: {period}):{C_RESET}\n")
+    print(f"{'名次':<6} {'持股比例%':<10} {'持股数(万股)':<14} {'变动情况':<10} {'股份性质':<12} {'股东名称'}")
+    print("-" * 88)
+    for h in top10.get("holders", []):
+        change_col = C_RED if "增" in h['change'] else (C_GREEN if "减" in h['change'] else C_GRAY)
+        print(f"{h['rank']:<6} {h['hold_ratio']:<10.2f} {h['hold_num_wan']:<14.2f} {change_col}{h['change']:<10}{C_RESET} {h['share_type']:<12} {h['name']}")
+
+    if history:
+        print(f"\n{C_BOLD}📊 历史股东户数变动与筹码集中度:{C_RESET}\n")
+        print(f"{'报告截止日':<14} {'总户数':<12} {'较上期变动%':<12} {'户均持股(股)':<14} {'筹码集中度'}")
+        print("-" * 65)
+        for h in history:
+            chg_col = C_GREEN if h['change_ratio'] < 0 else C_RED # 户数减少代表筹码趋向集中（绿或红色提示）
+            print(f"{h['period']:<14} {h['holder_num']:<12} {chg_col}{h['change_ratio']:>+.2f}%{C_RESET}       {h['avg_hold_num']:<14.0f} {h['focus_level']}")
+    print("")
+    return 0
+
+
+def cmd_dividend(code: str):
+    """查询指定股票的历年分红与排期"""
+    clean_code = code.lower().replace("sh", "").replace("sz", "").replace("bj", "")
+    print(f"\n{C_CYAN}⏳ 正在拉取股票 [{clean_code}] 历年分红派现方案...{C_RESET}")
+    divs = StockDataHub.get_dividends(clean_code, limit=8)
+    if not divs:
+        print(f"{C_YELLOW}⚠️ 未查询到 [{clean_code}] 的分红信息或网络超时{C_RESET}")
+        return 1
+
+    name = divs[0].get("name", clean_code)
+    print(f"\n{C_BOLD}💰 [{clean_code} {name}] 历年分红派现明细与最新方案:{C_RESET}\n")
+    print(f"{'分红年度/期':<14} {'进度状态':<10} {'每10股派现(元)':<16} {'股权登记日':<14} {'除权除息日':<14} {'分红方案说明'}")
+    print("-" * 90)
+    for d in divs:
+        status_col = C_GREEN if d['progress'] == "实施分配" else C_YELLOW
+        reg_d = d['record_date'] or "--"
+        ex_d = d['ex_dividend_date'] or "--"
+        print(f"{d['report_period']:<14} {status_col}{d['progress']:<10}{C_RESET} {d['cash_ratio']:<16.2f} {reg_d:<14} {ex_d:<14} {d['plan_detail']}")
+    print("")
+    return 0
+
+
+def cmd_notice(code: str, keyword: str = ""):
+    """查询官方权威公告"""
+    clean_code = code.lower().replace("sh", "").replace("sz", "").replace("bj", "")
+    kw_desc = f" (过滤词: '{keyword}')" if keyword else ""
+    print(f"\n{C_CYAN}⏳ 正在对接巨潮资讯网检索 [{clean_code}]{kw_desc} 官方公告...{C_RESET}")
+    notices = StockDataHub.get_announcements(clean_code, keyword=keyword, days=180, limit=10)
+    if not notices:
+        print(f"{C_YELLOW}⚠️ 未检索到 [{clean_code}] 的相关官方公告{C_RESET}")
+        return 0
+
+    name = notices[0].get("sec_name", clean_code)
+    print(f"\n{C_BOLD}📢 [{clean_code} {name}] 官方公告列表 (证监会指定披露平台 巨潮资讯):{C_RESET}\n")
+    for i, n in enumerate(notices, 1):
+        print(f"{C_BOLD}{i}. [{n['publish_time']}] {n['title']}{C_RESET}")
+        if n['pdf_url']:
+            print(f"   {C_GRAY}官方PDF: {n['pdf_url']}{C_RESET}")
+    print("")
+    return 0
+
+
+def cmd_blocktrade(code: str = ""):
+    """查询大宗交易记录"""
+    clean_code = code.lower().replace("sh", "").replace("sz", "").replace("bj", "") if code else ""
+    target_desc = f"股票 [{clean_code}]" if clean_code else "全市场最新重点"
+    print(f"\n{C_CYAN}⏳ 正在拉取 {target_desc} 大宗交易成交明细与席位动向...{C_RESET}")
+    trades = StockDataHub.get_block_trades(code=clean_code, limit=12)
+    if not trades:
+        print(f"{C_YELLOW}⚠️ 近期无大宗交易成交记录{C_RESET}")
+        return 0
+
+    print(f"\n{C_BOLD}📦 大宗交易成交明细 (按折溢价与成交席位透视):{C_RESET}\n")
+    print(f"{'交易日期':<12} {'代码':<8} {'名称':<8} {'成交价':<10} {'收盘价':<10} {'折溢价率%':<10} {'成交额(万)':<12} {'买方营业部/机构':<24} {'卖方营业部/机构'}")
+    print("-" * 115)
+    for t in trades:
+        prem_col = C_RED if t['premium_ratio'] > 0 else (C_GREEN if t['premium_ratio'] < 0 else C_GRAY)
+        buyer_str = f"{C_MAGENTA}【机构】{C_RESET}" if t['is_buyer_org'] else t['buyer'][:14]
+        seller_str = f"{C_MAGENTA}【机构】{C_RESET}" if t['is_seller_org'] else t['seller'][:14]
+        print(f"{t['trade_date']:<12} {t['code']:<8} {t['name']:<8} {t['deal_price']:<10.2f} {t['close_price']:<10.2f} {prem_col}{t['premium_ratio']:>+.2f}%{C_RESET}     {t['amount_wan']:<12.1f} {buyer_str:<32} {seller_str}")
+    print("")
+    return 0
+
+
 def cmd_report():
     """生成每日全盘分析研报与全套图表"""
     print(f"{C_CYAN}⏳ 正在拉取大盘行情、计算自选股量化分并渲染 SVG 图表...{C_RESET}")
@@ -247,6 +340,23 @@ def main():
     p_chart.add_argument("code", help="股票代码，如 600519")
     p_chart.add_argument("-o", "--output", default="", help="SVG 输出文件路径 (可选)")
 
+    # holder 子命令 (新增)
+    p_holder = subparsers.add_parser("holder", help="查询股票最新十大股东明细与股东户数筹码变动")
+    p_holder.add_argument("code", help="股票代码，如 600519")
+
+    # dividend 子命令 (新增)
+    p_div = subparsers.add_parser("dividend", help="查询股票历年分红派现方案与最新除权除息日")
+    p_div.add_argument("code", help="股票代码，如 600519")
+
+    # notice 子命令 (新增)
+    p_not = subparsers.add_parser("notice", help="检索巨潮资讯网官方权威公告与监管披露")
+    p_not.add_argument("code", help="股票代码，如 600519")
+    p_not.add_argument("-k", "--keyword", default="", help="过滤关键词，如 '分红'、'减持'、'业绩'")
+
+    # blocktrade 子命令 (新增)
+    p_blk = subparsers.add_parser("blocktrade", help="查看盘后大宗交易成交明细、折溢价率与机构席位")
+    p_blk.add_argument("code", nargs="?", default="", help="股票代码 (可选，留空则展示全市场最新大宗)")
+
     # report 子命令
     subparsers.add_parser("report", help="一键生成每日全盘分析研报 (Markdown) 与全量 SVG 图表")
 
@@ -270,6 +380,14 @@ def main():
         return cmd_portfolio()
     elif args.command == "chart":
         return cmd_chart(args.code, args.output)
+    elif args.command == "holder":
+        return cmd_holder(args.code)
+    elif args.command == "dividend":
+        return cmd_dividend(args.code)
+    elif args.command == "notice":
+        return cmd_notice(args.code, args.keyword)
+    elif args.command == "blocktrade":
+        return cmd_blocktrade(args.code)
     elif args.command == "report":
         return cmd_report()
     elif args.command == "status":

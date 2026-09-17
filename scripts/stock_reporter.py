@@ -153,7 +153,60 @@ def generate_daily_report(config_path: Optional[str] = None) -> str:
     lines.append("")
     lines.append("---")
     lines.append("")
-    lines.append("## 🛡️ 五、风控纪律备忘")
+
+    # 资本异动与多维基本面透视 (新增)
+    lines.append("## 🔍 五、重点持仓与自选股多维资本异动透视")
+    lines.append("")
+    try:
+        from scripts.data_sources import StockDataHub
+        # 挑选重点持仓或自选进行基本面扫描
+        target_codes = [p.code for p in summary.positions[:2]] or [w["code"] for w in watchlist[:2]]
+        for t_code in target_codes:
+            clean_c = t_code.lower().replace("sh", "").replace("sz", "")
+            h_data = StockDataHub.get_holders(clean_c)
+            top10 = h_data.get("top10", {})
+            h_count = h_data.get("history_count", [])
+            divs = StockDataHub.get_dividends(clean_c, limit=1)
+            notices = StockDataHub.get_announcements(clean_c, limit=2)
+            blocks = StockDataHub.get_block_trades(code=clean_c, limit=2)
+
+            name = top10.get("name") or clean_c
+            lines.append(f"### 🏢 标的：`{clean_c}` {name}")
+            
+            # 1. 股东与筹码
+            if top10.get("holders"):
+                top1_name = top10["holders"][0]["name"]
+                top1_ratio = top10["holders"][0]["hold_ratio"]
+                lines.append(f"- **第一大股东**：{top1_name} (持股 `{top1_ratio:.2f}%`)")
+            if h_count:
+                latest_h = h_count[0]
+                chg_h = f"{'+' if latest_h['change_ratio'] >= 0 else ''}{latest_h['change_ratio']:.2f}%"
+                lines.append(f"- **最新股东户数**：`{latest_h['holder_num']:,} 户` (环比: `{chg_h}`，集中度: `{latest_h['focus_level']}`)")
+
+            # 2. 分红情况
+            if divs:
+                d = divs[0]
+                lines.append(f"- **最新分红预案/进度**：{d['report_period']} [{d['progress']}] `{d['plan_detail']}`")
+
+            # 3. 大宗交易
+            if blocks:
+                b = blocks[0]
+                prem = f"{'+' if b['premium_ratio'] >= 0 else ''}{b['premium_ratio']:.2f}%"
+                lines.append(f"- **近期大宗交易**：{b['trade_date']} 成交 `{b['amount_wan']:.1f}万元` (折溢价: `{prem}`，买方: `{b['buyer']}`)")
+
+            # 4. 官方公告
+            if notices:
+                lines.append("- **最新官方公告**：")
+                for n in notices:
+                    lines.append(f"  - `[{n['publish_time']}]` [{n['title']}]({n['pdf_url']})")
+            lines.append("")
+    except Exception as e:
+        lines.append(f"> *(基本面多维透视模块获取异常: {str(e)})*")
+        lines.append("")
+
+    lines.append("---")
+    lines.append("")
+    lines.append("## 🛡️ 六、风控纪律备忘")
     lines.append("1. **严守止盈止损**：单一标的亏损触及止损线（-8%）必须强制复盘并视情况减仓，杜绝侥幸死扛；")
     lines.append("2. **拒绝追高超买**：RSI-6 > 80 标的进入极度超买阶段，严禁盲目追高；")
     lines.append("3. **仓位动态平衡**：任何单一行业龙头持仓市值占比建议控制在 35% 以内，防范单一赛道行业系统性黑天鹅。")

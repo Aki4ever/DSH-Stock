@@ -35,3 +35,8 @@ ENV/
 *.log
 *.tmp
 temp/
+.server.pid
+
+# SQLite journal/wal
+*.db-shm
+*.db-wal

@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>【v1.6.1】A股多维量化筛选器 - DSH Stock Web</title>
+  <link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+
+  <!-- 顶部常显状态、版本与 Tab 切换导航栏 -->
+  <header class="header-bar">
+    <div class="brand-section">
+      <span class="brand-icon">📈</span>
+      <span class="brand-title">A股多维量化筛选器</span>
+      <span id="appVersionBadge" class="version-badge">v1.6.1</span>
+      <span class="brand-tag">全市场主板+创业板</span>
+    </div>
+
+    <!-- 顶栏页面 Tab 切换器 (新增全市场宏观仪表盘) -->
+    <nav class="nav-tabs">
+      <button id="tabBtnFilter" class="nav-tab-btn active" onclick="switchMainTab('filter')">
+        <span>📊 行情与量化筛选</span>
+      </button>
+      <button id="tabBtnDashboard" class="nav-tab-btn" onclick="switchMainTab('dashboard')">
+        <span>📈 全市场全景仪表盘</span>
+      </button>
+      <button id="tabBtnCrawler" class="nav-tab-btn" onclick="switchMainTab('crawler')">
+        <span>🕷️ 独立数据采集中心</span>
+      </button>
+    </nav>
+
+    <!-- 服务端运行状态常显中枢 -->
+    <div class="server-status-box">
+      <div id="serverStatusBadge" class="status-badge offline">
+        <div class="status-indicator"></div>
+        <span id="serverStatusText">检测服务中...</span>
+      </div>
+      <span id="serverPingText" class="server-stats-text">延迟: -- ms</span>
+      <span id="serverStockCountText" class="server-stats-text">全量标的: 4,601</span>
+      <button id="btnRefreshQuotes" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" title="刷新最新行情并入库">
+        🔄 刷新
+      </button>
+      
+      <!-- 前端双向启停控制按钮 -->
+      <button id="btnToggleServer" class="btn-header" style="background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3);" title="暂停或启动后台服务业务引擎">
+        🛑 暂停服务
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ==================================================== -->
+    <!-- 视图 1: 多维量化筛选中心 (Tab: filter)                -->
+    <!-- ==================================================== -->
+    <div id="viewFilterTab" class="tab-view">
+      <!-- 筛选卡片 -->
+      <section class="filter-card">
+        <div class="filter-header">
+          <div class="filter-title">
+            <span>🎯 多条件联合筛选</span>
+            <span class="filter-badge-and">全部条件同时满足 (AND 逻辑)</span>
+          </div>
+          <!-- 快捷预设池 -->
+          <div class="preset-tags">
+            <span class="preset-title">快捷方案:</span>
+            <button class="preset-chip" onclick="applyPreset('all')">全部A股(4601)</button>
+            <button class="preset-chip" onclick="applyPreset('csi50')">🏆 中证50核心龙头</button>
+            <button class="preset-chip" onclick="applyPreset('csi100')">⭐ 中证100翘楚</button>
+            <button class="preset-chip" onclick="applyPreset('chinext_growth')">🚀 创业板成长股</button>
+            <button class="preset-chip" onclick="applyPreset('high_dividend')">🎁 高频分红(&gt;15次)</button>
+            <button class="preset-chip" onclick="applyPreset('seasoned')">⏳ 穿越牛熊(&gt;15年)</button>
+            <button class="preset-chip" onclick="applyPreset('high_concentration')">🔒 筹码高集中(&gt;60%)</button>
+          </div>
+        </div>
+
+        <!-- 核心多维筛选控件网格 (每个维度均配有单项即时重置按钮) -->
+        <div class="filter-grid">
+
+          <!-- 控件 0: 标的搜索框 (代码/名称，全匹配/部分匹配) -->
+          <div class="filter-item" style="grid-column: span 2;">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>🔎 标的智能检索 (代码/名称)</span>
+                <span class="filter-label-hint">全匹配(如600519/贵州茅台) ｜ 部分匹配(如300/银行)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('keyword')" title="清空搜索关键字">↺ 清空</button>
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="keywordInput" class="input-search" placeholder="输入股票名称、6位完整代码或前缀数字即搜 (回车快速确认)...">
+              <button class="btn btn-secondary" style="padding: 0.4rem 0.9rem; font-size: 0.85rem;" onclick="triggerFilterSubmit()">
+                搜索
+              </button>
+            </div>
+          </div>
+
+          <!-- 控件 1: 筛选基准日期 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>📅 交易/披露基准日期</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('date')" title="重置日期为今天">↺ 默认今天</button>
+              </div>
+            </div>
+            <input type="date" id="filterDateInput" class="input-date">
+          </div>
+
+          <!-- 控件 2: 股市分类 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>🏛️ 股市分类</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('market')" title="重置为全部A股">↺ 重置</button>
+              </div>
+            </div>
+            <div class="segmented-control" id="marketControl">
+              <button type="button" class="seg-btn active" data-val="all">全部 A 股</button>
+              <button type="button" class="seg-btn" data-val="sh">上证 (SH)</button>
+              <button type="button" class="seg-btn" data-val="sz">深圳 (SZ)</button>
+            </div>
+          </div>
+
+          <!-- 控件 3: 板块分类 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>🧩 板块分类</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('board')" title="重置为全部板块">↺ 重置</button>
+              </div>
+            </div>
+            <div class="segmented-control" id="boardControl">
+              <button type="button" class="seg-btn active" data-val="all">全部板块</button>
+              <button type="button" class="seg-btn" data-val="main">主板</button>
+              <button type="button" class="seg-btn" data-val="chinext">创业板</button>
+            </div>
+          </div>
+
+          <!-- 控件 4: 指数成分股 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>🎖️ 成分股归属</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('constituent')" title="重置为不限制">↺ 重置</button>
+              </div>
+            </div>
+            <div class="segmented-control" id="constituentControl">
+              <button type="button" class="seg-btn active" data-val="all">全部 (不限)</button>
+              <button type="button" class="seg-btn" data-val="csi50">中证50</button>
+              <button type="button" class="seg-btn" data-val="csi100">中证100</button>
+            </div>
+          </div>
+
+          <!-- 控件 5: 股价区间 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>💵 股价区间 (元)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('price')" title="清空股价限制">↺ 清空</button>
+              </div>
+            </div>
+            <div class="range-inputs">
+              <input type="number" id="minPriceInput" class="input-number" placeholder="最低价" min="0" step="0.1">
+              <span class="range-divider">~</span>
+              <input type="number" id="maxPriceInput" class="input-number" placeholder="最高价" min="0" step="0.1">
+            </div>
+          </div>
+
+          <!-- 控件 6: 总市值区间 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>🏢 总市值区间 (亿元)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('market_cap')" title="清空总市值限制">↺ 清空</button>
+              </div>
+            </div>
+            <div class="range-inputs">
+              <input type="number" id="minCapInput" class="input-number" placeholder="最小总市值" min="0" step="1">
+              <span class="range-divider">~</span>
+              <input type="number" id="maxCapInput" class="input-number" placeholder="最大总市值" min="0" step="1">
+            </div>
+          </div>
+
+          <!-- 控件 7: 流通市值区间 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>🌊 流通市值区间 (亿元)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('circ_cap')" title="清空流通市值限制">↺ 清空</button>
+              </div>
+            </div>
+            <div class="range-inputs">
+              <input type="number" id="minCircCapInput" class="input-number" placeholder="最小流通市值" min="0" step="1">
+              <span class="range-divider">~</span>
+              <input type="number" id="maxCircCapInput" class="input-number" placeholder="最大流通市值" min="0" step="1">
+            </div>
+          </div>
+
+          <!-- 控件 8: 市盈率 PE -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>📉 市盈率 PE (倍)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('pe')" title="清空PE限制">↺ 清空</button>
+              </div>
+            </div>
+            <div class="range-inputs">
+              <input type="number" id="minPeInput" class="input-number" placeholder="最低PE" step="1">
+              <span class="range-divider">~</span>
+              <input type="number" id="maxPeInput" class="input-number" placeholder="最高PE" step="1">
+            </div>
+          </div>
+
+          <!-- 控件 9: 十大流通股东持股比例 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>👥 十大流通股东持股 (%)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('top10_circ')" title="清空流通股东比例限制">↺ 清空</button>
+              </div>
+            </div>
+            <div class="range-inputs">
+              <input type="number" id="minTop10CircInput" class="input-number" placeholder="最小比例" min="0" max="100" step="1">
+              <span class="range-divider">~</span>
+              <input type="number" id="maxTop10CircInput" class="input-number" placeholder="最大比例" min="0" max="100" step="1">
+            </div>
+          </div>
+
+          <!-- 控件 10: 十大股东持股比例 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>🏛️ 十大主要股东持股 (%)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('top10_hold')" title="清空主要股东比例限制">↺ 清空</button>
+              </div>
+            </div>
+            <div class="range-inputs">
+              <input type="number" id="minTop10HoldInput" class="input-number" placeholder="最小比例" min="0" max="100" step="1">
+              <span class="range-divider">~</span>
+              <input type="number" id="maxTop10HoldInput" class="input-number" placeholder="最大比例" min="0" max="100" step="1">
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 操作按钮栏 (含一键全局重置) -->
+        <div class="filter-actions">
+          <div class="actions-left">
+            <button id="btnExecuteFilter" class="btn btn-primary">
+              <span>🔍 立即筛选</span>
+            </button>
+            <button id="btnResetFilter" class="btn btn-reset-all">
+              <span>🔄 一键重置所有条件</span>
+            </button>
+          </div>
+          <div class="actions-right">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">
+              💾 本地 SQLite 沉淀 ｜ 支持代码/名称全匹配与部分匹配 ｜ 支持单项与全局即时重置
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 筛选结果统计摘要栏 -->
+      <section class="stats-banner">
+        <div class="stats-count">
+          筛选结果：共命中 <strong id="matchedCount">0</strong> 只符合条件的 A 股标的
+          <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;" id="poolCountText">(全市场主板+创业板总计: 4,601 只)</span>
+        </div>
+        <div class="stats-badges">
+          <div class="stat-item">
+            <span>平均股价:</span>
+            <span id="statAvgPrice" class="stat-val">¥0.00</span>
+          </div>
+          <div class="stat-item">
+            <span>平均涨跌:</span>
+            <span id="statAvgChange" class="stat-val">0.00%</span>
+          </div>
+          <div class="stat-item">
+            <span>总市值合计:</span>
+            <span id="statTotalCap" class="stat-val">0 亿元</span>
+          </div>
+          <div class="stat-item">
+            <span>流通市值合计:</span>
+            <span id="statTotalCircCap" class="stat-val">0 亿元</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 股票列表表格卡片 -->
+      <section class="table-container">
+        <table class="stock-table">
+          <thead>
+            <tr>
+              <th onclick="sortTable('raw_code')">代码 ⇅</th>
+              <th onclick="sortTable('name')">股票名称 ⇅</th>
+              <th>股市</th>
+              <th>板块</th>
+              <th>成分股</th>
+              <th onclick="sortTable('price')">最新价 (元) ⇅</th>
+              <th onclick="sortTable('change_pct')">涨跌幅 ⇅</th>
+              <th onclick="sortTable('market_cap')">总市值 (亿) ⇅</th>
+              <th onclick="sortTable('circulating_cap')">流通市值 (亿) ⇅</th>
+              <th onclick="sortTable('pe')">市盈率 PE ⇅</th>
+              <th onclick="sortTable('dividend_count')">分红次数 ⇅</th>
+              <th onclick="sortTable('listing_years')">上市总时长 ⇅</th>
+              <th onclick="sortTable('top10_circ_hold_pct')">十大流通股东 ⇅</th>
+              <th onclick="sortTable('top10_hold_pct')">十大股东 ⇅</th>
+              <th>报告披露期</th>
+              <th style="text-align: center;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="stockTableBody">
+            <!-- 动态渲染行 -->
+          </tbody>
+        </table>
+
+        <!-- 加载与空状态提示 -->
+        <div id="loadingIndicator" class="loading-state" style="display: none;">
+          <div class="spinner"></div>
+          <div>正在从 SQLite 本地数据库快速联合检索并比对筹码...</div>
+        </div>
+
+        <div id="emptyIndicator" class="empty-state" style="display: none;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📭</div>
+          <div style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 0.3rem;">未检索到同时满足以上所有条件的 A 股标的</div>
+          <div style="font-size: 0.85rem;">建议放宽搜索条件或点击「一键重置所有条件」还原默认</div>
+        </div>
+
+        <!-- 分页控制栏 -->
+        <div class="pagination-container" id="paginationBar">
+          <div>
+            <span>显示第 <strong id="pageRangeText">1 - 50</strong> 条 ｜ 当前第 <strong id="currentPageNum">1</strong> 页 / 共 <strong id="totalPageNum">1</strong> 页</span>
+          </div>
+          <div class="pagination-controls">
+            <button id="btnPrevPage" class="btn-page" onclick="changePage(-1)">&larr; 上一页</button>
+            <button id="btnNextPage" class="btn-page" onclick="changePage(1)">下一页 &rarr;</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- 视图 2: 全市场宏观全景仪表盘 (Tab: dashboard)          -->
+    <!-- ==================================================== -->
+    <div id="viewDashboardTab" class="tab-view hidden">
+      <div class="macro-dashboard">
+
+        <!-- 宏观顶栏总览卡片 -->
+        <div class="macro-summary-card">
+          <div class="macro-header-left">
+            <h2 style="font-size: 1.35rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📈 全市场 A 股宏观全景仪表盘</span>
+              <span class="version-badge" style="font-size: 0.75rem;">统计学分布中枢</span>
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.35rem;">
+              深度覆盖全市场全部主板与创业板标的。针对 10 大核心量化维度，严谨计算全市场<strong>最小值 (Min)</strong>、<strong>最大值 (Max)</strong>、<strong>平均值 (Mean)</strong>与<strong>中位数 (Median)</strong>，还原最真实的宏观全景水位。
+            </p>
+          </div>
+          <div class="macro-header-right">
+            <button class="btn btn-secondary" onclick="loadDashboardOverview()" style="padding: 0.45rem 0.9rem; font-size: 0.85rem;">
+              🔄 实时刷新概览
+            </button>
+          </div>
+        </div>
+
+        <!-- 全市场涨跌晴雨表与多空分布条 -->
+        <div class="market-breadth-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="font-weight: 700; font-size: 0.95rem;">🌤️ 全市场涨跌晴雨表 (总计: <span id="dashTotalStocks" style="color: #38bdf8;">--</span> 只)</div>
+            <div style="font-size: 0.82rem; color: var(--text-muted);">
+              上涨胜率: <span id="dashUpRatio" style="color: #ef4444; font-weight: 700;">--%</span> ｜ 
+              涨停: <span id="dashLimitUp" style="color: #ef4444; font-weight: 700;">--</span> 家 ｜ 
+              跌停: <span id="dashLimitDown" style="color: #10b981; font-weight: 700;">--</span> 家
+            </div>
+          </div>
+
+          <!-- 红绿对比占比条 -->
+          <div class="breadth-bar-track">
+            <div id="breadthBarUp" class="breadth-fill up" style="width: 50%;">上涨 --</div>
+            <div id="breadthBarFlat" class="breadth-fill flat" style="width: 10%;">平 --</div>
+            <div id="breadthBarDown" class="breadth-fill down" style="width: 40%;">下跌 --</div>
+          </div>
+        </div>
+
+        <!-- 10 大维度核心统计学指标矩阵 (4分位: Min, Max, Mean, Median) -->
+        <div style="font-weight: 700; font-size: 1.05rem; margin-top: 1.4rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span>📋 10 大量化维度统计学全景透视</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">(包含最小值、最大值、算术平均值、50%中位数)</span>
+        </div>
+
+        <div class="macro-dimension-grid" id="macroDimGrid">
+          <!-- 由 JS 动态渲染 10 大核心维度卡片 -->
+        </div>
+
+        <!-- 宏观图形化透视图谱 (涨跌幅梯度直方图 + 市值梯队金字塔) -->
+        <div class="macro-charts-grid" style="margin-top: 1.4rem;">
+          
+          <!-- 图表 1: 涨跌幅区间梯度分布直方图 -->
+          <div class="macro-chart-box">
+            <div class="macro-chart-title">
+              <span>📊 全市场收益率区间梯度分布直方图</span>
+              <span class="brand-tag" style="font-size: 0.7rem;">收益率梯队</span>
+            </div>
+            <div id="chartChangeDistContainer" class="macro-chart-inner">
+              <div style="padding: 2rem; color: var(--text-muted); text-align: center;">直方图生成中...</div>
+            </div>
+          </div>
+
+          <!-- 图表 2: 市值梯队金字塔结构 -->
+          <div class="macro-chart-box">
+            <div class="macro-chart-title">
+              <span>🏛️ 市值规模梯队金字塔 (超大盘至微盘)</span>
+              <span class="brand-tag" style="font-size: 0.7rem;">市值结构</span>
+            </div>
+            <div id="chartCapTiersContainer" class="macro-chart-inner">
+              <div style="padding: 2rem; color: var(--text-muted); text-align: center;">金字塔生成中...</div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- 视图 3: 独立数据采集控制中心 (Tab: crawler)          -->
+    <!-- ==================================================== -->
+    <div id="viewCrawlerTab" class="tab-view hidden">
+      <div class="crawler-dashboard">
+
+        <!-- 采集控制卡片 -->
+        <div class="crawler-header-card">
+          <div class="crawler-title-area">
+            <h2>🕷️ A股原生数据采集控制台</h2>
+            <p>纯本地原生 Python 反爬调度引擎，零外部 AI 依赖。支持一键全量抓取、实时进度反馈与本地 SQLite 自动落盘沉淀。</p>
+          </div>
+          <div class="crawler-btn-group">
+            <button id="btnStartFullCrawl" class="btn btn-crawl-full" onclick="startManualCrawl('full')">
+              🚀 一键全量抓取 (4,601 只)
+            </button>
+            <button id="btnStartCoreCrawl" class="btn btn-crawl-core" onclick="startManualCrawl('core')">
+              ⚡ 核心资产增量抓取 (中证100)
+            </button>
+            <button id="btnCancelCrawl" class="btn btn-crawl-cancel" onclick="cancelManualCrawl()" disabled>
+              ⏹️ 终止当前抓取
+            </button>
+          </div>
+        </div>
+
+        <!-- 实时进度监控面板 -->
+        <div class="crawler-monitor-card">
+          <div class="monitor-top">
+            <div class="monitor-status-label">
+              <span id="crawlerPulseDot" class="status-indicator" style="background-color: #94a3b8;"></span>
+              <span id="crawlerStatusText">就绪待命中 (未开始抓取任务)</span>
+            </div>
+            <div class="monitor-percentage" id="crawlerProgressPct">0.0%</div>
+          </div>
+
+          <!-- 动态进度条 -->
+          <div class="progress-track">
+            <div id="crawlerProgressBar" class="progress-fill"></div>
+          </div>
+
+          <!-- 状态详情与指标四宫格 -->
+          <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.8rem;" id="crawlerPhaseDesc">
+            当前阶段：准备就绪。点击上方按钮即可启动脱敏数据采集，全过程支持断点与优雅终止。
+          </div>
+
+          <div class="monitor-metrics-grid">
+            <div class="metric-box">
+              <span class="metric-label">总计划采集标的数</span>
+              <span class="metric-value" id="crawlerMetricTotal">-- 只</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-label">已成功更新入库</span>
+              <span class="metric-value" id="crawlerMetricUpdated" style="color: #38bdf8;">-- 只</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-label">当前耗时</span>
+              <span class="metric-value" id="crawlerMetricElapsed">0.0 秒</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-label">采集引擎防封机制</span>
+              <span class="metric-value" style="color: #4ade80; font-size: 1.05rem;">自适应 Jitter 激活</span>
+            </div>
+          </div>
+
+          <!-- 任务完成明确反馈提示横幅 (动态显示) -->
+          <div id="crawlerCompleteBanner" class="alert-feedback" style="display: none;">
+            <div class="alert-feedback-text">
+              <span>🎉</span>
+              <span id="crawlerCompleteMsg">数据采集任务已圆满完成！已成功写入本地数据库。</span>
+            </div>
+            <button class="btn btn-secondary" style="padding: 0.35rem 0.8rem; font-size: 0.82rem;" onclick="switchMainTab('filter')">
+              👉 返回筛选列表查看最新数据
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- 股票详情模态浮层 -->
+  <div id="stockDetailModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span id="modalStockName" class="modal-stock-name">股票名称</span>
+          <span id="modalStockCode" class="modal-stock-code">sh000000</span>
+          <span id="modalMarketTag" class="tag-badge">市场</span>
+          <span id="modalBoardTag" class="tag-badge">板块</span>
+          <span id="modalConstituentTag" class="tag-badge" style="display:none;">成分股</span>
+          <span id="modalPriceBadge" class="price-up" style="font-size: 1.3rem; margin-left: 0.4rem;">0.00</span>
+          <span id="modalChangeBadge" class="price-up" style="font-size: 0.95rem;">+0.00 (+0.00%)</span>
+        </div>
+        <button class="btn-close" onclick="closeStockDetail()">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="quote-grid">
+          <div class="quote-grid-item">
+            <span class="quote-label">今开盘</span>
+            <span id="modalOpenPrice" class="quote-value">--</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">昨收盘</span>
+            <span id="modalPrevClose" class="quote-value">--</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">最高价</span>
+            <span id="modalHighPrice" class="quote-value price-up">--</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">最低价</span>
+            <span id="modalLowPrice" class="quote-value price-down">--</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">总市值</span>
+            <span id="modalMarketCap" class="quote-value">-- 亿</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">流通市值</span>
+            <span id="modalCircCap" class="quote-value">-- 亿</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">市盈率 PE</span>
+            <span id="modalPe" class="quote-value">--</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">累计分红次数</span>
+            <span id="modalDividendCount" class="quote-value" style="color: #f59e0b;">-- 次</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">上市总时长</span>
+            <span id="modalListingYears" class="quote-value" style="color: #10b981;">-- 年</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">换手率</span>
+            <span id="modalTurnoverRate" class="quote-value">--%</span>
+          </div>
+          <div class="quote-grid-item">
+            <span class="quote-label">成交额</span>
+            <span id="modalTurnover" class="quote-value">-- 亿</span>
+          </div>
+        </div>
+
+        <div class="shareholder-card">
+          <div class="shareholder-header">
+            <div style="font-weight: 600; font-size: 0.95rem;">👥 股东结构与筹码集中度 (最新财报披露期: <span id="modalReportDate" style="color: #60a5fa;">--</span>)</div>
+          </div>
+          <div class="shareholder-grid">
+            <div class="sh-box">
+              <span style="font-size: 0.78rem; color: var(--text-muted);">十大流通股东合计持股比例</span>
+              <span id="modalTop10Circ" style="font-size: 1.25rem; font-weight: 700; color: #38bdf8;">--%</span>
+              <span style="font-size: 0.75rem; color: var(--text-secondary);">反映主力资金与机构流通筹码锁定程度</span>
+            </div>
+            <div class="sh-box">
+              <span style="font-size: 0.78rem; color: var(--text-muted);">十大股东合计持股比例</span>
+              <span id="modalTop10Hold" style="font-size: 1.25rem; font-weight: 700; color: #c084fc;">--%</span>
+              <span style="font-size: 0.75rem; color: var(--text-secondary);">反映大股东与核心控股股东控制力</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="quant-card">
+          <div class="quant-header">
+            <div style="font-weight: 600; font-size: 0.95rem;">📊 多维量化体检与多空动能诊断</div>
+            <div id="modalQuantScore" class="quant-score-badge">量化评分: -- 分</div>
+          </div>
+          <div id="modalQuantAction" class="quant-action-text">正在评估该标的技术面与多空动能...</div>
+        </div>
+
+        <!-- 专业交互式走势图与量额分图控制区 (真实数据驱动) -->
+        <div class="chart-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.6rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-weight: 700; font-size: 0.95rem;">📈 行情走势图谱</span>
+            <span id="chartDataSourceBadge" class="brand-tag" style="font-size: 0.7rem;">官方实时行情源</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
+            <!-- 主图时段切换 -->
+            <div class="segmented-control" id="chartPeriodControl">
+              <button type="button" class="seg-btn active" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 分时走势</button>
+              <button type="button" class="seg-btn" data-period="daily" onclick="switchChartPeriod('daily')">📊 60日 K线</button>
+            </div>
+            <!-- 副图指标切换 -->
+            <div class="segmented-control" id="chartSubPlotControl">
+              <button type="button" class="seg-btn active" data-subplot="vol" onclick="switchChartSubplot('vol')">📊 成交量(手)</button>
+              <button type="button" class="seg-btn" data-subplot="amt" onclick="switchChartSubplot('amt')">💰 成交额(亿元)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 动态矢量图表容器 (含图1十字光标悬浮摘要栏) -->
+        <div id="modalChartWrapper" class="chart-wrapper">
+          <!-- 悬浮信息栏摘要 (严格复刻图1) -->
+          <div id="chartTooltipBox" class="chart-tooltip-box">
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">时间</span><span id="ttDate" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">开盘</span><span id="ttOpen" class="chart-tooltip-val">--</span></div>
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">收盘</span><span id="ttClose" class="chart-tooltip-val">--</span></div>
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">最高</span><span id="ttHigh" class="chart-tooltip-val">--</span></div>
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">最低</span><span id="ttLow" class="chart-tooltip-val">--</span></div>
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">涨幅</span><span id="ttChangePct" class="chart-tooltip-val">--</span></div>
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">振幅</span><span id="ttAmplitude" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">成交量</span><span id="ttVolume" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">成交额</span><span id="ttAmount" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>
+            <div class="chart-tooltip-row"><span class="chart-tooltip-label">换手率</span><span id="ttTurnover" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>
+          </div>
+          <div id="chartSvgContainer" style="width: 100%; display: flex; justify-content: center;">
+            <div style="padding: 2.5rem; color: var(--text-muted);">图表加载中...</div>
+          </div>
+        </div>
+
+        <!-- 上市公司基本档案资料 (深度 F10) -->
+        <div class="company-profile-card">
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.4rem; display: flex; align-items: center; justify-content: space-between;">
+            <span>🏢 上市公司基本资料</span>
+            <span id="modalProfileIndustryTag" class="tag-badge tag-board-main">行业分类</span>
+          </div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;" id="modalProfileScope">
+            主营业务：--
+          </div>
+          <div class="profile-grid">
+            <div class="profile-item">
+              <span class="profile-label">法定代表人</span>
+              <span class="profile-val" id="modalProfileLegal">--</span>
+            </div>
+            <div class="profile-item">
+              <span class="profile-label">注册资本</span>
+              <span class="profile-val" id="modalProfileCapital">--</span>
+            </div>
+            <div class="profile-item">
+              <span class="profile-label">上市地与交易所</span>
+              <span class="profile-val" id="modalProfileExchange">--</span>
+            </div>
+            <div class="profile-item">
+              <span class="profile-label">办公地址</span>
+              <span class="profile-val" id="modalProfileAddress">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 深度财务分析 4 个 Tab 页面 (主要指标、资产负债表、利润表、现金流量表) -->
+        <div class="finance-analysis-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="font-weight: 700; font-size: 0.95rem;">
+              📊 深度财务分析 <span id="modalFinancePeriod" style="font-size: 0.8rem; color: #60a5fa; font-weight: normal;">(最新披露期)</span>
+            </div>
+            <!-- 4 Tab 切换按钮 -->
+            <div class="finance-nav-tabs" style="margin-bottom: 0;">
+              <button type="button" class="fin-tab-btn active" data-fintab="main" onclick="switchFinanceTab('main')">主要指标</button>
+              <button type="button" class="fin-tab-btn" data-fintab="balance" onclick="switchFinanceTab('balance')">资产负债表</button>
+              <button type="button" class="fin-tab-btn" data-fintab="income" onclick="switchFinanceTab('income')">利润表</button>
+              <button type="button" class="fin-tab-btn" data-fintab="cash" onclick="switchFinanceTab('cash')">现金流量表</button>
+            </div>
+          </div>
+
+          <!-- Tab 1: 主要指标 -->
+          <div id="finPanelMain" class="finance-panel">
+            <div class="finance-table-box">
+              <table class="fin-data-table">
+                <thead>
+                  <tr>
+                    <th>财务关键指标</th>
+                    <th>数值</th>
+                    <th>指标含义与投资参考</th>
+                  </tr>
+                </thead>
+                <tbody id="finTableBodyMain">
+                  <!-- 动态插入 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab 2: 资产负债表 -->
+          <div id="finPanelBalance" class="finance-panel" style="display: none;">
+            <div class="finance-table-box">
+              <table class="fin-data-table">
+                <thead>
+                  <tr>
+                    <th>科目名称</th>
+                    <th>期末金额 (亿元)</th>
+                    <th>结构分类</th>
+                  </tr>
+                </thead>
+                <tbody id="finTableBodyBalance">
+                  <!-- 动态插入 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab 3: 利润表 -->
+          <div id="finPanelIncome" class="finance-panel" style="display: none;">
+            <div class="finance-table-box">
+              <table class="fin-data-table">
+                <thead>
+                  <tr>
+                    <th>利润表核心科目</th>
+                    <th>金额 (亿元)</th>
+                    <th>核算项目</th>
+                  </tr>
+                </thead>
+                <tbody id="finTableBodyIncome">
+                  <!-- 动态插入 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab 4: 现金流量表 -->
+          <div id="finPanelCash" class="finance-panel" style="display: none;">
+            <div class="finance-table-box">
+              <table class="fin-data-table">
+                <thead>
+                  <tr>
+                    <th>现金流量表科目</th>
+                    <th>净流入/流出 (亿元)</th>
+                    <th>资金属性</th>
+                  </tr>
+                </thead>
+                <tbody id="finTableBodyCash">
+                  <!-- 动态插入 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+          <button class="btn btn-secondary" onclick="closeStockDetail()">⬅️ 返回筛选列表</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/web/app.js"></script>
+</body>
+</html>

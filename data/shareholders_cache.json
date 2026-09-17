@@ -1,0 +1,902 @@
+{
+  "sz002475": {
+    "code": "sz002475",
+    "clean_code": "002475",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 48.63,
+    "top10_circ_hold_pct": 48.74,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:04"
+  },
+  "sz002460": {
+    "code": "sz002460",
+    "clean_code": "002460",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 94.68,
+    "top10_circ_hold_pct": 43.99,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:04"
+  },
+  "sh601818": {
+    "code": "sh601818",
+    "clean_code": "601818",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 79.42,
+    "top10_circ_hold_pct": 79.41,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:04"
+  },
+  "sz002129": {
+    "code": "sz002129",
+    "clean_code": "002129",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 65.97,
+    "top10_circ_hold_pct": 37.34,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:04"
+  },
+  "sh600585": {
+    "code": "sh600585",
+    "clean_code": "600585",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 66.99,
+    "top10_circ_hold_pct": 66.99,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:04"
+  },
+  "sh601919": {
+    "code": "sh601919",
+    "clean_code": "601919",
+    "report_date": "2026-07-03",
+    "top10_hold_pct": 92.93,
+    "top10_circ_hold_pct": 71.52,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:06"
+  },
+  "sz300122": {
+    "code": "sz300122",
+    "clean_code": "300122",
+    "report_date": "2026-07-17",
+    "top10_hold_pct": 63.24,
+    "top10_circ_hold_pct": 38.68,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:06"
+  },
+  "sz300059": {
+    "code": "sz300059",
+    "clean_code": "300059",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 29.41,
+    "top10_circ_hold_pct": 16.94,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:06"
+  },
+  "sz000001": {
+    "code": "sz000001",
+    "clean_code": "000001",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 64.29,
+    "top10_circ_hold_pct": 64.29,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:06"
+  },
+  "sz000002": {
+    "code": "sz000002",
+    "clean_code": "000002",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 96.92,
+    "top10_circ_hold_pct": 49.51,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:06"
+  },
+  "sz300760": {
+    "code": "sz300760",
+    "clean_code": "300760",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 93.04,
+    "top10_circ_hold_pct": 66.46,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:07"
+  },
+  "sz300274": {
+    "code": "sz300274",
+    "clean_code": "300274",
+    "report_date": "2026-07-31",
+    "top10_hold_pct": 39.75,
+    "top10_circ_hold_pct": 21.87,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:07"
+  },
+  "sh601766": {
+    "code": "sh601766",
+    "clean_code": "601766",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 70.53,
+    "top10_circ_hold_pct": 70.54,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:07"
+  },
+  "sh601899": {
+    "code": "sh601899",
+    "clean_code": "601899",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 53.67,
+    "top10_circ_hold_pct": 53.67,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:07"
+  },
+  "sh600795": {
+    "code": "sh600795",
+    "clean_code": "600795",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 66.56,
+    "top10_circ_hold_pct": 66.56,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:07"
+  },
+  "sz002352": {
+    "code": "sz002352",
+    "clean_code": "002352",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 65.23,
+    "top10_circ_hold_pct": 65.22,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:08"
+  },
+  "sz002142": {
+    "code": "sz002142",
+    "clean_code": "002142",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 62.77,
+    "top10_circ_hold_pct": 62.81,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:08"
+  },
+  "sh601288": {
+    "code": "sh601288",
+    "clean_code": "601288",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 94.85,
+    "top10_circ_hold_pct": 94.85,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:08"
+  },
+  "sh601138": {
+    "code": "sh601138",
+    "clean_code": "601138",
+    "report_date": "2026-07-27",
+    "top10_hold_pct": 85.28,
+    "top10_circ_hold_pct": 85.29,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:09"
+  },
+  "sz000333": {
+    "code": "sz000333",
+    "clean_code": "000333",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 59.48,
+    "top10_circ_hold_pct": 59.41,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:09"
+  },
+  "sz000858": {
+    "code": "sz000858",
+    "clean_code": "000858",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 63.04,
+    "top10_circ_hold_pct": 63.02,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:10"
+  },
+  "sh600893": {
+    "code": "sh600893",
+    "clean_code": "600893",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 58.29,
+    "top10_circ_hold_pct": 58.31,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:10"
+  },
+  "sz002371": {
+    "code": "sz002371",
+    "clean_code": "002371",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 63.89,
+    "top10_circ_hold_pct": 63.92,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:10"
+  },
+  "sh601988": {
+    "code": "sh601988",
+    "clean_code": "601988",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 96.5,
+    "top10_circ_hold_pct": 96.24,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:11"
+  },
+  "sh600309": {
+    "code": "sh600309",
+    "clean_code": "600309",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 54.63,
+    "top10_circ_hold_pct": 54.63,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:11"
+  },
+  "sh601800": {
+    "code": "sh601800",
+    "clean_code": "601800",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 172.09,
+    "top10_circ_hold_pct": 85.77,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:12"
+  },
+  "sh600276": {
+    "code": "sh600276",
+    "clean_code": "600276",
+    "report_date": "2026-08-19",
+    "top10_hold_pct": 55.33,
+    "top10_circ_hold_pct": 55.32,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:13"
+  },
+  "sh601225": {
+    "code": "sh601225",
+    "clean_code": "601225",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 138.82,
+    "top10_circ_hold_pct": 74.75,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:13"
+  },
+  "sz002049": {
+    "code": "sz002049",
+    "clean_code": "002049",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 66.29,
+    "top10_circ_hold_pct": 35.84,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:13"
+  },
+  "sz002466": {
+    "code": "sz002466",
+    "clean_code": "002466",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 48.0,
+    "top10_circ_hold_pct": 48.06,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:13"
+  },
+  "sh603993": {
+    "code": "sh603993",
+    "clean_code": "603993",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 70.37,
+    "top10_circ_hold_pct": 70.36,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:15"
+  },
+  "sh603501": {
+    "code": "sh603501",
+    "clean_code": "603501",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 51.7,
+    "top10_circ_hold_pct": 50.06,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:14"
+  },
+  "sz002027": {
+    "code": "sz002027",
+    "clean_code": "002027",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 64.46,
+    "top10_circ_hold_pct": 41.38,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:15"
+  },
+  "sh601318": {
+    "code": "sh601318",
+    "clean_code": "601318",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 59.03,
+    "top10_circ_hold_pct": 59.03,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:15"
+  },
+  "sh600030": {
+    "code": "sh600030",
+    "clean_code": "600030",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 64.94,
+    "top10_circ_hold_pct": 47.12,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:15"
+  },
+  "sz300394": {
+    "code": "sz300394",
+    "clean_code": "300394",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 51.74,
+    "top10_circ_hold_pct": 51.87,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:17"
+  },
+  "sh600941": {
+    "code": "sh600941",
+    "clean_code": "600941",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 190.21,
+    "top10_circ_hold_pct": 95.88,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:17"
+  },
+  "sh600036": {
+    "code": "sh600036",
+    "clean_code": "600036",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 63.45,
+    "top10_circ_hold_pct": 63.46,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:17"
+  },
+  "sh601939": {
+    "code": "sh601939",
+    "clean_code": "601939",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 97.4,
+    "top10_circ_hold_pct": 97.46,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:17"
+  },
+  "sz002714": {
+    "code": "sz002714",
+    "clean_code": "002714",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 63.32,
+    "top10_circ_hold_pct": 44.86,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:18"
+  },
+  "sz300750": {
+    "code": "sz300750",
+    "clean_code": "300750",
+    "report_date": "2026-08-05",
+    "top10_hold_pct": 66.28,
+    "top10_circ_hold_pct": 65.16,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:18"
+  },
+  "sh600050": {
+    "code": "sh600050",
+    "clean_code": "600050",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 66.29,
+    "top10_circ_hold_pct": 66.89,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:18"
+  },
+  "sh601166": {
+    "code": "sh601166",
+    "clean_code": "601166",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 48.15,
+    "top10_circ_hold_pct": 48.14,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:18"
+  },
+  "sh600016": {
+    "code": "sh600016",
+    "clean_code": "600016",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 59.94,
+    "top10_circ_hold_pct": 59.95,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:19"
+  },
+  "sz002459": {
+    "code": "sz002459",
+    "clean_code": "002459",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 60.94,
+    "top10_circ_hold_pct": 60.98,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:19"
+  },
+  "sz300418": {
+    "code": "sz300418",
+    "clean_code": "300418",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 37.16,
+    "top10_circ_hold_pct": 31.38,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:19"
+  },
+  "sz002594": {
+    "code": "sz002594",
+    "clean_code": "002594",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 116.75,
+    "top10_circ_hold_pct": 71.71,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:20"
+  },
+  "sh601888": {
+    "code": "sh601888",
+    "clean_code": "601888",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 61.42,
+    "top10_circ_hold_pct": 61.42,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:20"
+  },
+  "sz300014": {
+    "code": "sz300014",
+    "clean_code": "300014",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 42.22,
+    "top10_circ_hold_pct": 40.81,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:21"
+  },
+  "sh600031": {
+    "code": "sh600031",
+    "clean_code": "600031",
+    "report_date": "2026-07-24",
+    "top10_hold_pct": 48.47,
+    "top10_circ_hold_pct": 48.46,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:21"
+  },
+  "sz301236": {
+    "code": "sz301236",
+    "clean_code": "301236",
+    "report_date": "2026-07-07",
+    "top10_hold_pct": 38.21,
+    "top10_circ_hold_pct": 27.14,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:22"
+  },
+  "sh600809": {
+    "code": "sh600809",
+    "clean_code": "600809",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 75.05,
+    "top10_circ_hold_pct": 75.04,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:22"
+  },
+  "sh601688": {
+    "code": "sh601688",
+    "clean_code": "601688",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 50.33,
+    "top10_circ_hold_pct": 50.34,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:22"
+  },
+  "sh601111": {
+    "code": "sh601111",
+    "clean_code": "601111",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 84.6,
+    "top10_circ_hold_pct": 80.77,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:23"
+  },
+  "sz000069": {
+    "code": "sz000069",
+    "clean_code": "000069",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 116.49,
+    "top10_circ_hold_pct": 55.05,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:23"
+  },
+  "sz300124": {
+    "code": "sz300124",
+    "clean_code": "300124",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 69.22,
+    "top10_circ_hold_pct": 55.12,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:23"
+  },
+  "sh603259": {
+    "code": "sh603259",
+    "clean_code": "603259",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 42.63,
+    "top10_circ_hold_pct": 42.62,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:23"
+  },
+  "sz300015": {
+    "code": "sz300015",
+    "clean_code": "300015",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 58.62,
+    "top10_circ_hold_pct": 52.05,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:23"
+  },
+  "sh601728": {
+    "code": "sh601728",
+    "clean_code": "601728",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 91.36,
+    "top10_circ_hold_pct": 91.36,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:24"
+  },
+  "sz300502": {
+    "code": "sz300502",
+    "clean_code": "300502",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 26.22,
+    "top10_circ_hold_pct": 18.03,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:24"
+  },
+  "sz000568": {
+    "code": "sz000568",
+    "clean_code": "000568",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 64.28,
+    "top10_circ_hold_pct": 64.33,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:24"
+  },
+  "sz300661": {
+    "code": "sz300661",
+    "clean_code": "300661",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 51.62,
+    "top10_circ_hold_pct": 50.29,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:25"
+  },
+  "sz000977": {
+    "code": "sz000977",
+    "clean_code": "000977",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 38.39,
+    "top10_circ_hold_pct": 38.44,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:24"
+  },
+  "sh600938": {
+    "code": "sh600938",
+    "clean_code": "600938",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 154.96,
+    "top10_circ_hold_pct": 95.01,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:25"
+  },
+  "sh601066": {
+    "code": "sh601066",
+    "clean_code": "601066",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 89.16,
+    "top10_circ_hold_pct": 89.14,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:25"
+  },
+  "sz002812": {
+    "code": "sz002812",
+    "clean_code": "002812",
+    "report_date": "2026-07-22",
+    "top10_hold_pct": 61.82,
+    "top10_circ_hold_pct": 40.02,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:25"
+  },
+  "sh601009": {
+    "code": "sh601009",
+    "clean_code": "601009",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 71.21,
+    "top10_circ_hold_pct": 71.23,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:26"
+  },
+  "sh600009": {
+    "code": "sh600009",
+    "clean_code": "600009",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 132.12,
+    "top10_circ_hold_pct": 61.57,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:26"
+  },
+  "sz300308": {
+    "code": "sz300308",
+    "clean_code": "300308",
+    "report_date": "2026-08-31",
+    "top10_hold_pct": 36.34,
+    "top10_circ_hold_pct": 34.18,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:26"
+  },
+  "sh601088": {
+    "code": "sh601088",
+    "clean_code": "601088",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 91.51,
+    "top10_circ_hold_pct": 92.28,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:26"
+  },
+  "sh600438": {
+    "code": "sh600438",
+    "clean_code": "600438",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 53.72,
+    "top10_circ_hold_pct": 53.7,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:27"
+  },
+  "sh688008": {
+    "code": "sh688008",
+    "clean_code": "688008",
+    "report_date": "2026-07-23",
+    "top10_hold_pct": 32.49,
+    "top10_circ_hold_pct": 32.48,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:27"
+  },
+  "sh600019": {
+    "code": "sh600019",
+    "clean_code": "600019",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 117.36,
+    "top10_circ_hold_pct": 75.22,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:27"
+  },
+  "sh600660": {
+    "code": "sh600660",
+    "clean_code": "600660",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 113.59,
+    "top10_circ_hold_pct": 65.29,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:27"
+  },
+  "sz002415": {
+    "code": "sz002415",
+    "clean_code": "002415",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 64.82,
+    "top10_circ_hold_pct": 64.53,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:28"
+  },
+  "sh688981": {
+    "code": "sh688981",
+    "clean_code": "688981",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 79.42,
+    "top10_circ_hold_pct": 79.15,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:28"
+  },
+  "sh600519": {
+    "code": "sh600519",
+    "clean_code": "600519",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 67.63,
+    "top10_circ_hold_pct": 67.62,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:29"
+  },
+  "sh600887": {
+    "code": "sh600887",
+    "clean_code": "600887",
+    "report_date": "2026-09-08",
+    "top10_hold_pct": 41.59,
+    "top10_circ_hold_pct": 33.1,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:28"
+  },
+  "sh600010": {
+    "code": "sh600010",
+    "clean_code": "600010",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 116.32,
+    "top10_circ_hold_pct": 42.28,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:29"
+  },
+  "sh601398": {
+    "code": "sh601398",
+    "clean_code": "601398",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 95.57,
+    "top10_circ_hold_pct": 95.57,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:30"
+  },
+  "sz000651": {
+    "code": "sz000651",
+    "clean_code": "000651",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 36.15,
+    "top10_circ_hold_pct": 35.24,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:30"
+  },
+  "sz000792": {
+    "code": "sz000792",
+    "clean_code": "000792",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 60.04,
+    "top10_circ_hold_pct": 47.82,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:31"
+  },
+  "sz000725": {
+    "code": "sz000725",
+    "clean_code": "000725",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 41.41,
+    "top10_circ_hold_pct": 26.31,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:31"
+  },
+  "sh601211": {
+    "code": "sh601211",
+    "clean_code": "601211",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 53.42,
+    "top10_circ_hold_pct": 51.7,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:31"
+  },
+  "sh688036": {
+    "code": "sh688036",
+    "clean_code": "688036",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 66.24,
+    "top10_circ_hold_pct": 66.24,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:32"
+  },
+  "sh603288": {
+    "code": "sh603288",
+    "clean_code": "603288",
+    "report_date": "2026-07-03",
+    "top10_hold_pct": 146.25,
+    "top10_circ_hold_pct": 79.48,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:32"
+  },
+  "sz300782": {
+    "code": "sz300782",
+    "clean_code": "300782",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 52.65,
+    "top10_circ_hold_pct": 40.95,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:33"
+  },
+  "sz002271": {
+    "code": "sz002271",
+    "clean_code": "002271",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 46.26,
+    "top10_circ_hold_pct": 35.07,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:33"
+  },
+  "sh600900": {
+    "code": "sh600900",
+    "clean_code": "600900",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 70.93,
+    "top10_circ_hold_pct": 70.94,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:34"
+  },
+  "sh601012": {
+    "code": "sh601012",
+    "clean_code": "601012",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 41.85,
+    "top10_circ_hold_pct": 28.05,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:34"
+  },
+  "sh601328": {
+    "code": "sh601328",
+    "clean_code": "601328",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 79.73,
+    "top10_circ_hold_pct": 71.06,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:33"
+  },
+  "sz000063": {
+    "code": "sz000063",
+    "clean_code": "000063",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 61.12,
+    "top10_circ_hold_pct": 41.36,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:35"
+  },
+  "sz002230": {
+    "code": "sz002230",
+    "clean_code": "002230",
+    "report_date": "2026-07-27",
+    "top10_hold_pct": 26.79,
+    "top10_circ_hold_pct": 24.45,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:36"
+  },
+  "sh600150": {
+    "code": "sh600150",
+    "clean_code": "600150",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 56.26,
+    "top10_circ_hold_pct": 56.25,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:36"
+  },
+  "sh601668": {
+    "code": "sh601668",
+    "clean_code": "601668",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 121.49,
+    "top10_circ_hold_pct": 64.06,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:36"
+  },
+  "sz300033": {
+    "code": "sz300033",
+    "clean_code": "300033",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 103.7,
+    "top10_circ_hold_pct": 44.76,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:37"
+  },
+  "sh601186": {
+    "code": "sh601186",
+    "clean_code": "601186",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 134.58,
+    "top10_circ_hold_pct": 68.36,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:38"
+  },
+  "sh600760": {
+    "code": "sh600760",
+    "clean_code": "600760",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 71.46,
+    "top10_circ_hold_pct": 71.54,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:37"
+  },
+  "sh600111": {
+    "code": "sh600111",
+    "clean_code": "600111",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 86.42,
+    "top10_circ_hold_pct": 46.98,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:39"
+  },
+  "sh688111": {
+    "code": "sh688111",
+    "clean_code": "688111",
+    "report_date": "2026-06-30",
+    "top10_hold_pct": 61.29,
+    "top10_circ_hold_pct": 61.3,
+    "source": "sina_finance",
+    "updated_at": "2026-09-16 20:59:38"
+  }
+}
