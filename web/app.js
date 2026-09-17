@@ -303,6 +303,29 @@ function initDateControl() {
 }
 
 /**
+ * 实时核验日期是否为休市日并进行强视觉提醒
+ */
+async function checkFilterDateTradingStatus(dateStr) {
+  if (!dom.filterDateTradingStatus || !dom.filterDateStatusText) return;
+  try {
+    const res = await fetch(`/api/calendar/check?date=${dateStr}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    const cal = json.data;
+
+    if (cal.is_trading_day) {
+      dom.filterDateTradingStatus.className = 'trading-status-tip trading-status-open';
+      dom.filterDateStatusText.textContent = cal.badge_text;
+    } else {
+      dom.filterDateTradingStatus.className = 'trading-status-tip trading-status-closed';
+      dom.filterDateStatusText.textContent = `${cal.badge_text} - 非交易日`;
+    }
+  } catch (err) {
+    console.error('日历判定异常:', err);
+  }
+}
+
+/**
  * 筛选器快速日期设定 (今天 / 近5日(周) / 近20天(月))
  */
 function setQuickDateFilter(rangeType, evt = null) {
