@@ -2996,3 +2996,49 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==================================================== */
+/* 需求2/3/4/5/6: 指数大盘视图专有高质感金融样式        */
+/* ==================================================== */
+.index-dashboard {
+  animation: fadeIn 0.25s ease-in-out;
+}
+
+.index-code-badge {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #38bdf8;
+  padding: 0.2rem 0.5rem;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 4px;
+}
+
+.index-name-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #f8fafc;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.index-name-title:hover {
+  color: #38bdf8;
+  text-decoration: underline;
+}
+
+.index-price-val {
+  font-family: monospace;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.index-row-interactive {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.index-row-interactive:hover td {
+  background-color: rgba(56, 189, 248, 0.08) !important;
+}

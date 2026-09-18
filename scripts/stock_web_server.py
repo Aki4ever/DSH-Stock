@@ -567,9 +567,13 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
 
             all_stocks = list(DATA_MANAGER.stocks_dict.values())
             # 聚合股东数据 (缓存或实时聚合)
-            shareholders = Top10ShareholdersEngine.aggregate_market_shareholders(all_stocks)
+            shareholders_raw = Top10ShareholdersEngine.aggregate_market_shareholders(all_stocks)
+
+            # 计算需求1的6大概览指标 (基于全量聚合数据)
+            overview_stats = Top10ShareholdersEngine.get_shareholders_overview(shareholders_raw)
 
             # 筛选
+            shareholders = list(shareholders_raw)
             if cat in ("individual", "institution"):
                 shareholders = [h for h in shareholders if h["category"] == cat]
             if kw:
@@ -587,8 +591,32 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
 
             self._send_json(200, {
                 "total": len(shareholders),
+                "overview": overview_stats,
                 "data": shareholders
             })
+            return
+
+        # 3.1.0.2 需求2/3/4/5/6: 指数列表与详情 API /api/index/list 与 /api/index/{code}
+        if url_path == "/api/index/list":
+            from scripts.index_engine import IndexEngine
+            indices = IndexEngine.get_indices_list()
+            self._send_json(200, {
+                "total": len(indices),
+                "data": indices
+            })
+            return
+
+        if url_path.startswith("/api/index/"):
+            from scripts.index_engine import IndexEngine
+            code = url_path.replace("/api/index/", "").strip()
+            detail = IndexEngine.get_index_detail(code)
+            if detail:
+                self._send_json(200, {
+                    "code": 200,
+                    "data": detail
+                })
+            else:
+                self._send_json(404, {"error": "Index Not Found"})
             return
 
         # 3.1.1 需求2: 独立数据采集中心导出端点 /api/crawler/export?format=json|csv

@@ -74,11 +74,14 @@ const dom = {
   tabBtnDashboard: document.getElementById('tabBtnDashboard'),
   tabBtnWorld: document.getElementById('tabBtnWorld'),
   tabBtnShareholders: document.getElementById('tabBtnShareholders'),
+  tabBtnIndex: document.getElementById('tabBtnIndex'),
   tabBtnCrawler: document.getElementById('tabBtnCrawler'),
   viewFilterTab: document.getElementById('viewFilterTab'),
   viewDashboardTab: document.getElementById('viewDashboardTab'),
   viewWorldTab: document.getElementById('viewWorldTab'),
   viewShareholdersTab: document.getElementById('viewShareholdersTab'),
+  viewIndexTab: document.getElementById('viewIndexTab'),
+  viewIndexDetailTab: document.getElementById('viewIndexDetailTab'),
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
   viewStockDetailTab: document.getElementById('viewStockDetailTab'),
   btnBackToStockList: document.getElementById('btnBackToStockList'),
@@ -87,6 +90,28 @@ const dom = {
   shCategoryControl: document.getElementById('shCategoryControl'),
   shKeywordInput: document.getElementById('shKeywordInput'),
   shareholdersTableBody: document.getElementById('shareholdersTableBody'),
+  shOverviewTotalHolders: document.getElementById('shOverviewTotalHolders'),
+  shOverviewInstHolders: document.getElementById('shOverviewInstHolders'),
+  shOverviewIndHolders: document.getElementById('shOverviewIndHolders'),
+  shOverviewTotalAmount: document.getElementById('shOverviewTotalAmount'),
+  shOverviewInstAmount: document.getElementById('shOverviewInstAmount'),
+  shOverviewIndAmount: document.getElementById('shOverviewIndAmount'),
+
+  // 指数专区 DOM
+  indexTableBody: document.getElementById('indexTableBody'),
+  indexModalName: document.getElementById('indexModalName'),
+  indexModalCode: document.getElementById('indexModalCode'),
+  indexModalPriceBadge: document.getElementById('indexModalPriceBadge'),
+  indexModalChangeBadge: document.getElementById('indexModalChangeBadge'),
+  indexModalOpen: document.getElementById('indexModalOpen'),
+  indexModalPrevClose: document.getElementById('indexModalPrevClose'),
+  indexModalHigh: document.getElementById('indexModalHigh'),
+  indexModalLow: document.getElementById('indexModalLow'),
+  indexModalTurnover: document.getElementById('indexModalTurnover'),
+  indexChartSvgContainer: document.getElementById('indexChartSvgContainer'),
+  indexChartPeriodControl: document.getElementById('indexChartPeriodControl'),
+  btnIndexAutoLines: document.getElementById('btnIndexAutoLines'),
+  btnIndexDrawHorizontal: document.getElementById('btnIndexDrawHorizontal'),
 
   // 外部宏观环境 DOM
   worldHeaderScopeTitle: document.getElementById('worldHeaderScopeTitle'),
@@ -333,7 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * 顶栏 Tab 页面无缝切换 (对齐图1: filter | dashboard | world | shareholders | crawler)
+ * 顶栏 Tab 页面无缝切换 (对齐图1: filter | dashboard | world | shareholders | index | crawler)
  */
 function switchMainTab(tabId) {
   appState.currentTab = tabId;
@@ -342,13 +367,19 @@ function switchMainTab(tabId) {
   if (dom.tabBtnDashboard) dom.tabBtnDashboard.classList.toggle('active', tabId === 'dashboard');
   if (dom.tabBtnWorld) dom.tabBtnWorld.classList.toggle('active', tabId === 'world');
   if (dom.tabBtnShareholders) dom.tabBtnShareholders.classList.toggle('active', tabId === 'shareholders');
+  if (dom.tabBtnIndex) dom.tabBtnIndex.classList.toggle('active', tabId === 'index');
   if (dom.tabBtnCrawler) dom.tabBtnCrawler.classList.toggle('active', tabId === 'crawler');
 
   if (dom.viewFilterTab) dom.viewFilterTab.classList.toggle('hidden', tabId !== 'filter');
   if (dom.viewDashboardTab) dom.viewDashboardTab.classList.toggle('hidden', tabId !== 'dashboard');
   if (dom.viewWorldTab) dom.viewWorldTab.classList.toggle('hidden', tabId !== 'world');
   if (dom.viewShareholdersTab) dom.viewShareholdersTab.classList.toggle('hidden', tabId !== 'shareholders');
+  if (dom.viewIndexTab) dom.viewIndexTab.classList.toggle('hidden', tabId !== 'index');
   if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.toggle('hidden', tabId !== 'crawler');
+
+  // 隐藏详情全屏页
+  if (dom.viewStockDetailTab) dom.viewStockDetailTab.classList.add('hidden');
+  if (dom.viewIndexDetailTab) dom.viewIndexDetailTab.classList.add('hidden');
 
   if (tabId === 'dashboard') {
     loadDashboardOverview();
@@ -356,6 +387,8 @@ function switchMainTab(tabId) {
     loadWorldMacroIntelligence();
   } else if (tabId === 'shareholders') {
     loadShareholdersOverview();
+  } else if (tabId === 'index') {
+    loadIndicesList();
   } else if (tabId === 'crawler') {
     pollCrawlerStatus();
     loadCrawlerAuditList();
@@ -4124,6 +4157,18 @@ async function loadShareholdersOverview() {
     if (!res.ok) throw new Error('拉取股东列表失败');
     const json = await res.json();
     shareholderState.data = json.data || [];
+
+    // 需求1: 渲染概览信息 (股东总数、机构股东总数、个人股东总数、股东总金额、机构股东总金额、个人股东总金额)
+    if (json.overview) {
+      const ov = json.overview;
+      if (dom.shOverviewTotalHolders) dom.shOverviewTotalHolders.textContent = `${(ov.total_holders_count || 0).toLocaleString()} 户`;
+      if (dom.shOverviewInstHolders) dom.shOverviewInstHolders.textContent = `${(ov.institution_holders_count || 0).toLocaleString()} 户`;
+      if (dom.shOverviewIndHolders) dom.shOverviewIndHolders.textContent = `${(ov.individual_holders_count || 0).toLocaleString()} 户`;
+      if (dom.shOverviewTotalAmount) dom.shOverviewTotalAmount.textContent = `${(ov.total_holding_amount_yi || 0).toLocaleString()} 亿`;
+      if (dom.shOverviewInstAmount) dom.shOverviewInstAmount.textContent = `${(ov.institution_holding_amount_yi || 0).toLocaleString()} 亿`;
+      if (dom.shOverviewIndAmount) dom.shOverviewIndAmount.textContent = `${(ov.individual_holding_amount_yi || 0).toLocaleString()} 亿`;
+    }
+
     renderShareholdersTable(shareholderState.data);
   } catch (err) {
     console.error('加载股东研究异常:', err);
@@ -4233,6 +4278,456 @@ function sortShareholderTable(field) {
   loadShareholdersOverview();
 }
 
+// ====================================================
+// 需求2/3/4/5/6: 指数大盘与专属成交额K线详情交互控制
+// ====================================================
+
+let indexState = {
+  list: [],
+  activeIndex: null,
+  period: 'timeline',
+  showAutoLines: false,
+  drawingMode: 'none',
+  customLines: []
+};
+
+/**
+ * 需求3/4: 加载大盘指数列表 (上证指数、深证成指)
+ * 表头: 代码、名称、最新、现价、涨幅、成交金额、操作
+ */
+async function loadIndicesList() {
+  const tbody = document.getElementById('indexTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <div class="spinner"></div>
+        <div>正在调取上海与深圳交易所官方基准指数实时行情...</div>
+      </td>
+    </tr>
+  `;
+
+  try {
+    const res = await fetch('/api/index/list');
+    if (!res.ok) throw new Error('拉取指数行情失败');
+    const json = await res.json();
+    indexState.list = json.data || [];
+    renderIndicesTable(indexState.list);
+  } catch (err) {
+    console.error('加载指数列表异常:', err);
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; color: var(--color-up); padding: 2rem;">
+          获取指数行情失败: ${err.message}
+        </td>
+      </tr>
+    `;
+  }
+}
+
+function renderIndicesTable(list) {
+  const tbody = document.getElementById('indexTableBody');
+  if (!tbody) return;
+
+  if (!list || list.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+          暂无大盘基准指数数据
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = list.map(item => {
+    const isUp = item.change >= 0;
+    const colorClass = isUp ? 'price-up' : 'price-down';
+    const sign = isUp ? '+' : '';
+
+    return `
+      <tr class="index-row-interactive" onclick="openIndexDetail('${item.code}')">
+        <td><span class="index-code-badge">${item.raw_code}</span></td>
+        <td>
+          <span class="index-name-title" title="点击查看 ${item.name} 专属K线与成交额中枢">
+            ${item.name}
+          </span>
+        </td>
+        <td><span class="index-price-val ${colorClass}">${item.price.toFixed(2)}</span></td>
+        <td><span class="index-price-val ${colorClass}">${item.price.toFixed(2)}</span></td>
+        <td>
+          <span class="stock-change-badge ${isUp ? 'badge-up' : 'badge-down'}">
+            ${sign}${item.change_pct.toFixed(2)}%
+          </span>
+        </td>
+        <td>
+          <strong style="color: #f59e0b; font-family: monospace; font-size: 1.05rem;">
+            ${item.turnover_yi.toLocaleString()}
+          </strong> 亿
+        </td>
+        <td style="text-align: center;">
+          <button class="btn btn-secondary" style="padding: 0.25rem 0.65rem; font-size: 0.78rem;" onclick="event.stopPropagation(); openIndexDetail('${item.code}')">
+            指数详情 ➔
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * 需求5/6: 点击指数切换到指数详情页面
+ * @param {string} code 指数代码 (sh000001 | sz399001)
+ */
+async function openIndexDetail(code) {
+  // 隐藏其他主视图
+  if (dom.viewFilterTab) dom.viewFilterTab.classList.add('hidden');
+  if (dom.viewDashboardTab) dom.viewDashboardTab.classList.add('hidden');
+  if (dom.viewWorldTab) dom.viewWorldTab.classList.add('hidden');
+  if (dom.viewShareholdersTab) dom.viewShareholdersTab.classList.add('hidden');
+  if (dom.viewIndexTab) dom.viewIndexTab.classList.add('hidden');
+  if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.add('hidden');
+  if (dom.viewStockDetailTab) dom.viewStockDetailTab.classList.add('hidden');
+
+  // 展示指数详情全屏页
+  if (dom.viewIndexDetailTab) {
+    dom.viewIndexDetailTab.classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  dom.indexModalName.textContent = '指数行情加载中...';
+  dom.indexModalCode.textContent = code;
+  dom.indexChartSvgContainer.innerHTML = '<div style="padding: 2.5rem; color: var(--text-muted);"><div class="spinner"></div><div>正在调取大盘基准真实历史日K与资金成交额中枢...</div></div>';
+  hideTooltip();
+
+  try {
+    const res = await fetch(`/api/index/${code}`);
+    if (!res.ok) throw new Error('获取指数详情失败');
+    const json = await res.json();
+    const indexData = json.data;
+    indexState.activeIndex = indexData;
+
+    // 填充顶部行情看板
+    dom.indexModalName.textContent = indexData.name;
+    dom.indexModalCode.textContent = indexData.code;
+    const isUp = indexData.change >= 0;
+    const colorClass = isUp ? 'price-up' : 'price-down';
+    const sign = isUp ? '+' : '';
+
+    dom.indexModalPriceBadge.textContent = indexData.price.toFixed(2);
+    dom.indexModalPriceBadge.className = colorClass;
+    dom.indexModalChangeBadge.textContent = `${sign}${indexData.change.toFixed(2)} (${sign}${indexData.change_pct.toFixed(2)}%)`;
+    dom.indexModalChangeBadge.className = colorClass;
+
+    if (dom.indexModalOpen) dom.indexModalOpen.textContent = indexData.open.toFixed(2);
+    if (dom.indexModalPrevClose) dom.indexModalPrevClose.textContent = indexData.prev_close.toFixed(2);
+    if (dom.indexModalHigh) dom.indexModalHigh.textContent = indexData.high.toFixed(2);
+    if (dom.indexModalLow) dom.indexModalLow.textContent = indexData.low.toFixed(2);
+    if (dom.indexModalTurnover) dom.indexModalTurnover.textContent = `${indexData.turnover_yi.toLocaleString()} 亿`;
+
+    // 渲染走势图
+    renderActiveIndexChart();
+  } catch (err) {
+    console.error('加载指数详情异常:', err);
+    dom.indexChartSvgContainer.innerHTML = `<div style="padding: 2rem; color: var(--color-up);">加载指数走势图谱失败: ${err.message}</div>`;
+  }
+}
+
+function closeIndexDetailPage() {
+  if (dom.viewIndexDetailTab) {
+    dom.viewIndexDetailTab.classList.add('hidden');
+  }
+  // 切回指数列表
+  if (dom.viewIndexTab) {
+    dom.viewIndexTab.classList.remove('hidden');
+  }
+  indexState.activeIndex = null;
+  hideTooltip();
+}
+
+function switchIndexChartPeriod(period) {
+  indexState.period = period;
+  if (dom.indexChartPeriodControl) {
+    dom.indexChartPeriodControl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-period') === period);
+    });
+  }
+  renderActiveIndexChart();
+}
+
+function toggleIndexAutoLines() {
+  indexState.showAutoLines = !indexState.showAutoLines;
+  if (dom.btnIndexAutoLines) {
+    dom.btnIndexAutoLines.classList.toggle('active', indexState.showAutoLines);
+  }
+  renderActiveIndexChart();
+}
+
+function setIndexDrawingMode(mode) {
+  indexState.drawingMode = indexState.drawingMode === mode ? 'none' : mode;
+  if (dom.btnIndexDrawHorizontal) {
+    dom.btnIndexDrawHorizontal.classList.toggle('active', indexState.drawingMode === 'horizontal');
+  }
+}
+
+function clearIndexChartDrawings() {
+  indexState.customLines = [];
+  indexState.showAutoLines = false;
+  indexState.drawingMode = 'none';
+  if (dom.btnIndexAutoLines) dom.btnIndexAutoLines.classList.remove('active');
+  if (dom.btnIndexDrawHorizontal) dom.btnIndexDrawHorizontal.classList.remove('active');
+  renderActiveIndexChart();
+}
+
+/**
+ * 需求6: 渲染指数专属走势图谱 (分时、5天、10天、20天、60天、全部K线，副图只有成交金额，配备自动画线)
+ */
+function renderActiveIndexChart() {
+  const indexData = indexState.activeIndex;
+  if (!indexData || !dom.indexChartSvgContainer) return;
+
+  const width = dom.indexChartSvgContainer.clientWidth || 920;
+  const height = 480;
+  const margin = { top: 30, right: 90, bottom: 35, left: 60 };
+  const mainHeight = 310;
+  const subHeight = 90;
+  const subTop = mainHeight + 45;
+
+  if (indexState.period === 'timeline') {
+    // 渲染分时图
+    const timeline = indexData.timeline_data || {};
+    const items = timeline.items || [];
+    const preClose = timeline.pre_close || indexData.prev_close;
+
+    if (items.length === 0) {
+      dom.indexChartSvgContainer.innerHTML = '<div style="padding: 3rem; text-align: center; color: var(--text-muted);">暂无官方分时数据源</div>';
+      return;
+    }
+
+    let minPrice = preClose;
+    let maxPrice = preClose;
+    let maxAmount = 0.1;
+    items.forEach(it => {
+      if (it.price < minPrice) minPrice = it.price;
+      if (it.price > maxPrice) maxPrice = it.price;
+      if (it.amount_yi > maxAmount) maxAmount = it.amount_yi;
+    });
+
+    const diff = Math.max(Math.abs(maxPrice - preClose), Math.abs(minPrice - preClose));
+    minPrice = Math.floor((preClose - diff * 1.1) * 10) / 10;
+    maxPrice = Math.ceil((preClose + diff * 1.1) * 10) / 10;
+    if (minPrice === maxPrice) { minPrice *= 0.99; maxPrice *= 1.01; }
+
+    const plotWidth = width - margin.left - margin.right;
+    const n = items.length;
+    const getX = idx => margin.left + (idx / Math.max(1, n - 1)) * plotWidth;
+    const getY = p => margin.top + (1 - (p - minPrice) / (maxPrice - minPrice)) * (mainHeight - margin.top);
+    const getSubY = a => subTop + (1 - (a / maxAmount)) * subHeight;
+
+    let pathD = '';
+    let areaD = `M ${margin.left} ${mainHeight}`;
+    items.forEach((it, idx) => {
+      const x = getX(idx);
+      const y = getY(it.price);
+      if (idx === 0) {
+        pathD += `M ${x} ${y}`;
+        areaD += ` L ${x} ${y}`;
+      } else {
+        pathD += ` L ${x} ${y}`;
+        areaD += ` L ${x} ${y}`;
+      }
+    });
+    areaD += ` L ${getX(n - 1)} ${mainHeight} Z`;
+
+    const subBarsSvg = items.map((it, idx) => {
+      const x = getX(idx) - 2;
+      const y = getSubY(it.amount_yi);
+      const barH = Math.max(1, subTop + subHeight - y);
+      const isUp = it.price >= preClose;
+      const color = isUp ? 'var(--color-up)' : 'var(--color-down)';
+      return `<rect x="${x}" y="${y}" width="4" height="${barH}" fill="${color}" opacity="0.8"/>`;
+    }).join('');
+
+    const preCloseY = getY(preClose);
+
+    dom.indexChartSvgContainer.innerHTML = `
+      <svg width="${width}" height="${height}" style="user-select: none; display: block; overflow: visible;">
+        <defs>
+          <linearGradient id="indexTimelineGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0"/>
+          </linearGradient>
+        </defs>
+
+        <!-- 背景网格与轴线 -->
+        <rect x="${margin.left}" y="${margin.top}" width="${plotWidth}" height="${mainHeight - margin.top}" fill="none" stroke="rgba(51, 65, 85, 0.4)"/>
+        <line x1="${margin.left}" y1="${preCloseY}" x2="${margin.left + plotWidth}" y2="${preCloseY}" stroke="rgba(148, 163, 184, 0.6)" stroke-dasharray="4,4"/>
+
+        <!-- 副图背景 (仅成交金额) -->
+        <rect x="${margin.left}" y="${subTop}" width="${plotWidth}" height="${subHeight}" fill="none" stroke="rgba(51, 65, 85, 0.4)"/>
+        <text x="${margin.left + 8}" y="${subTop + 16}" fill="#f59e0b" font-size="11" font-weight="700">💰 副图: 成交金额 (亿元)</text>
+
+        <!-- 走势面积与折线 -->
+        <path d="${areaD}" fill="url(#indexTimelineGrad)"/>
+        <path d="${pathD}" fill="none" stroke="#38bdf8" stroke-width="2"/>
+
+        <!-- 副图柱子 -->
+        ${subBarsSvg}
+
+        <!-- 坐标刻度 -->
+        <text x="${margin.left - 8}" y="${margin.top + 10}" fill="var(--color-up)" font-size="11" text-anchor="end" font-family="monospace">${maxPrice.toFixed(2)}</text>
+        <text x="${margin.left - 8}" y="${preCloseY + 4}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">${preClose.toFixed(2)}</text>
+        <text x="${margin.left - 8}" y="${mainHeight}" fill="var(--color-down)" font-size="11" text-anchor="end" font-family="monospace">${minPrice.toFixed(2)}</text>
+
+        <text x="${margin.left - 8}" y="${subTop + 14}" fill="#f59e0b" font-size="10" text-anchor="end" font-family="monospace">${maxAmount.toFixed(1)}亿</text>
+        <text x="${margin.left - 8}" y="${subTop + subHeight}" fill="#94a3b8" font-size="10" text-anchor="end" font-family="monospace">0</text>
+      </svg>
+    `;
+  } else {
+    // 渲染 K 线图 (5天、10天、20天、60天、全部K线)
+    let klines = (indexData.daily_bars && Array.isArray(indexData.daily_bars) && indexData.daily_bars.length > 0)
+      ? indexData.daily_bars
+      : null;
+
+    if (!klines || klines.length === 0) {
+      dom.indexChartSvgContainer.innerHTML = '<div style="padding: 3rem; text-align: center; color: var(--text-muted);">⚠️ 暂无官方真实大盘日K数据源</div>';
+      return;
+    }
+
+    // 切片
+    let winCount = klines.length;
+    if (indexState.period === 'kline5') winCount = Math.min(klines.length, 5);
+    else if (indexState.period === 'kline10') winCount = Math.min(klines.length, 10);
+    else if (indexState.period === 'kline20') winCount = Math.min(klines.length, 20);
+    else if (indexState.period === 'kline60') winCount = Math.min(klines.length, 60);
+    else if (indexState.period === 'all') winCount = klines.length;
+
+    if (klines.length > winCount) {
+      klines = klines.slice(klines.length - winCount);
+    }
+
+    let minPrice = Infinity;
+    let maxPrice = -Infinity;
+    let maxAmount = 0.1;
+    klines.forEach(k => {
+      if (k.low < minPrice) minPrice = k.low;
+      if (k.high > maxPrice) maxPrice = k.high;
+      if (k.amount_yi > maxAmount) maxAmount = k.amount_yi;
+    });
+
+    const pPad = (maxPrice - minPrice) * 0.08 || 5;
+    minPrice = Math.floor(minPrice - pPad);
+    maxPrice = Math.ceil(maxPrice + pPad);
+
+    const plotWidth = width - margin.left - margin.right;
+    const n = klines.length;
+    const candleWidth = Math.max(3, Math.min(38, Math.floor(plotWidth / n) - 2));
+    const getX = idx => margin.left + (idx + 0.5) * (plotWidth / n);
+    const getY = p => margin.top + (1 - (p - minPrice) / (maxPrice - minPrice)) * (mainHeight - margin.top);
+    const getSubY = a => subTop + (1 - (a / maxAmount)) * subHeight;
+
+    // 蜡烛与仅成交金额柱
+    let candlesSvg = '';
+    let subBarsSvg = '';
+
+    klines.forEach((k, idx) => {
+      const x = getX(idx);
+      const isUp = k.close >= k.open;
+      const color = isUp ? 'var(--color-up)' : 'var(--color-down)';
+
+      // 影线
+      const yHigh = getY(k.high);
+      const yLow = getY(k.low);
+      candlesSvg += `<line x1="${x}" y1="${yHigh}" x2="${x}" y2="${yLow}" stroke="${color}" stroke-width="1.2"/>`;
+
+      // 实体
+      const yOpen = getY(k.open);
+      const yClose = getY(k.close);
+      const yTop = Math.min(yOpen, yClose);
+      const hRect = Math.max(1.5, Math.abs(yOpen - yClose));
+      candlesSvg += `<rect x="${x - candleWidth / 2}" y="${yTop}" width="${candleWidth}" height="${hRect}" fill="${color}" opacity="0.9"/>`;
+
+      // 副图柱 (仅成交金额)
+      const ySub = getSubY(k.amount_yi);
+      const hSub = Math.max(1, subTop + subHeight - ySub);
+      subBarsSvg += `<rect x="${x - candleWidth / 2}" y="${ySub}" width="${candleWidth}" height="${hSub}" fill="${color}" opacity="0.8"/>`;
+    });
+
+    // 需求6: 自动画线 (只画1根全局交汇成交金额绝对最大值中枢线)
+    let autoLinesSvg = '';
+    if (indexState.showAutoLines) {
+      const autoLevels = calculateAutoSupportResistanceLevels(klines, indexData.price);
+      if (autoLevels && autoLevels.length > 0) {
+        const peakLine = autoLevels[0];
+        const lineY = getY(peakLine.price);
+        autoLinesSvg = `
+          <g class="auto-line-single-peak">
+            <line x1="${margin.left}" y1="${lineY}" x2="${margin.left + plotWidth}" y2="${lineY}" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="6,4"/>
+            <rect x="${margin.left + plotWidth - 235}" y="${lineY - 12}" width="235" height="24" rx="4" fill="#0f172a" stroke="#f59e0b" stroke-width="1.2" opacity="0.95"/>
+            <text x="${margin.left + plotWidth - 225}" y="${lineY + 4}" fill="#f59e0b" font-size="11" font-weight="700" font-family="monospace">
+              ${peakLine.type}: ${peakLine.price} (最大交汇: ${peakLine.crossedAmountYi}亿)
+            </text>
+          </g>
+        `;
+      }
+    }
+
+    // 自定义水平线
+    const customLinesSvg = indexState.customLines.map(p => {
+      const ly = getY(p);
+      return `
+        <line x1="${margin.left}" y1="${ly}" x2="${margin.left + plotWidth}" y2="${ly}" stroke="#38bdf8" stroke-width="1.8" stroke-dasharray="4,4"/>
+        <text x="${margin.left + plotWidth + 6}" y="${ly + 4}" fill="#38bdf8" font-size="11" font-family="monospace">水平位: ${p}</text>
+      `;
+    }).join('');
+
+    dom.indexChartSvgContainer.innerHTML = `
+      <svg id="indexKLineSvg" width="${width}" height="${height}" style="user-select: none; display: block; overflow: visible; cursor: ${indexState.drawingMode === 'horizontal' ? 'crosshair' : 'default'};">
+        <!-- 主图网格 -->
+        <rect x="${margin.left}" y="${margin.top}" width="${plotWidth}" height="${mainHeight - margin.top}" fill="none" stroke="rgba(51, 65, 85, 0.4)"/>
+
+        <!-- 副图网格 (仅成交金额) -->
+        <rect x="${margin.left}" y="${subTop}" width="${plotWidth}" height="${subHeight}" fill="none" stroke="rgba(51, 65, 85, 0.4)"/>
+        <text x="${margin.left + 8}" y="${subTop + 16}" fill="#f59e0b" font-size="11" font-weight="700">💰 副图: 成交金额 (亿元)</text>
+
+        <!-- 蜡烛与副图 -->
+        ${candlesSvg}
+        ${subBarsSvg}
+
+        <!-- 自动画线与手动线 -->
+        ${autoLinesSvg}
+        ${customLinesSvg}
+
+        <!-- 坐标刻度 -->
+        <text x="${margin.left - 8}" y="${margin.top + 10}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">${maxPrice.toFixed(2)}</text>
+        <text x="${margin.left - 8}" y="${getY((maxPrice + minPrice) / 2) + 4}" fill="#64748b" font-size="11" text-anchor="end" font-family="monospace">${((maxPrice + minPrice) / 2).toFixed(2)}</text>
+        <text x="${margin.left - 8}" y="${mainHeight}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">${minPrice.toFixed(2)}</text>
+
+        <text x="${margin.left - 8}" y="${subTop + 14}" fill="#f59e0b" font-size="10" text-anchor="end" font-family="monospace">${maxAmount.toFixed(1)}亿</text>
+        <text x="${margin.left - 8}" y="${subTop + subHeight}" fill="#94a3b8" font-size="10" text-anchor="end" font-family="monospace">0</text>
+      </svg>
+    `;
+
+    // 绑定手动画线交互
+    const svgElem = document.getElementById('indexKLineSvg');
+    if (svgElem) {
+      svgElem.addEventListener('click', (e) => {
+        if (indexState.drawingMode !== 'horizontal') return;
+        const rect = svgElem.getBoundingClientRect();
+        const clickY = e.clientY - rect.top;
+        if (clickY >= margin.top && clickY <= mainHeight) {
+          const ratio = 1 - (clickY - margin.top) / (mainHeight - margin.top);
+          const clickPrice = roundTo(minPrice + ratio * (maxPrice - minPrice), 2);
+          indexState.customLines.push(clickPrice);
+          setIndexDrawingMode('none');
+          renderActiveIndexChart();
+        }
+      });
+    }
+  }
+}
+
 function closeStockDetailPage() {
   if (dom.viewStockDetailTab) {
     dom.viewStockDetailTab.classList.add('hidden');
@@ -4244,6 +4739,8 @@ function closeStockDetailPage() {
     if (dom.viewWorldTab) dom.viewWorldTab.classList.remove('hidden');
   } else if (appState.currentTab === 'shareholders') {
     if (dom.viewShareholdersTab) dom.viewShareholdersTab.classList.remove('hidden');
+  } else if (appState.currentTab === 'index') {
+    if (dom.viewIndexTab) dom.viewIndexTab.classList.remove('hidden');
   } else if (appState.currentTab === 'crawler') {
     if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.remove('hidden');
   } else {

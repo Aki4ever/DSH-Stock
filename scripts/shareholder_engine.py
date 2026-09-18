@@ -424,6 +424,44 @@ class Top10ShareholdersEngine:
         cls._CACHED_TIME = now
         return result
 
+    @classmethod
+    def get_shareholders_overview(cls, shareholders_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        需求1: 计算股东研究页面 6 大概览信息:
+        1. 股东总数
+        2. 机构股东总数
+        3. 个人股东总数
+        4. 股东总金额(亿)
+        5. 机构股东总金额(亿)
+        6. 个人股东总金额(亿)
+        """
+        total_count = len(shareholders_list)
+        institution_count = 0
+        individual_count = 0
+        total_amount = 0.0
+        institution_amount = 0.0
+        individual_amount = 0.0
+
+        for h in shareholders_list:
+            amt = float(h.get("total_holding_amount") or 0.0)
+            cat = h.get("category", "institution")
+            total_amount += amt
+            if cat == "individual":
+                individual_count += 1
+                individual_amount += amt
+            else:
+                institution_count += 1
+                institution_amount += amt
+
+        return {
+            "total_holders_count": total_count,
+            "institution_holders_count": institution_count,
+            "individual_holders_count": individual_count,
+            "total_holding_amount_yi": round(total_amount, 2),
+            "institution_holding_amount_yi": round(institution_amount, 2),
+            "individual_holding_amount_yi": round(individual_amount, 2)
+        }
+
 
 if __name__ == "__main__":
     icbc = Top10ShareholdersEngine.get_stock_top10_shareholders("sh601398", "工商银行", 57.79)
