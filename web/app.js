@@ -251,6 +251,7 @@ const dom = {
   klineStartDate: document.getElementById('klineStartDate'),
   klineEndDate: document.getElementById('klineEndDate'),
   chartSubPlotControl: document.getElementById('chartSubPlotControl'),
+  btnAutoDrawLevels: document.getElementById('btnAutoDrawLevels'),
   btnToggleHLine: document.getElementById('btnToggleHLine'),
   btnClearLines: document.getElementById('btnClearLines'),
   chartDataSourceBadge: document.getElementById('chartDataSourceBadge'),
@@ -2804,25 +2805,215 @@ function setChartZoomWindow(windowSize) {
 }
 
 /**
+ * 需求1/2/4: 智能识别压力位与支撑位，并严格求和交汇交易日成交额 (Low <= Price <= High)
+ */
+function calculateAutoSupportResistanceLevels(klines, currentPrice) {
+  if (!klines || klines.length < 5) return [];
+
+  const highs = klines.map(d => Number(d.high || d.price));
+  const lows = klines.map(d => Number(d.low || d.price));
+  const maxP = Math.max(...highs);
+  const minP = Math.min(...lows);
+  if (maxP <= minP) return [];
+
+  // 1. 局部拐点探测 (Pivot Highs & Lows)
+  const pivotHighs = [];
+  const pivotLows = [];
+  const span = Math.max(2, Math.min(5, Math.floor(klines.length / 15)));
+
+  for (let i = span; i < klines.length - span; i++) {
+    const curH = Number(klines[i].high || klines[i].price);
+    const curL = Number(klines[i].low || klines[i].price);
+    
+    let isHigh = true;
+    let isLow = true;
+    for (let j = i - span; j <= i + span; j++) {
+      if (j === i) continue;
+      if (Number(klines[j].high || klines[j].price) > curH) isHigh = false;
+      if (Number(klines[j].low || klines[j].price) < curL) isLow = false;
+    }
+    if (isHigh) pivotHighs.push(curH);
+    if (isLow) pivotLows.push(curL);
+  }
+
+  // 保证极值点纳入考虑
+  pivotHighs.push(maxP);
+  pivotLows.push(minP);
+
+  // 2. 聚类合并相近的价格位 (避免过于密集的线)
+  const threshold = (maxP - minP) * 0.035; // 3.5% 价格带聚类阈值
+  function clusterPrices(prices) {
+    if (prices.length === 0) return [];
+    prices.sort((a, b) => a - b);
+    const clusters = [];
+    let curGroup = [prices[0]];
+    for (let i = 1; i < prices.length; i++) {
+      if (prices[i] - curGroup[curGroup.length - 1] <= threshold) {
+        curGroup.push(prices[i]);
+      } else {
+        const avg = curGroup.reduce((a, b) => a + b, 0) / curGroup.length;
+        clusters.push(Number(avg.toFixed(2)));
+        curGroup = [prices[i]];
+      }
+    }
+    if (curGroup.length > 0) {
+      const avg = curGroup.reduce((a, b) => a + b, 0) / curGroup.length;
+      clusters.push(Number(avg.toFixed(2)));
+    }
+    return clusters;
+  }
+
+  const clusteredHighs = clusterPrices(pivotHighs);
+  const clusteredLows = clusterPrices(pivotLows);
+
+  // 区分现价上方的压力位与现价下方的支撑位
+  const refP = Number(currentPrice) || Number(klines[klines.length - 1].close || klines[klines.length - 1].price);
+  let resistances = clusteredHighs.filter(p => p > refP * 1.005);
+  let supports = clusteredLows.filter(p => p < refP * 0.995);
+
+  // 如果现价在最高点或最低点附近，进行补充
+  if (resistances.length === 0) {
+    resistances = [Number(maxP.toFixed(2))];
+  }
+  if (supports.length === 0) {
+    supports = [Number(minP.toFixed(2))];
+  }
+
+  // 压力位取最靠近现价的前2~3个以及最高阻力位
+  resistances.sort((a, b) => a - b);
+  if (resistances.length > 3) {
+    resistances = [resistances[0], resistances[Math.floor(resistances.length / 2)], resistances[resistances.length - 1]];
+  }
+  // 支撑位取最靠近现价的前2~3个以及最低防线
+  supports.sort((a, b) => b - a);
+  if (supports.length > 3) {
+    supports = [supports[0], supports[Math.floor(supports.length / 2)], supports[supports.length - 1]];
+  }
+
+  // 3. 严格计算交汇交易日产生的所有交易金额之和 (Low <= Price <= High)
+  const resultLevels = [];
+
+  // 计算每根辅助线的交汇成交额
+  function computeLevelCrossStats(price, typeName) {
+    let crossedAmountYi = 0;
+    let crossedDays = 0;
+
+    klines.forEach(item => {
+      const h = Number(item.high !== undefined ? item.high : item.price);
+      const l = Number(item.low !== undefined ? item.low : item.price);
+      // 需求2: 严密交汇判定公式: l <= price && price <= h
+      if (l <= price && price <= h) {
+        crossedDays++;
+        // 累加成交额 (单位: 亿元)
+        let amt = 0;
+        if (item.amount_yi !== undefined) {
+          amt = Number(item.amount_yi);
+        } else if (item.amount !== undefined) {
+          amt = Number(item.amount) / 100000000.0;
+        } else if (item.volume !== undefined) {
+          // 均价 * 股数
+          const c = Number(item.close || item.price);
+          amt = (Number(item.volume) * 100 * c) / 100000000.0;
+        }
+        crossedAmountYi += amt;
+      }
+    });
+
+    return {
+      id: 'auto_' + typeName + '_' + Math.round(price * 100),
+      price: price,
+      type: typeName,
+      crossedDays: crossedDays,
+      crossedAmountYi: Number(crossedAmountYi.toFixed(2))
+    };
+  }
+
+  resistances.forEach(p => {
+    resultLevels.push(computeLevelCrossStats(p, '压力位'));
+  });
+
+  supports.forEach(p => {
+    resultLevels.push(computeLevelCrossStats(p, '支撑位'));
+  });
+
+  return resultLevels;
+}
+
+/**
+ * 需求1: 触发自动画线
+ */
+function triggerAutoDrawLevels() {
+  if (!appState.activeDetailStock) return;
+  const stock = appState.activeDetailStock;
+
+  // 获取当前正在展示的 K 线序列
+  let klines = [];
+  if (appState.chartPeriod === 'timeline') {
+    // 分时图转化为类K线点位以供画线
+    const tlData = stock.timeline_data || { pre_close: stock.prev_close || stock.price, items: [] };
+    const items = (tlData.items && tlData.items.length > 0) ? tlData.items : generateClientFallbackTimeline(stock.price, stock.prev_close);
+    klines = items.map(it => ({
+      date: it.time,
+      open: it.price,
+      close: it.price,
+      high: it.price,
+      low: it.price,
+      price: it.price,
+      amount_yi: it.amount_yi || 0
+    }));
+  } else {
+    klines = stock.daily_bars && stock.daily_bars.length > 0 ? stock.daily_bars : generateClientFallbackDaily(stock.price);
+    // 按时间窗口切片
+    let winCount = klines.length;
+    if (appState.chartPeriod === 'kline20') {
+      winCount = Math.min(klines.length, 20);
+    } else if (appState.chartPeriod === 'kline60') {
+      winCount = Math.min(klines.length, 60);
+    } else if (appState.chartPeriod === 'all' || appState.chartZoomWindow === 'max') {
+      winCount = klines.length;
+    } else if (appState.chartCustomZoomCount > 0) {
+      winCount = Math.min(klines.length, Math.max(15, appState.chartCustomZoomCount));
+    } else {
+      winCount = parseInt(appState.chartZoomWindow, 10) || 60;
+    }
+    if (klines.length > winCount) {
+      klines = klines.slice(klines.length - winCount);
+    }
+  }
+
+  const levels = calculateAutoSupportResistanceLevels(klines, stock.price);
+  appState.drawnHorizontalLines = levels;
+  
+  if (dom.btnAutoDrawLevels) {
+    dom.btnAutoDrawLevels.classList.add('active');
+  }
+
+  renderActiveStockChart();
+}
+
+/**
  * 需求1: 开启/关闭画水平线 (压力/支撑位) 模式
  */
 function toggleDrawHLineMode() {
   appState.drawHLineMode = !appState.drawHLineMode;
   if (dom.btnToggleHLine) {
     dom.btnToggleHLine.classList.toggle('active', appState.drawHLineMode);
-    dom.btnToggleHLine.innerHTML = appState.drawHLineMode ? '✏️ 请在图表上点击放线...' : '📏 画水平线(压力/支撑)';
+    dom.btnToggleHLine.innerHTML = appState.drawHLineMode ? '✏️ 点击图表放置水平线...' : '📏 画水平线';
   }
 }
 
 /**
- * 需求1: 清除所有已绘制的水平辅助线
+ * 需求1/3: 清除所有已绘制的自动及手动水平辅助线
  */
 function clearAllChartDrawLines() {
   appState.drawnHorizontalLines = [];
   appState.drawHLineMode = false;
   if (dom.btnToggleHLine) {
     dom.btnToggleHLine.classList.remove('active');
-    dom.btnToggleHLine.innerHTML = '📏 画水平线(压力/支撑)';
+    dom.btnToggleHLine.innerHTML = '📏 画水平线';
+  }
+  if (dom.btnAutoDrawLevels) {
+    dom.btnAutoDrawLevels.classList.remove('active');
   }
   renderActiveStockChart();
 }
@@ -3382,11 +3573,34 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
         priceVal = pTop - ((mouseY - m.top) / mh) * (pTop - pBottom);
       }
 
+      // 需求2: 针对手动放置的辅助线，同样精准统计交汇交易日成交总额 (Low <= priceVal <= High)
+      let crossedAmountYi = 0;
+      let crossedDays = 0;
+      dataList.forEach(item => {
+        const h = Number(item.high !== undefined ? item.high : item.price);
+        const l = Number(item.low !== undefined ? item.low : item.price);
+        if (l <= priceVal && priceVal <= h) {
+          crossedDays++;
+          let amt = 0;
+          if (item.amount_yi !== undefined) {
+            amt = Number(item.amount_yi);
+          } else if (item.amount !== undefined) {
+            amt = Number(item.amount) / 100000000.0;
+          } else if (item.volume !== undefined) {
+            const c = Number(item.close || item.price);
+            amt = (Number(item.volume) * 100 * c) / 100000000.0;
+          }
+          crossedAmountYi += amt;
+        }
+      });
+
       appState.drawnHorizontalLines.push({
         id: 'line_' + Date.now(),
         y: mouseY,
         price: Number(priceVal.toFixed(2)),
-        type: priceVal >= preClose ? '压力位' : '支撑位'
+        type: priceVal >= preClose ? '压力位' : '支撑位',
+        crossedDays: crossedDays,
+        crossedAmountYi: Number(crossedAmountYi.toFixed(2))
       });
 
       // 画完保持模式或更新
@@ -3592,14 +3806,25 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
       <text x="${m.left + innerW * 0.5}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">11:30 / 13:00</text>
       <text x="${m.left + innerW}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="end">15:00</text>
 
-      <!-- 需求1: 渲染用户绘制的水平压力/支撑辅助线 -->
-      ${appState.drawnHorizontalLines.map(line => `
-        <line x1="${m.left}" y1="${line.y}" x2="${m.left + innerW}" y2="${line.y}" stroke="${line.price >= preClose ? '#f43f5e' : '#10b981'}" stroke-width="1.5" stroke-dasharray="5,3"/>
-        <rect x="${m.left + innerW - 110}" y="${line.y - 9}" width="110" height="18" fill="rgba(15, 23, 42, 0.9)" rx="3" stroke="${line.price >= preClose ? '#f43f5e' : '#10b981'}"/>
-        <text x="${m.left + innerW - 5}" y="${line.y + 4}" fill="${line.price >= preClose ? '#fca5a5' : '#6ee7b7'}" font-size="10" text-anchor="end" font-family="monospace">
-          ${line.type}: ¥${line.price.toFixed(2)}
-        </text>
-      `).join('')}
+      <!-- 需求1/2/4: 渲染用户绘制或自动测算的水平压力/支撑辅助线及交汇成交额 -->
+      ${appState.drawnHorizontalLines.map(line => {
+        const yPos = line.y !== undefined ? line.y : (m.top + ((pTop - line.price) / (pTop - pBottom)) * mh);
+        const isUp = line.price >= preClose;
+        const color = isUp ? '#f43f5e' : '#10b981';
+        const txtColor = isUp ? '#fca5a5' : '#86efac';
+        // 标签内容: 显示交汇成交额
+        const amtText = line.crossedAmountYi !== undefined 
+          ? `${line.type}: ¥${line.price.toFixed(2)} (交汇:${line.crossedAmountYi}亿)`
+          : `${line.type}: ¥${line.price.toFixed(2)}`;
+        const tagW = line.crossedAmountYi !== undefined ? 180 : 110;
+        return `
+          <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="1.5" stroke-dasharray="5,3"/>
+          <rect x="${m.left + innerW - tagW}" y="${yPos - 9}" width="${tagW}" height="18" fill="rgba(15, 23, 42, 0.92)" rx="3" stroke="${color}" stroke-width="1"/>
+          <text x="${m.left + innerW - 6}" y="${yPos + 4}" fill="${txtColor}" font-size="10" text-anchor="end" font-family="monospace" font-weight="600">
+            ${amtText}
+          </text>
+        `;
+      }).join('')}
 
       <!-- 副图量额区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
@@ -3719,14 +3944,26 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
       <text x="${m.left + innerW * 0.5}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[Math.floor(n / 2)].date}</text>
       <text x="${m.left + innerW}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="end">${klines[n - 1].date}</text>
 
-      <!-- 需求1: 渲染用户绘制的水平压力/支撑辅助线 -->
-      ${appState.drawnHorizontalLines.map(line => `
-        <line x1="${m.left}" y1="${line.y}" x2="${m.left + innerW}" y2="${line.y}" stroke="${line.price >= (klines[klines.length-1].close) ? '#f43f5e' : '#10b981'}" stroke-width="1.5" stroke-dasharray="5,3"/>
-        <rect x="${m.left + innerW - 110}" y="${line.y - 9}" width="110" height="18" fill="rgba(15, 23, 42, 0.9)" rx="3" stroke="${line.price >= (klines[klines.length-1].close) ? '#f43f5e' : '#10b981'}"/>
-        <text x="${m.left + innerW - 5}" y="${line.y + 4}" fill="${line.price >= (klines[klines.length-1].close) ? '#fca5a5' : '#6ee7b7'}" font-size="10" text-anchor="end" font-family="monospace">
-          ${line.type}: ¥${line.price.toFixed(2)}
-        </text>
-      `).join('')}
+      <!-- 需求1/2/4: 渲染用户绘制或自动测算的水平压力/支撑辅助线及交汇成交额 -->
+      ${appState.drawnHorizontalLines.map(line => {
+        const yPos = priceToY(line.price);
+        const lastClose = Number(klines[klines.length - 1].close || klines[klines.length - 1].price);
+        const isUp = line.price >= lastClose;
+        const color = isUp ? '#f43f5e' : '#10b981';
+        const txtColor = isUp ? '#fca5a5' : '#86efac';
+        // 标签内容: 显示交汇成交额
+        const amtText = line.crossedAmountYi !== undefined 
+          ? `${line.type}: ¥${line.price.toFixed(2)} (交汇:${line.crossedAmountYi}亿)`
+          : `${line.type}: ¥${line.price.toFixed(2)}`;
+        const tagW = line.crossedAmountYi !== undefined ? 180 : 110;
+        return `
+          <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="1.5" stroke-dasharray="5,3"/>
+          <rect x="${m.left + innerW - tagW}" y="${yPos - 9}" width="${tagW}" height="18" fill="rgba(15, 23, 42, 0.92)" rx="3" stroke="${color}" stroke-width="1"/>
+          <text x="${m.left + innerW - 6}" y="${yPos + 4}" fill="${txtColor}" font-size="10" text-anchor="end" font-family="monospace" font-weight="600">
+            ${amtText}
+          </text>
+        `;
+      }).join('')}
 
       <!-- 副图区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>

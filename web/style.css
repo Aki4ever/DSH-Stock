@@ -1830,6 +1830,42 @@ body {
   box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
 }
 
+.btn-draw-auto {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(99, 102, 241, 0.2));
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.btn-draw-auto:hover {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(99, 102, 241, 0.35));
+  color: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+.btn-draw-auto.active {
+  background: linear-gradient(135deg, #0284c7, #4f46e5);
+  color: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.6);
+}
+
+/* 压力与支撑水平辅助线右侧成交额标注气泡样式 */
+.draw-level-tag {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.draw-level-tag.resistance {
+  fill: #fca5a5;
+}
+
+.draw-level-tag.support {
+  fill: #86efac;
+}
+
 /* 需求3: 外部宏观对 A 股总评分走势图卡片 */
 .world-timeline-chart-card {
   background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.95));

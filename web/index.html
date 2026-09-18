@@ -1129,13 +1129,16 @@
               <button type="button" class="seg-btn" data-subplot="amt" onclick="switchChartSubplot('amt')">💰 成交额(亿元)</button>
             </div>
 
-            <!-- 画图工具箱 (水平压力/支撑线与一键清除) -->
+            <!-- 画图工具箱 (智能自动画线 / 手动画线 / 清除) -->
             <div class="chart-draw-toolbox">
-              <button type="button" id="btnToggleHLine" class="btn-draw-tool" onclick="toggleDrawHLineMode()" title="开启画水平线模式后，在图表任意价格位置点击即可放置压力/支撑线">
-                📏 画水平线(压力/支撑)
+              <button type="button" id="btnAutoDrawLevels" class="btn-draw-tool btn-draw-auto" onclick="triggerAutoDrawLevels()" title="基于波段拐点与筹码密集理论智能绘制关键压力位/支撑位，并统计交汇交易日成交总额">
+                🤖 自动画线
               </button>
-              <button type="button" id="btnClearLines" class="btn-draw-tool" onclick="clearAllChartDrawLines()" title="清除图表上所有辅助线">
-                🧹 清除辅助线
+              <button type="button" id="btnToggleHLine" class="btn-draw-tool" onclick="toggleDrawHLineMode()" title="开启画水平线模式后，在图表任意价格位置点击即可放置手动辅助线">
+                📏 画水平线
+              </button>
+              <button type="button" id="btnClearLines" class="btn-draw-tool" onclick="clearAllChartDrawLines()" title="清除当前图表上所有自动绘制与手动的压力/支撑辅助线及交汇金额标签">
+                🧹 清除
               </button>
             </div>
           </div>
