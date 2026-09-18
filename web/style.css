@@ -1201,6 +1201,93 @@ body {
   font-size: 0.78rem;
 }
 
+/* 需求2: 飞书表格级列拖拽与可拖动冻结线 */
+.stock-table th {
+  user-select: none;
+  position: relative;
+  transition: background-color 0.2s;
+}
+
+.stock-table th.drag-over {
+  background-color: rgba(56, 189, 248, 0.25) !important;
+  border-left: 2px solid #38bdf8 !important;
+}
+
+.col-drag-handle {
+  display: inline-block;
+  cursor: grab;
+  color: #64748b;
+  font-size: 0.85rem;
+  margin-right: 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.stock-table th:hover .col-drag-handle {
+  opacity: 1;
+  color: #38bdf8;
+}
+
+.col-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* 飞书多维表格可拖动冻结分割线 */
+.table-freeze-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #38bdf8, rgba(56, 189, 248, 0.3));
+  box-shadow: 2px 0 8px rgba(56, 189, 248, 0.5);
+  z-index: 25;
+  cursor: col-resize;
+  pointer-events: auto;
+  transition: left 0.05s ease-out;
+}
+
+.freeze-line-handle {
+  position: absolute;
+  top: 6px;
+  left: -28px;
+  background: #0284c7;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 冻结列样式 (position: sticky) */
+.col-frozen {
+  position: sticky !important;
+  background-color: #0d162d !important;
+  z-index: 20 !important;
+}
+
+.stock-table tbody tr:hover .col-frozen {
+  background-color: #172554 !important;
+}
+
+/* 顶栏数据截取有效期常显徽章 */
+.data-validity-badge {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.15));
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.22rem 0.65rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+  letter-spacing: 0.02em;
+}
+
 /* 需求2: 股东穿透 ! 图标按钮样式 */
 .btn-holder-info {
   display: inline-flex;
@@ -1228,41 +1315,65 @@ body {
   box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
 }
 
-/* 股东异动三兄弟徽章 */
+/* 股东异动三兄弟徽章 (支持手型点击穿透) */
 .badge-holder-new {
   display: inline-block;
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 0.1rem 0.4rem;
+  padding: 0.15rem 0.45rem;
   border-radius: 4px;
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.18);
   color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.4);
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.badge-holder-new:hover {
+  background: rgba(239, 68, 68, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
 }
 
 .badge-holder-change {
   display: inline-block;
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 0.1rem 0.4rem;
+  padding: 0.15rem 0.45rem;
   border-radius: 4px;
-  background: rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.18);
   color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  border: 1px solid rgba(245, 158, 11, 0.4);
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.badge-holder-change:hover {
+  background: rgba(245, 158, 11, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
 }
 
 .badge-holder-exit {
   display: inline-block;
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 0.1rem 0.4rem;
+  padding: 0.15rem 0.45rem;
   border-radius: 4px;
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.18);
   color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  border: 1px solid rgba(16, 185, 129, 0.4);
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.badge-holder-exit:hover {
+  background: rgba(16, 185, 129, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
 }
 
 .badge-holder-none {

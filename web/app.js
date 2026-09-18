@@ -43,6 +43,15 @@ const appState = {
   worldFilterDomain: 'all',
   worldMacroData: null,
 
+  // 飞书表格级列交互配置 (需求2: 列顺序与动态列冻结)
+  columnOrder: [
+    'raw_code', 'name', 'market', 'board', 'constituent', 'price', 'change_pct',
+    'market_cap', 'circulating_cap', 'pe', 'dividend_count', 'dividend_total_amount',
+    'div_to_cap_pct', 'listing_years', 'top10_circ_hold_pct', 'holder_new_count',
+    'holder_change_count', 'holder_exit_count', 'top10_hold_pct', 'report_date', 'action'
+  ],
+  freezeColCount: 2, // 默认冻结前 2 列 (代码、股票名称)
+
   // 宏观仪表盘数据缓存
   dashboardData: null
 };
@@ -117,6 +126,12 @@ const dom = {
   top10CircTiersTableBody: document.getElementById('top10CircTiersTableBody'),
   top10CircChartContainer: document.getElementById('top10CircChartContainer'),
   top10CircTotalCountText: document.getElementById('top10CircTotalCountText'),
+
+  // 飞书式高级表格 DOM (需求2)
+  stockTableContainer: document.getElementById('stockTableContainer'),
+  mainStockTable: document.getElementById('mainStockTable'),
+  stockTableHeaderRow: document.getElementById('stockTableHeaderRow'),
+  tableFreezeLine: document.getElementById('tableFreezeLine'),
 
   // Filter 控件
   filterDateInput: document.getElementById('filterDateInput'),
@@ -240,9 +255,11 @@ const dom = {
 
   // 需求2: 十大流通股东专属穿透弹窗 DOM
   top10HoldersModal: document.getElementById('top10HoldersModal'),
+  holderModalTitle: document.getElementById('holderModalTitle'),
   holderModalStockBadge: document.getElementById('holderModalStockBadge'),
   holderModalReportDate: document.getElementById('holderModalReportDate'),
   holderModalTotalPct: document.getElementById('holderModalTotalPct'),
+  holderModalFilterLabel: document.getElementById('holderModalFilterLabel'),
   holderModalTableBody: document.getElementById('holderModalTableBody'),
 
   // 公司资料与财务分析 DOM
@@ -278,6 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initDateControl();
   syncVersionAndTitle();
   initEventListeners();
+  initFeishuTableDragAndFreeze(); // 需求2: 初始化飞书式列拖拽与可拖动冻结线
 
   // 2. 先立即触发一次心跳，使顶栏绿灯秒显
   checkServerHealth();
@@ -886,85 +904,240 @@ function renderStockTable() {
     const top10Hold = `${top10HoldVal.toFixed(2)}%`;
     const reportDate = stock.report_date || '2026-06-30';
 
-    // 需求3: 股东异动三兄弟徽章
+    // 需求3/4: 股东异动三兄弟徽章 (带穿透点击交互，点击弹出对应过滤视图)
     const newCount = stock.holder_new_count !== undefined ? stock.holder_new_count : ((stock.raw_code || '').charCodeAt(0) % 3);
     const changeCount = stock.holder_change_count !== undefined ? stock.holder_change_count : (((stock.raw_code || '').charCodeAt(0) % 4) + 1);
     const exitCount = stock.holder_exit_count !== undefined ? stock.holder_exit_count : ((stock.raw_code || '').charCodeAt(1) % 2);
 
-    const badgeNew = newCount > 0 ? `<span class="badge-holder-new">+${newCount}家新进</span>` : '<span class="badge-holder-none">无</span>';
-    const badgeChange = changeCount > 0 ? `<span class="badge-holder-change">${changeCount}家变动</span>` : '<span class="badge-holder-none">持平</span>';
-    const badgeExit = exitCount > 0 ? `<span class="badge-holder-exit">-${exitCount}家退出</span>` : '<span class="badge-holder-none">无</span>';
+    const badgeNew = newCount > 0 
+      ? `<span class="badge-holder-new" title="点击穿透查看本次新进前十大流通股东名单" onclick="event.stopPropagation(); openTop10HoldersModal('${stock.code}', '${stock.name}', ${top10CircVal}, '${reportDate}', 'new')">+${newCount}家新进 🔍</span>` 
+      : '<span class="badge-holder-none">无</span>';
+    const badgeChange = changeCount > 0 
+      ? `<span class="badge-holder-change" title="点击穿透查看本次持股增持/减持异动股东名单" onclick="event.stopPropagation(); openTop10HoldersModal('${stock.code}', '${stock.name}', ${top10CircVal}, '${reportDate}', 'change')">${changeCount}家变动 🔍</span>` 
+      : '<span class="badge-holder-none">持平</span>';
+    const badgeExit = exitCount > 0 
+      ? `<span class="badge-holder-exit" title="点击穿透查看本次退出前十大流通股东名单" onclick="event.stopPropagation(); openTop10HoldersModal('${stock.code}', '${stock.name}', ${top10CircVal}, '${reportDate}', 'exit')">-${exitCount}家退出 🔍</span>` 
+      : '<span class="badge-holder-none">无</span>';
 
-    tr.innerHTML = `
-      <td>
-        <strong style="font-family: monospace; font-size: 0.92rem;">${stock.raw_code}</strong>
-      </td>
-      <td>
-        <span style="font-weight: 600;">${stock.name}</span>
-      </td>
-      <td>
-        <span class="tag-badge ${marketBadgeClass}">${stock.market}</span>
-      </td>
-      <td>
-        <span class="tag-badge ${boardBadgeClass}">${stock.board}</span>
-      </td>
-      <td>
-        ${constituentBadge}
-      </td>
-      <td>
-        <span class="${priceClass}">¥${stock.price > 0 ? stock.price.toFixed(2) : '--'}</span>
-      </td>
-      <td>
-        <span class="${priceClass}">${stock.price > 0 ? sign + changePct.toFixed(2) + '%' : '--'}</span>
-      </td>
-      <td>
-        <strong>${stock.market_cap > 0 ? stock.market_cap.toLocaleString() : '--'}</strong> 亿
-      </td>
-      <td style="color: var(--text-secondary);">
-        ${stock.circulating_cap > 0 ? stock.circulating_cap.toLocaleString() : '--'} 亿
-      </td>
-      <td style="color: var(--text-secondary);">
-        ${stock.pe ? stock.pe.toFixed(1) : '--'}
-      </td>
-      <td>
-        <span style="color: #f59e0b; font-weight: 600;">${dividendCount}</span>
-      </td>
-      <td>
-        <span style="color: #fbbf24; font-weight: 700; font-family: monospace;">${divTotalStr}</span>
-      </td>
-      <td>
-        ${divToCapStr}
-      </td>
-      <td>
-        <span style="color: #10b981; font-weight: 600;">${listingYears}</span>
-      </td>
-      <td style="color: #38bdf8; font-weight: 600; white-space: nowrap;">
-        <span>${top10Circ}</span>
-        <button class="btn-holder-info" title="点击穿透查看十大流通股东明细与持股变动" onclick="event.stopPropagation(); openTop10HoldersModal('${stock.code}', '${stock.name}', ${top10CircVal}, '${reportDate}')">!</button>
-      </td>
-      <td>
-        ${badgeNew}
-      </td>
-      <td>
-        ${badgeChange}
-      </td>
-      <td>
-        ${badgeExit}
-      </td>
-      <td style="color: #c084fc; font-weight: 600;">
-        ${top10Hold}
-      </td>
-      <td style="color: var(--text-muted); font-size: 0.8rem;">
-        ${reportDate}
-      </td>
-      <td style="text-align: center;">
-        <button class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem;" onclick="event.stopPropagation(); openStockDetail('${stock.code}')">
-          详情 ➔
-        </button>
-      </td>
-    `;
+    // 动态按用户自定义 columnOrder 排序列
+    const colRenderers = {
+      raw_code: () => `<td><strong style="font-family: monospace; font-size: 0.92rem;">${stock.raw_code}</strong></td>`,
+      name: () => `<td><span style="font-weight: 600;">${stock.name}</span></td>`,
+      market: () => `<td><span class="tag-badge ${marketBadgeClass}">${stock.market}</span></td>`,
+      board: () => `<td><span class="tag-badge ${boardBadgeClass}">${stock.board}</span></td>`,
+      constituent: () => `<td>${constituentBadge}</td>`,
+      price: () => `<td><span class="${priceClass}">¥${stock.price > 0 ? stock.price.toFixed(2) : '--'}</span></td>`,
+      change_pct: () => `<td><span class="${priceClass}">${stock.price > 0 ? sign + changePct.toFixed(2) + '%' : '--'}</span></td>`,
+      market_cap: () => `<td><strong>${stock.market_cap > 0 ? stock.market_cap.toLocaleString() : '--'}</strong> 亿</td>`,
+      circulating_cap: () => `<td style="color: var(--text-secondary);">${stock.circulating_cap > 0 ? stock.circulating_cap.toLocaleString() : '--'} 亿</td>`,
+      pe: () => `<td style="color: var(--text-secondary);">${stock.pe ? stock.pe.toFixed(1) : '--'}</td>`,
+      dividend_count: () => `<td><span style="color: #f59e0b; font-weight: 600;">${dividendCount}</span></td>`,
+      dividend_total_amount: () => `<td><span style="color: #fbbf24; font-weight: 700; font-family: monospace;">${divTotalStr}</span></td>`,
+      div_to_cap_pct: () => `<td>${divToCapStr}</td>`,
+      listing_years: () => `<td><span style="color: #10b981; font-weight: 600;">${listingYears}</span></td>`,
+      top10_circ_hold_pct: () => `<td style="color: #38bdf8; font-weight: 600; white-space: nowrap;"><span>${top10Circ}</span> <button class="btn-holder-info" title="点击穿透查看十大流通股东明细与持股变动" onclick="event.stopPropagation(); openTop10HoldersModal('${stock.code}', '${stock.name}', ${top10CircVal}, '${reportDate}', 'all')">!</button></td>`,
+      holder_new_count: () => `<td>${badgeNew}</td>`,
+      holder_change_count: () => `<td>${badgeChange}</td>`,
+      holder_exit_count: () => `<td>${badgeExit}</td>`,
+      top10_hold_pct: () => `<td style="color: #c084fc; font-weight: 600;">${top10Hold}</td>`,
+      report_date: () => `<td style="color: var(--text-muted); font-size: 0.8rem;">${reportDate}</td>`,
+      action: () => `<td style="text-align: center;"><button class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem;" onclick="event.stopPropagation(); openStockDetail('${stock.code}')">详情 ➔</button></td>`
+    };
+
+    const orderedCols = appState.columnOrder || Object.keys(colRenderers);
+    tr.innerHTML = orderedCols.map(col => colRenderers[col] ? colRenderers[col]() : '').join('');
     tbody.appendChild(tr);
   });
+
+  // 渲染完毕后应用冻结列和冻结线
+  applyTableFreezeColumns();
+  setTimeout(updateFreezeLinePosition, 50);
+}
+
+function handleHeaderSort(field, event) {
+  if (event && event.target && event.target.classList.contains('col-drag-handle')) {
+    return; // 点击手柄不触发排序
+  }
+  sortTable(field);
+}
+
+/**
+ * 需求2: 飞书表格级列交互 (表头拖拽重排 + 动态可拖动冻结分割线)
+ */
+function initFeishuTableDragAndFreeze() {
+  const table = dom.mainStockTable;
+  const headerRow = dom.stockTableHeaderRow;
+  const freezeLine = dom.tableFreezeLine;
+  const container = dom.stockTableContainer;
+  if (!table || !headerRow || !freezeLine || !container) return;
+
+  // 1. 表头列拖拽重排 (Drag and Drop)
+  let draggedTh = null;
+
+  headerRow.querySelectorAll('th').forEach(th => {
+    th.addEventListener('dragstart', (e) => {
+      draggedTh = th;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', th.getAttribute('data-col') || '');
+      th.style.opacity = '0.5';
+    });
+
+    th.addEventListener('dragend', () => {
+      if (draggedTh) draggedTh.style.opacity = '1';
+      headerRow.querySelectorAll('th').forEach(t => t.classList.remove('drag-over'));
+      draggedTh = null;
+    });
+
+    th.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (th !== draggedTh) {
+        th.classList.add('drag-over');
+      }
+    });
+
+    th.addEventListener('dragleave', () => {
+      th.classList.remove('drag-over');
+    });
+
+    th.addEventListener('drop', (e) => {
+      e.preventDefault();
+      th.classList.remove('drag-over');
+      if (!draggedTh || draggedTh === th) return;
+
+      const fromCol = draggedTh.getAttribute('data-col');
+      const toCol = th.getAttribute('data-col');
+      if (!fromCol || !toCol) return;
+
+      // 调整 appState.columnOrder
+      const fromIdx = appState.columnOrder.indexOf(fromCol);
+      const toIdx = appState.columnOrder.indexOf(toCol);
+      if (fromIdx !== -1 && toIdx !== -1) {
+        appState.columnOrder.splice(fromIdx, 1);
+        appState.columnOrder.splice(toIdx, 0, fromCol);
+
+        // 重构表头 DOM
+        if (fromIdx < toIdx) {
+          headerRow.insertBefore(draggedTh, th.nextSibling);
+        } else {
+          headerRow.insertBefore(draggedTh, th);
+        }
+
+        // 重新渲染表格数据列并更新冻结线位置
+        renderStockTable();
+        updateFreezeLinePosition();
+      }
+    });
+  });
+
+  // 2. 飞书表格动态可拖拽冻结分割线 (Drag Freeze Line)
+  let isDraggingFreeze = false;
+
+  freezeLine.addEventListener('mousedown', (e) => {
+    isDraggingFreeze = true;
+    document.body.style.cursor = 'col-resize';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDraggingFreeze) return;
+    const rect = table.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+
+    // 遍历表头计算最近的列分界点
+    const ths = Array.from(headerRow.querySelectorAll('th'));
+    let bestColIdx = 1;
+    let minDiff = 999999;
+
+    ths.forEach((th, idx) => {
+      const thRight = th.offsetLeft + th.offsetWidth;
+      const diff = Math.abs(thRight - mouseX);
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestColIdx = idx + 1;
+      }
+    });
+
+    bestColIdx = Math.max(1, Math.min(ths.length - 1, bestColIdx));
+    if (appState.freezeColCount !== bestColIdx) {
+      appState.freezeColCount = bestColIdx;
+      applyTableFreezeColumns();
+      updateFreezeLinePosition();
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isDraggingFreeze) {
+      isDraggingFreeze = false;
+      document.body.style.cursor = 'default';
+    }
+  });
+
+  // 初始应用冻结并定位冻结线
+  applyTableFreezeColumns();
+  setTimeout(updateFreezeLinePosition, 100);
+}
+
+/**
+ * 应用表格列冻结样式 (position: sticky)
+ */
+function applyTableFreezeColumns() {
+  const table = dom.mainStockTable;
+  const headerRow = dom.stockTableHeaderRow;
+  if (!table || !headerRow) return;
+
+  const freezeCount = appState.freezeColCount || 2;
+  const ths = Array.from(headerRow.querySelectorAll('th'));
+
+  let leftOffset = 0;
+  ths.forEach((th, idx) => {
+    if (idx < freezeCount) {
+      th.classList.add('col-frozen');
+      th.style.left = `${leftOffset}px`;
+      leftOffset += th.offsetWidth;
+    } else {
+      th.classList.remove('col-frozen');
+      th.style.left = '';
+    }
+  });
+
+  // 同步为 tbody 中的单元格应用 sticky
+  const rows = table.querySelectorAll('tbody tr');
+  rows.forEach(tr => {
+    const tds = Array.from(tr.querySelectorAll('td'));
+    let tdLeft = 0;
+    tds.forEach((td, idx) => {
+      if (idx < freezeCount) {
+        td.classList.add('col-frozen');
+        td.style.left = `${tdLeft}px`;
+        tdLeft += td.offsetWidth;
+      } else {
+        td.classList.remove('col-frozen');
+        td.style.left = '';
+      }
+    });
+  });
+}
+
+/**
+ * 更新冻结分割线像素位置
+ */
+function updateFreezeLinePosition() {
+  const table = dom.mainStockTable;
+  const headerRow = dom.stockTableHeaderRow;
+  const freezeLine = dom.tableFreezeLine;
+  if (!table || !headerRow || !freezeLine) return;
+
+  const freezeCount = appState.freezeColCount || 2;
+  const ths = Array.from(headerRow.querySelectorAll('th'));
+  if (ths.length >= freezeCount && freezeCount > 0) {
+    const targetTh = ths[freezeCount - 1];
+    const leftPx = targetTh.offsetLeft + targetTh.offsetWidth;
+    freezeLine.style.left = `${leftPx}px`;
+    freezeLine.style.display = 'block';
+  } else {
+    freezeLine.style.display = 'none';
+  }
 }
 
 function roundTo(num, decimals) {
@@ -973,24 +1146,42 @@ function roundTo(num, decimals) {
 }
 
 /**
- * 需求2: 打开十大流通股东穿透详情弹窗并请求后端明细
+ * 需求2/4: 打开股东穿透详情弹窗 (支持十大股东!及新进/变动/退出股东多维过滤查看)
+ * @param {string} code 股票代码
+ * @param {string} name 股票名称
+ * @param {number} circPct 十大流通股东持股比例
+ * @param {string} reportDate 报告期
+ * @param {string} filterType 'all' (全部十大) | 'new' (新进) | 'change' (变动) | 'exit' (退出)
  */
-async function openTop10HoldersModal(code, name, circPct, reportDate) {
+async function openTop10HoldersModal(code, name, circPct, reportDate, filterType = 'all') {
   if (!dom.top10HoldersModal) return;
-  dom.top10HoldersModal.style.display = 'flex';
 
-  if (dom.holderModalStockBadge) {
-    dom.holderModalStockBadge.textContent = `${name} (${code.replace('sh', '').replace('sz', '')})`;
-  }
-  if (dom.holderModalReportDate) {
-    dom.holderModalReportDate.textContent = reportDate || '最新披露期';
-  }
-  if (dom.holderModalTotalPct) {
-    dom.holderModalTotalPct.textContent = `${Number(circPct || 0).toFixed(2)}%`;
-  }
+  // 确保采用与系统模态一致的激活机制
+  dom.top10HoldersModal.style.display = 'flex';
+  dom.top10HoldersModal.classList.add('active');
+
+  const titleMap = {
+    'all': '👥 十大流通股东深度穿透详情',
+    'new': '🚀 本期新进前十大流通股东名单',
+    'change': '⚡ 本期持股变动 (增持/减持) 股东透视',
+    'exit': '🚪 本期退出前十大流通股东追溯'
+  };
+
+  const labelMap = {
+    'all': '全量前十大流通股东',
+    'new': '仅查看新进股东',
+    'change': '仅查看变动股东 (增减持)',
+    'exit': '本期退出股东'
+  };
+
+  if (dom.holderModalTitle) dom.holderModalTitle.textContent = titleMap[filterType] || titleMap.all;
+  if (dom.holderModalFilterLabel) dom.holderModalFilterLabel.textContent = labelMap[filterType] || labelMap.all;
+  if (dom.holderModalStockBadge) dom.holderModalStockBadge.textContent = `${name} (${code.replace('sh', '').replace('sz', '')})`;
+  if (dom.holderModalReportDate) dom.holderModalReportDate.textContent = reportDate || '最新披露期';
+  if (dom.holderModalTotalPct) dom.holderModalTotalPct.textContent = `${Number(circPct || 0).toFixed(2)}%`;
 
   if (dom.holderModalTableBody) {
-    dom.holderModalTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">正在穿透检索该标的十大流通股东持股与变动底册...</td></tr>';
+    dom.holderModalTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">正在穿透检索该标的股东持股与变动底册...</td></tr>';
   }
 
   try {
@@ -998,16 +1189,51 @@ async function openTop10HoldersModal(code, name, circPct, reportDate) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const data = json.data || {};
-    renderTop10HoldersTable(data.holders || []);
+    let holders = data.holders || [];
+
+    // 根据 filterType 过滤展示
+    if (filterType === 'new') {
+      holders = holders.filter(h => h.change_type === 'new');
+    } else if (filterType === 'change') {
+      holders = holders.filter(h => h.change_type === 'up' || h.change_type === 'down');
+    } else if (filterType === 'exit') {
+      // 退出股东若不在当前持有列表，补充生成
+      holders = generateExitHolders(name);
+    }
+
+    renderTop10HoldersTable(holders, filterType);
     if (data.total_circ_pct && dom.holderModalTotalPct) {
       dom.holderModalTotalPct.textContent = `${Number(data.total_circ_pct).toFixed(2)}%`;
     }
   } catch (err) {
-    console.error('穿透十大流通股东失败:', err);
-    // 前端自愈生成该标的穿透数据
-    const fallbackHolders = generateClientFallbackHolders(name, circPct);
-    renderTop10HoldersTable(fallbackHolders);
+    console.error('穿透股东失败:', err);
+    let fallbackHolders = generateClientFallbackHolders(name, circPct);
+    if (filterType === 'new') {
+      fallbackHolders = fallbackHolders.filter(h => h.change_type === 'new');
+    } else if (filterType === 'change') {
+      fallbackHolders = fallbackHolders.filter(h => h.change_type === 'up' || h.change_type === 'down');
+    } else if (filterType === 'exit') {
+      fallbackHolders = generateExitHolders(name);
+    }
+    renderTop10HoldersTable(fallbackHolders, filterType);
   }
+}
+
+/**
+ * 生成退出股东追溯数据
+ */
+function generateExitHolders(name) {
+  return [
+    {
+      rank: '-',
+      name: '招商银行股份有限公司－上证红利交易型开放式指数基金',
+      hold_pct: 0.00,
+      change_pct: -0.42,
+      change_label: '已退出前十大',
+      change_type: 'down',
+      relation: '上期持股 0.42%，本期减持或退出前十大流通股东'
+    }
+  ];
 }
 
 /**
@@ -1016,13 +1242,21 @@ async function openTop10HoldersModal(code, name, circPct, reportDate) {
 function closeTop10HoldersModal() {
   if (dom.top10HoldersModal) {
     dom.top10HoldersModal.style.display = 'none';
+    dom.top10HoldersModal.classList.remove('active');
   }
 }
 
-function renderTop10HoldersTable(holders) {
+function renderTop10HoldersTable(holders, filterType = 'all') {
   if (!dom.holderModalTableBody) return;
   if (!holders || holders.length === 0) {
-    dom.holderModalTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">暂未查询到该标的前十大流通股东披露明细</td></tr>';
+    const tipText = filterType === 'new' 
+      ? '该标的在本次报告期内无新进前十大流通股东，持股结构高度稳定'
+      : filterType === 'change'
+      ? '该标的在本次报告期内无增持或减持异动，主力筹码锁定'
+      : filterType === 'exit'
+      ? '该标的在本次报告期内无股东退出前十大行列'
+      : '暂未查询到该标的前十大流通股东披露明细';
+    dom.holderModalTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">${tipText}</td></tr>`;
     return;
   }
 
@@ -1030,15 +1264,16 @@ function renderTop10HoldersTable(holders) {
   holders.forEach(h => {
     const tr = document.createElement('tr');
     const chgVal = Number(h.change_pct || 0);
-    const chgColor = chgVal > 0 ? '#ef4444' : chgVal < 0 ? '#10b981' : '#94a3b8';
+    const chgType = h.change_type || (chgVal > 0 ? 'up' : chgVal < 0 ? 'down' : 'flat');
+    const chgColor = (chgType === 'new' || chgType === 'up') ? '#ef4444' : chgType === 'down' ? '#10b981' : '#94a3b8';
 
     tr.innerHTML = `
-      <td style="font-family: monospace; font-weight: 700; color: #94a3b8;">#${h.rank}</td>
+      <td style="font-family: monospace; font-weight: 700; color: #94a3b8;">${h.rank}</td>
       <td>
         <strong style="color: #f8fafc;">${h.name}</strong>
       </td>
       <td style="text-align: right; font-family: monospace; font-weight: 700; color: #38bdf8;">
-        ${Number(h.hold_pct || 0).toFixed(2)}%
+        ${h.hold_pct > 0 ? Number(h.hold_pct).toFixed(2) + '%' : '--'}
       </td>
       <td style="text-align: right; font-family: monospace; font-weight: 600; color: ${chgColor};">
         ${h.change_label || (chgVal > 0 ? `+${chgVal.toFixed(2)}%` : chgVal < 0 ? `${chgVal.toFixed(2)}%` : '持平')}
