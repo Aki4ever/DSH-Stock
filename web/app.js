@@ -47,7 +47,8 @@ const appState = {
   columnOrder: [
     'raw_code', 'name', 'market', 'board', 'constituent', 'price', 'change_pct',
     'market_cap', 'circulating_cap', 'pe', 'dividend_count', 'dividend_total_amount',
-    'div_to_cap_pct', 'listing_years', 'div_freq', 'ipo_date', 'top10_circ_hold_pct', 'holder_new_count',
+    'div_to_cap_pct', 'listing_years', 'div_freq', 'ipo_date', 'top10_circ_hold_pct',
+    'holder_individual_pct', 'holder_institution_pct', 'holder_new_count',
     'holder_change_count', 'holder_exit_count', 'peer_holders', 'peer_companies', 'top10_hold_pct', 'report_date', 'action'
   ],
   freezeColCount: 2, // 默认冻结前 2 列 (代码、股票名称)
@@ -1006,6 +1007,14 @@ function renderStockTable() {
       div_freq: () => `<td>${divFreqStr}</td>`,
       ipo_date: () => `<td style="color: #cbd5e1; font-size: 0.82rem; font-family: monospace; white-space: nowrap;">${ipoDateStr}</td>`,
       top10_circ_hold_pct: () => `<td style="color: #38bdf8; font-weight: 600; white-space: nowrap;"><span>${top10Circ}</span> <button class="btn-holder-info" title="点击穿透查看十大流通股东明细与持股变动" onclick="event.stopPropagation(); openTop10HoldersModal('${stock.code}', '${stock.name}', ${top10CircVal}, '${reportDate}', 'all')">!</button></td>`,
+      holder_individual_pct: () => {
+        const indVal = Number(stock.holder_individual_pct !== undefined ? stock.holder_individual_pct : 0);
+        return `<td style="color: #fb923c; font-weight: 700; font-family: monospace;">${indVal.toFixed(2)}%</td>`;
+      },
+      holder_institution_pct: () => {
+        const instVal = Number(stock.holder_institution_pct !== undefined ? stock.holder_institution_pct : (top10CircVal - (stock.holder_individual_pct || 0)));
+        return `<td style="color: #38bdf8; font-weight: 700; font-family: monospace;">${instVal.toFixed(2)}%</td>`;
+      },
       holder_new_count: () => `<td>${btnNew}</td>`,
       holder_change_count: () => `<td>${btnChange}</td>`,
       holder_exit_count: () => `<td>${btnExit}</td>`,
@@ -1069,6 +1078,16 @@ function initFeishuTableDragAndFreeze() {
           const insertAt = savedOrder.indexOf('peer_companies');
           if (insertAt !== -1) savedOrder.splice(insertAt, 0, 'peer_holders');
           else savedOrder.push('peer_holders');
+        }
+        if (!savedOrder.includes('holder_individual_pct')) {
+          const insertAt = savedOrder.indexOf('top10_circ_hold_pct');
+          if (insertAt !== -1) savedOrder.splice(insertAt + 1, 0, 'holder_individual_pct');
+          else savedOrder.push('holder_individual_pct');
+        }
+        if (!savedOrder.includes('holder_institution_pct')) {
+          const insertAt = savedOrder.indexOf('holder_individual_pct');
+          if (insertAt !== -1) savedOrder.splice(insertAt + 1, 0, 'holder_institution_pct');
+          else savedOrder.push('holder_institution_pct');
         }
         appState.columnOrder = savedOrder;
         reorderHeaderDomByColumnOrder();
@@ -1549,10 +1568,19 @@ function renderTop10HoldersTable(holders, filterType = 'all') {
     const chgType = h.change_type || (chgVal > 0 ? 'up' : chgVal < 0 ? 'down' : 'flat');
     const chgColor = (chgType === 'new' || chgType === 'up') ? '#ef4444' : chgType === 'down' ? '#10b981' : '#94a3b8';
 
+    // 需求1: 股东属性标签判定与渲染
+    const isIndividual = (h.category === 'individual' || h.holder_type === 'individual');
+    const categoryTag = isIndividual
+      ? `<span class="badge-holder-individual">👤 个人</span>`
+      : `<span class="badge-holder-institution">🏢 机构</span>`;
+
     tr.innerHTML = `
       <td style="font-family: monospace; font-weight: 700; color: #94a3b8;">${h.rank}</td>
       <td>
         <strong style="color: #f8fafc;">${h.name}</strong>
+      </td>
+      <td style="text-align: center;">
+        ${categoryTag}
       </td>
       <td style="text-align: right; font-family: monospace; font-weight: 700; color: #38bdf8;">
         ${h.hold_pct > 0 ? Number(h.hold_pct).toFixed(2) + '%' : '--'}

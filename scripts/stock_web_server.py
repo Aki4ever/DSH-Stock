@@ -769,7 +769,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {
                 "code": 200,
                 "message": "success",
-                "version": APP_VERSION,
+                "version": load_version_info().get("version", "v3.0.0"),
                 "stats": stats,
                 "filter_params": params,
                 "data": filtered_stocks

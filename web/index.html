@@ -474,6 +474,19 @@
                   <span class="col-title">十大流通股东</span> <span class="sort-indicator">⇅</span>
                 </div>
               </th>
+              <!-- 需求2/3: 新增个人占比与机构占比列，支持升降序精准排序 -->
+              <th data-col="holder_individual_pct" draggable="true" onclick="handleHeaderSort('holder_individual_pct', event)">
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title" title="十大流通股东中所有自然人/牛散股东持股比例总和">个人占比</span> <span class="sort-indicator">⇅</span>
+                </div>
+              </th>
+              <th data-col="holder_institution_pct" draggable="true" onclick="handleHeaderSort('holder_institution_pct', event)">
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title" title="十大流通股东中所有法人/基金/险资/国家队等机构股东持股比例总和">机构占比</span> <span class="sort-indicator">⇅</span>
+                </div>
+              </th>
               <!-- 需求4: 股东异动三兄弟列 (新进、变动、退出，纯数字展示并支持精准升降序排序) -->
               <th data-col="holder_new_count" draggable="true" onclick="handleHeaderSort('holder_new_count', event)">
                 <div class="col-header-box">
@@ -1387,8 +1400,9 @@
             <tr>
               <th style="width: 55px;">排名</th>
               <th>股东名称</th>
-              <th style="text-align: right; width: 130px;">持股比例 (%)</th>
-              <th style="text-align: right; width: 150px;">与上期相比变动</th>
+              <th style="width: 95px; text-align: center;">股东属性</th>
+              <th style="text-align: right; width: 120px;">持股比例 (%)</th>
+              <th style="text-align: right; width: 140px;">与上期相比变动</th>
               <th>股东与企业关系 / 身份属性</th>
             </tr>
           </thead>
