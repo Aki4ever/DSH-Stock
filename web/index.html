@@ -1140,9 +1140,11 @@
             <span style="font-weight: 700; font-size: 1.05rem;">📈 行情走势图谱</span>
           </div>
           <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
-            <!-- 主图时段规范化 4 个 Tab (分时图 / 20天K线 / 60天K线 / 全部) -->
+            <!-- 需求1: 主图时段扩充为 6 个 Tab (分时图 / 5天K线 / 10天K线 / 20天K线 / 60天K线 / 全部) -->
             <div class="segmented-control" id="chartPeriodControl">
               <button type="button" class="seg-btn active" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 分时图</button>
+              <button type="button" class="seg-btn" data-period="kline5" onclick="switchChartPeriod('kline5')">⚡ 5天K线</button>
+              <button type="button" class="seg-btn" data-period="kline10" onclick="switchChartPeriod('kline10')">🔥 10天K线</button>
               <button type="button" class="seg-btn" data-period="kline20" onclick="switchChartPeriod('kline20')">📊 20天K线</button>
               <button type="button" class="seg-btn" data-period="kline60" onclick="switchChartPeriod('kline60')">📈 60天K线</button>
               <button type="button" class="seg-btn" data-period="all" onclick="switchChartPeriod('all')">🌟 全部</button>

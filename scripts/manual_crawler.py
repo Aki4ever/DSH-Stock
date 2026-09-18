@@ -118,6 +118,23 @@ class ManualCrawlerJob:
                     self.status = "cancelled"
                     self.phase_text = "采集已被用户手动取消"
                     self.end_time = time.time()
+                # 即使手动取消也记录审计流水
+                import hashlib
+                cancel_fp = hashlib.sha256(f"cancelled:{self.mode}:{i}".encode('utf-8')).hexdigest()[:16]
+                try:
+                    record_crawl_audit(
+                        task_id=self.job_id,
+                        crawl_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        status="用户手动取消",
+                        fingerprint=cancel_fp,
+                        target_scope="核心资产CSI100" if self.mode == "core" else "全市场A股",
+                        total_items=total,
+                        updated_items=updated_so_far,
+                        skipped_items=self.skipped_count,
+                        details=f"模式: {self.mode}, 处理进度: {i}/{total} 只时被用户终止"
+                    )
+                except Exception:
+                    pass
                 return
 
             chunk = codes[i:i + chunk_size]

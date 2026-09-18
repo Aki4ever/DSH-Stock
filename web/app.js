@@ -2740,7 +2740,7 @@ async function toggleServerState() {
 // ====================================================
 
 /**
- * 需求3: 切换图表时段 Tab: timeline (分时图) ｜ kline20 (20天K线) ｜ kline60 (60天K线) ｜ all (全部/上市至今)
+ * 需求1: 切换图表时段 Tab: timeline (分时图) ｜ kline5 (5天K线) ｜ kline10 (10天K线) ｜ kline20 (20天K线) ｜ kline60 (60天K线) ｜ all (全部/上市至今)
  */
 function switchChartPeriod(period) {
   appState.chartPeriod = period;
@@ -2751,7 +2751,13 @@ function switchChartPeriod(period) {
   }
 
   // 针对不同 Tab 自动配置窗口
-  if (period === 'kline20') {
+  if (period === 'kline5') {
+    appState.chartZoomWindow = '5';
+    appState.chartCustomZoomCount = 5;
+  } else if (period === 'kline10') {
+    appState.chartZoomWindow = '10';
+    appState.chartCustomZoomCount = 10;
+  } else if (period === 'kline20') {
     appState.chartZoomWindow = '20';
     appState.chartCustomZoomCount = 20;
   } else if (period === 'kline60') {
@@ -2873,138 +2879,82 @@ function setChartZoomWindow(windowSize) {
 }
 
 /**
- * 需求1/2/4: 智能识别压力位与支撑位，并严格求和交汇交易日成交额 (Low <= Price <= High)
+ * 需求2: 智能自动画线算法 (仅画 1 根线，这根线必须使得交汇金额达到全局最大值)
+ * 判定公式: Low_t <= P <= High_t, 求解 argmax_P Sum(Amount_t)
  */
 function calculateAutoSupportResistanceLevels(klines, currentPrice) {
-  if (!klines || klines.length < 5) return [];
+  if (!klines || klines.length === 0) return [];
 
-  const highs = klines.map(d => Number(d.high || d.price));
-  const lows = klines.map(d => Number(d.low || d.price));
+  const highs = klines.map(d => Number(d.high !== undefined ? d.high : d.price));
+  const lows = klines.map(d => Number(d.low !== undefined ? d.low : d.price));
   const maxP = Math.max(...highs);
   const minP = Math.min(...lows);
-  if (maxP <= minP) return [];
+  if (maxP <= 0) return [];
 
-  // 1. 局部拐点探测 (Pivot Highs & Lows)
-  const pivotHighs = [];
-  const pivotLows = [];
-  const span = Math.max(2, Math.min(5, Math.floor(klines.length / 15)));
+  // 1. 构建候选价位测试池 (包含所有日高/低/收盘点，并在区间内进行密集离散采样)
+  const candidatePrices = new Set();
+  klines.forEach(k => {
+    if (k.high !== undefined) candidatePrices.add(Number(k.high));
+    if (k.low !== undefined) candidatePrices.add(Number(k.low));
+    if (k.close !== undefined) candidatePrices.add(Number(k.close));
+    if (k.open !== undefined) candidatePrices.add(Number(k.open));
+  });
 
-  for (let i = span; i < klines.length - span; i++) {
-    const curH = Number(klines[i].high || klines[i].price);
-    const curL = Number(klines[i].low || klines[i].price);
-    
-    let isHigh = true;
-    let isLow = true;
-    for (let j = i - span; j <= i + span; j++) {
-      if (j === i) continue;
-      if (Number(klines[j].high || klines[j].price) > curH) isHigh = false;
-      if (Number(klines[j].low || klines[j].price) < curL) isLow = false;
-    }
-    if (isHigh) pivotHighs.push(curH);
-    if (isLow) pivotLows.push(curL);
+  // 在 [minP, maxP] 均匀采样 80 个步长点，确保覆盖所有可能的价格交叉点
+  const stepCount = 80;
+  const stepVal = (maxP - minP) / (stepCount + 1);
+  for (let i = 1; i <= stepCount; i++) {
+    candidatePrices.add(Number((minP + i * stepVal).toFixed(2)));
   }
 
-  // 保证极值点纳入考虑
-  pivotHighs.push(maxP);
-  pivotLows.push(minP);
+  // 2. 严密遍历每个候选价格，计算交汇金额之和 (Low <= P <= High)
+  let bestPrice = Number(currentPrice) || Number(klines[klines.length - 1].close || maxP);
+  let maxCrossedAmountYi = -1;
+  let bestCrossedDays = 0;
 
-  // 2. 聚类合并相近的价格位 (避免过于密集的线)
-  const threshold = (maxP - minP) * 0.035; // 3.5% 价格带聚类阈值
-  function clusterPrices(prices) {
-    if (prices.length === 0) return [];
-    prices.sort((a, b) => a - b);
-    const clusters = [];
-    let curGroup = [prices[0]];
-    for (let i = 1; i < prices.length; i++) {
-      if (prices[i] - curGroup[curGroup.length - 1] <= threshold) {
-        curGroup.push(prices[i]);
-      } else {
-        const avg = curGroup.reduce((a, b) => a + b, 0) / curGroup.length;
-        clusters.push(Number(avg.toFixed(2)));
-        curGroup = [prices[i]];
-      }
-    }
-    if (curGroup.length > 0) {
-      const avg = curGroup.reduce((a, b) => a + b, 0) / curGroup.length;
-      clusters.push(Number(avg.toFixed(2)));
-    }
-    return clusters;
-  }
-
-  const clusteredHighs = clusterPrices(pivotHighs);
-  const clusteredLows = clusterPrices(pivotLows);
-
-  // 区分现价上方的压力位与现价下方的支撑位
-  const refP = Number(currentPrice) || Number(klines[klines.length - 1].close || klines[klines.length - 1].price);
-  let resistances = clusteredHighs.filter(p => p > refP * 1.005);
-  let supports = clusteredLows.filter(p => p < refP * 0.995);
-
-  // 如果现价在最高点或最低点附近，进行补充
-  if (resistances.length === 0) {
-    resistances = [Number(maxP.toFixed(2))];
-  }
-  if (supports.length === 0) {
-    supports = [Number(minP.toFixed(2))];
-  }
-
-  // 压力位取最靠近现价的前2~3个以及最高阻力位
-  resistances.sort((a, b) => a - b);
-  if (resistances.length > 3) {
-    resistances = [resistances[0], resistances[Math.floor(resistances.length / 2)], resistances[resistances.length - 1]];
-  }
-  // 支撑位取最靠近现价的前2~3个以及最低防线
-  supports.sort((a, b) => b - a);
-  if (supports.length > 3) {
-    supports = [supports[0], supports[Math.floor(supports.length / 2)], supports[supports.length - 1]];
-  }
-
-  // 3. 严格计算交汇交易日产生的所有交易金额之和 (Low <= Price <= High)
-  const resultLevels = [];
-
-  // 计算每根辅助线的交汇成交额
-  function computeLevelCrossStats(price, typeName) {
-    let crossedAmountYi = 0;
-    let crossedDays = 0;
+  candidatePrices.forEach(p => {
+    let currentCrossedAmt = 0;
+    let currentCrossedDays = 0;
 
     klines.forEach(item => {
       const h = Number(item.high !== undefined ? item.high : item.price);
       const l = Number(item.low !== undefined ? item.low : item.price);
-      // 需求2: 严密交汇判定公式: l <= price && price <= h
-      if (l <= price && price <= h) {
-        crossedDays++;
-        // 累加成交额 (单位: 亿元)
+      // 交汇条件: l <= p && p <= h
+      if (l <= p && p <= h) {
+        currentCrossedDays++;
         let amt = 0;
         if (item.amount_yi !== undefined) {
           amt = Number(item.amount_yi);
         } else if (item.amount !== undefined) {
           amt = Number(item.amount) / 100000000.0;
         } else if (item.volume !== undefined) {
-          // 均价 * 股数
           const c = Number(item.close || item.price);
           amt = (Number(item.volume) * 100 * c) / 100000000.0;
         }
-        crossedAmountYi += amt;
+        currentCrossedAmt += amt;
       }
     });
 
-    return {
-      id: 'auto_' + typeName + '_' + Math.round(price * 100),
-      price: price,
-      type: typeName,
-      crossedDays: crossedDays,
-      crossedAmountYi: Number(crossedAmountYi.toFixed(2))
-    };
-  }
-
-  resistances.forEach(p => {
-    resultLevels.push(computeLevelCrossStats(p, '压力位'));
+    if (currentCrossedAmt > maxCrossedAmountYi) {
+      maxCrossedAmountYi = currentCrossedAmt;
+      bestPrice = p;
+      bestCrossedDays = currentCrossedDays;
+    }
   });
 
-  supports.forEach(p => {
-    resultLevels.push(computeLevelCrossStats(p, '支撑位'));
-  });
+  // 3. 确定该唯一的最大交汇中枢线是压力位还是支撑位
+  const refP = Number(currentPrice) || Number(klines[klines.length - 1].close || bestPrice);
+  const typeName = bestPrice >= refP ? '最强压力' : '核心支撑';
 
-  return resultLevels;
+  // 仅返回唯一 1 根全局最大交汇金额中枢线
+  return [{
+    id: 'max_cross_level_' + Math.round(bestPrice * 100),
+    price: Number(bestPrice.toFixed(2)),
+    type: typeName,
+    crossedDays: bestCrossedDays,
+    crossedAmountYi: Number(maxCrossedAmountYi.toFixed(2)),
+    isMaxPeak: true
+  }];
 }
 
 /**
@@ -3031,16 +2981,20 @@ function triggerAutoDrawLevels() {
     }));
   } else {
     klines = stock.daily_bars && stock.daily_bars.length > 0 ? stock.daily_bars : generateClientFallbackDaily(stock.price);
-    // 按时间窗口切片
+    // 按时间窗口切片 (支持 5天 / 10天 / 20天 / 60天 / 全部)
     let winCount = klines.length;
-    if (appState.chartPeriod === 'kline20') {
+    if (appState.chartPeriod === 'kline5') {
+      winCount = Math.min(klines.length, 5);
+    } else if (appState.chartPeriod === 'kline10') {
+      winCount = Math.min(klines.length, 10);
+    } else if (appState.chartPeriod === 'kline20') {
       winCount = Math.min(klines.length, 20);
     } else if (appState.chartPeriod === 'kline60') {
       winCount = Math.min(klines.length, 60);
     } else if (appState.chartPeriod === 'all' || appState.chartZoomWindow === 'max') {
       winCount = klines.length;
     } else if (appState.chartCustomZoomCount > 0) {
-      winCount = Math.min(klines.length, Math.max(15, appState.chartCustomZoomCount));
+      winCount = Math.min(klines.length, Math.max(5, appState.chartCustomZoomCount));
     } else {
       winCount = parseInt(appState.chartZoomWindow, 10) || 60;
     }
@@ -3491,16 +3445,20 @@ function renderActiveStockChart() {
         klines = stock.daily_bars || generateClientFallbackDaily(stock.price);
       }
     } else {
-      // 滚轮或预设缩放 (需求3: 20天 / 60天 / 全部 走势图Tab自适应)
+      // 滚轮或预设缩放 (需求1: 5天 / 10天 / 20天 / 60天 / 全部 走势图Tab自适应)
       let winCount = klines.length;
-      if (appState.chartPeriod === 'kline20') {
+      if (appState.chartPeriod === 'kline5') {
+        winCount = Math.min(klines.length, 5);
+      } else if (appState.chartPeriod === 'kline10') {
+        winCount = Math.min(klines.length, 10);
+      } else if (appState.chartPeriod === 'kline20') {
         winCount = Math.min(klines.length, 20);
       } else if (appState.chartPeriod === 'kline60') {
         winCount = Math.min(klines.length, 60);
       } else if (appState.chartPeriod === 'all' || appState.chartZoomWindow === 'max') {
         winCount = klines.length;
       } else if (appState.chartCustomZoomCount > 0) {
-        winCount = Math.min(klines.length, Math.max(15, appState.chartCustomZoomCount));
+        winCount = Math.min(klines.length, Math.max(5, appState.chartCustomZoomCount));
       } else {
         winCount = parseInt(appState.chartZoomWindow, 10) || 60;
       }
@@ -4012,22 +3970,23 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
       <text x="${m.left + innerW * 0.5}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[Math.floor(n / 2)].date}</text>
       <text x="${m.left + innerW}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="end">${klines[n - 1].date}</text>
 
-      <!-- 需求1/2/4: 渲染用户绘制或自动测算的水平压力/支撑辅助线及交汇成交额 -->
+      <!-- 需求2: 渲染用户绘制或自动测算的水平辅助线 (自动画线仅1根全局最大交汇金额中枢线) -->
       ${appState.drawnHorizontalLines.map(line => {
         const yPos = priceToY(line.price);
         const lastClose = Number(klines[klines.length - 1].close || klines[klines.length - 1].price);
         const isUp = line.price >= lastClose;
-        const color = isUp ? '#f43f5e' : '#10b981';
-        const txtColor = isUp ? '#fca5a5' : '#86efac';
-        // 标签内容: 显示交汇成交额
+        const isMax = !!line.isMaxPeak;
+        // 最大交汇线采用高辨识度亮金色/亮橙色 #f59e0b，普通压力红色，支撑绿色
+        const color = isMax ? '#f59e0b' : (isUp ? '#f43f5e' : '#10b981');
+        const txtColor = isMax ? '#fef08a' : (isUp ? '#fca5a5' : '#86efac');
         const amtText = line.crossedAmountYi !== undefined 
-          ? `${line.type}: ¥${line.price.toFixed(2)} (交汇:${line.crossedAmountYi}亿)`
+          ? `${line.type}: ¥${line.price.toFixed(2)} (最大交汇:${line.crossedAmountYi}亿)`
           : `${line.type}: ¥${line.price.toFixed(2)}`;
-        const tagW = line.crossedAmountYi !== undefined ? 180 : 110;
+        const tagW = line.crossedAmountYi !== undefined ? 200 : 110;
         return `
-          <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="1.5" stroke-dasharray="5,3"/>
-          <rect x="${m.left + innerW - tagW}" y="${yPos - 9}" width="${tagW}" height="18" fill="rgba(15, 23, 42, 0.92)" rx="3" stroke="${color}" stroke-width="1"/>
-          <text x="${m.left + innerW - 6}" y="${yPos + 4}" fill="${txtColor}" font-size="10" text-anchor="end" font-family="monospace" font-weight="600">
+          <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="${isMax ? '2' : '1.5'}" stroke-dasharray="${isMax ? '6,3' : '5,3'}"/>
+          <rect x="${m.left + innerW - tagW}" y="${yPos - 9}" width="${tagW}" height="18" fill="rgba(15, 23, 42, 0.95)" rx="3" stroke="${color}" stroke-width="1.2"/>
+          <text x="${m.left + innerW - 6}" y="${yPos + 4}" fill="${txtColor}" font-size="10" text-anchor="end" font-family="monospace" font-weight="700">
             ${amtText}
           </text>
         `;
