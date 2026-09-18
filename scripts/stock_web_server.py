@@ -273,6 +273,7 @@ class StockDataManager:
         market = params.get("market", "all")
         board = params.get("board", "all")
         constituent = params.get("constituent", "all")
+        st_filter = params.get("st", "all") # 需求4: "all" | "st" | "non_st"
         filter_date = params.get("filter_date", "")
 
         def to_float(v):
@@ -324,6 +325,15 @@ class StockDataManager:
                 continue
             elif constituent == "csi100" and not s["is_csi100"]:
                 continue
+            # 需求4: 股票列表 ST 维度过滤 (ST / 非ST / 全部)
+            if st_filter == "st":
+                is_st = ("ST" in s["name"].upper())
+                if not is_st:
+                    continue
+            elif st_filter == "non_st":
+                is_st = ("ST" in s["name"].upper())
+                if is_st:
+                    continue
             # 关键字智能规则检索 (代码/名称/首字母拼音，全匹配优先，部分匹配兼容)
             if keyword:
                 c_full = s["code"].lower()

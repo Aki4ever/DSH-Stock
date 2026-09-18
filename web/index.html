@@ -201,6 +201,23 @@
             </div>
           </div>
 
+          <!-- 需求4: 股票列表新增筛选维度: ST (选项有ST、非ST、全部; 默认选择全部) -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>⚠️ 风险属性 (ST)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('st')" title="重置为默认全部">↺ 全部</button>
+              </div>
+            </div>
+            <div class="segmented-control" id="stControl">
+              <button type="button" class="seg-btn active" data-val="all">全部 (默认)</button>
+              <button type="button" class="seg-btn" data-val="st">⚠️ ST 风险股</button>
+              <button type="button" class="seg-btn" data-val="non_st">🛡️ 非ST (正常股)</button>
+            </div>
+          </div>
+
           <!-- 控件 5: 股价区间 -->
           <div class="filter-item">
             <div class="filter-label">
@@ -1310,13 +1327,15 @@
             <span style="font-weight: 700; font-size: 1.05rem;">📊 指数行情走势图谱 (资金成交额驱动)</span>
           </div>
           <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
-            <!-- 6 大时段 Tab: 分时 / 5天K线 / 10天K线 / 20天K线 / 60天K线 / 全部K线 -->
+            <!-- 需求2: 8 大时段 Tab: 分时 / 5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部K线 -->
             <div class="segmented-control" id="indexChartPeriodControl">
               <button type="button" class="seg-btn active" data-period="timeline" onclick="switchIndexChartPeriod('timeline')">⏱️ 分时图</button>
               <button type="button" class="seg-btn" data-period="kline5" onclick="switchIndexChartPeriod('kline5')">⚡ 5天K线</button>
               <button type="button" class="seg-btn" data-period="kline10" onclick="switchIndexChartPeriod('kline10')">🔥 10天K线</button>
               <button type="button" class="seg-btn" data-period="kline20" onclick="switchIndexChartPeriod('kline20')">📊 20天K线</button>
               <button type="button" class="seg-btn" data-period="kline60" onclick="switchIndexChartPeriod('kline60')">📈 60天K线</button>
+              <button type="button" class="seg-btn" data-period="kline120" onclick="switchIndexChartPeriod('kline120')">📅 120天K线</button>
+              <button type="button" class="seg-btn" data-period="kline180" onclick="switchIndexChartPeriod('kline180')">🗓️ 180天K线</button>
               <button type="button" class="seg-btn" data-period="all" onclick="switchIndexChartPeriod('all')">🌟 全部K线</button>
             </div>
 
@@ -1382,13 +1401,15 @@
             <span style="font-weight: 700; font-size: 1.05rem;">📈 行情走势图谱</span>
           </div>
           <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
-            <!-- 需求1: 主图时段扩充为 6 个 Tab (分时图 / 5天K线 / 10天K线 / 20天K线 / 60天K线 / 全部) -->
+            <!-- 需求2: 主图时段扩充为 8 个 Tab (分时图 / 5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部) -->
             <div class="segmented-control" id="chartPeriodControl">
               <button type="button" class="seg-btn active" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 分时图</button>
               <button type="button" class="seg-btn" data-period="kline5" onclick="switchChartPeriod('kline5')">⚡ 5天K线</button>
               <button type="button" class="seg-btn" data-period="kline10" onclick="switchChartPeriod('kline10')">🔥 10天K线</button>
               <button type="button" class="seg-btn" data-period="kline20" onclick="switchChartPeriod('kline20')">📊 20天K线</button>
               <button type="button" class="seg-btn" data-period="kline60" onclick="switchChartPeriod('kline60')">📈 60天K线</button>
+              <button type="button" class="seg-btn" data-period="kline120" onclick="switchChartPeriod('kline120')">📅 120天K线</button>
+              <button type="button" class="seg-btn" data-period="kline180" onclick="switchChartPeriod('kline180')">🗓️ 180天K线</button>
               <button type="button" class="seg-btn" data-period="all" onclick="switchChartPeriod('all')">🌟 全部</button>
             </div>
             <!-- K线缩放区间控制 (按需隐蔽) -->

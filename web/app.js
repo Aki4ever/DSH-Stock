@@ -14,6 +14,7 @@ const appState = {
   market: 'all',
   board: 'all',
   constituent: 'all',
+  st: 'all', // 需求4: 'all' (全部，默认) | 'st' (ST股) | 'non_st' (非ST正常股)
   page: 1,
   pageSize: 50,
   totalMatched: 0,
@@ -176,6 +177,7 @@ const dom = {
   marketControl: document.getElementById('marketControl'),
   boardControl: document.getElementById('boardControl'),
   constituentControl: document.getElementById('constituentControl'),
+  stControl: document.getElementById('stControl'),
 
   minPriceInput: document.getElementById('minPriceInput'),
   maxPriceInput: document.getElementById('maxPriceInput'),
@@ -622,6 +624,19 @@ function initEventListeners() {
     });
   });
 
+  // 需求4: ST 风险属性控制
+  if (dom.stControl) {
+    dom.stControl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        dom.stControl.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        appState.st = btn.getAttribute('data-val');
+        appState.page = 1;
+        executeFilter();
+      });
+    });
+  }
+
   // 日期监听
   dom.filterDateInput.addEventListener('change', () => {
     checkFilterDateTradingStatus(dom.filterDateInput.value);
@@ -721,6 +736,10 @@ function resetSingleDimension(dimType) {
       appState.constituent = 'all';
       dom.constituentControl.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-val') === 'all'));
       break;
+    case 'st':
+      appState.st = 'all';
+      if (dom.stControl) dom.stControl.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-val') === 'all'));
+      break;
     case 'price':
       dom.minPriceInput.value = '';
       dom.maxPriceInput.value = '';
@@ -775,11 +794,13 @@ function resetAllFilters() {
   appState.market = 'all';
   appState.board = 'all';
   appState.constituent = 'all';
+  appState.st = 'all';
   appState.page = 1;
 
   dom.marketControl.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-val') === 'all'));
   dom.boardControl.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-val') === 'all'));
   dom.constituentControl.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-val') === 'all'));
+  if (dom.stControl) dom.stControl.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-val') === 'all'));
 
   dom.minPriceInput.value = '';
   dom.maxPriceInput.value = '';
@@ -845,6 +866,7 @@ function collectFilterParams() {
     market: appState.market,
     board: appState.board,
     constituent: appState.constituent,
+    st: appState.st || 'all', // 需求4: 'all' | 'st' | 'non_st'
     filter_date: dom.filterDateInput.value,
     min_price: dom.minPriceInput.value ? parseFloat(dom.minPriceInput.value) : null,
     max_price: dom.maxPriceInput.value ? parseFloat(dom.maxPriceInput.value) : null,
@@ -3546,7 +3568,7 @@ function renderActiveStockChart() {
         klines = stock.daily_bars || [];
       }
     } else {
-      // 滚轮或预设缩放 (需求1: 5天 / 10天 / 20天 / 60天 / 全部 走势图Tab自适应)
+      // 滚轮或预设缩放 (需求2: 5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部 走势图Tab自适应)
       let winCount = klines.length;
       if (appState.chartPeriod === 'kline5') {
         winCount = Math.min(klines.length, 5);
@@ -3556,6 +3578,10 @@ function renderActiveStockChart() {
         winCount = Math.min(klines.length, 20);
       } else if (appState.chartPeriod === 'kline60') {
         winCount = Math.min(klines.length, 60);
+      } else if (appState.chartPeriod === 'kline120') {
+        winCount = Math.min(klines.length, 120);
+      } else if (appState.chartPeriod === 'kline180') {
+        winCount = Math.min(klines.length, 180);
       } else if (appState.chartPeriod === 'all' || appState.chartZoomWindow === 'max') {
         winCount = klines.length;
       } else if (appState.chartCustomZoomCount > 0) {
@@ -3873,6 +3899,38 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
   const maxSubVal = Math.max(...subVals, 0.1) * 1.1;
   const subValToH = (v) => (v / maxSubVal) * (sh - 10);
 
+  // 需求3: 分时图副图全面呈现 平均、最小、最大、中位数 概要数据
+  const timelineStats = calculateDistributionSummary(subVals);
+  let timelineSummarySvg = '';
+  if (isVol) {
+    const fmtVol = (val) => {
+      if (val >= 100000000) return (val / 100000000).toFixed(2) + '亿手';
+      if (val >= 10000) return (val / 10000).toFixed(1) + '万手';
+      return Math.round(val) + '手';
+    };
+    timelineSummarySvg = `
+      <g class="sub-summary-group">
+        <text x="${m.left + 115}" y="${subTopY + 14}" fill="#38bdf8" font-size="10" font-family="monospace">
+          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#38bdf8">${fmtVol(timelineStats.mean)}</tspan>
+          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${fmtVol(timelineStats.min)}</tspan>
+          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${fmtVol(timelineStats.max)}</tspan>
+          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${fmtVol(timelineStats.median)}</tspan>
+        </text>
+      </g>
+    `;
+  } else {
+    timelineSummarySvg = `
+      <g class="sub-summary-group">
+        <text x="${m.left + 115}" y="${subTopY + 14}" fill="#f59e0b" font-size="10" font-family="monospace">
+          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#f59e0b">${timelineStats.mean.toFixed(2)}亿</tspan>
+          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${timelineStats.min.toFixed(2)}亿</tspan>
+          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${timelineStats.max.toFixed(2)}亿</tspan>
+          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${timelineStats.median.toFixed(2)}亿</tspan>
+        </text>
+      </g>
+    `;
+  }
+
   let subBars = '';
   items.forEach((d, idx) => {
     const x = m.left + idx * stepX;
@@ -3939,11 +3997,14 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
         const isUp = line.price >= preClose;
         const color = isUp ? '#f43f5e' : '#10b981';
         const txtColor = isUp ? '#fca5a5' : '#86efac';
-        // 标签内容: 显示交汇成交额
-        const amtText = line.crossedAmountYi !== undefined 
-          ? `${line.type}: ¥${line.price.toFixed(2)} (交汇:${line.crossedAmountYi}亿)`
-          : `${line.type}: ¥${line.price.toFixed(2)}`;
-        const tagW = line.crossedAmountYi !== undefined ? 180 : 110;
+        // 需求1: 自动画线还要著名这个辅助线交汇了几个交易日，显示: 交易日:x
+        let amtText = `${line.type}: ¥${line.price.toFixed(2)}`;
+        let tagW = 120;
+        if (line.crossedAmountYi !== undefined) {
+          const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
+          amtText = `${line.type}: ¥${line.price.toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
+          tagW = line.crossedDays !== undefined ? 270 : 190;
+        }
         return `
           <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="1.5" stroke-dasharray="5,3"/>
           <rect x="${m.left + innerW - tagW}" y="${yPos - 9}" width="${tagW}" height="18" fill="rgba(15, 23, 42, 0.92)" rx="3" stroke="${color}" stroke-width="1"/>
@@ -3956,6 +4017,7 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
       <!-- 副图量额区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
       <text x="${m.left + 8}" y="${subTopY + 14}" fill="#94a3b8" font-size="10" font-weight="600">${subTitle}</text>
+      ${timelineSummarySvg}
       <text x="${m.left - 8}" y="${subTopY + 14}" fill="#64748b" font-size="10" text-anchor="end" font-family="monospace">${maxSubVal.toFixed(1)}${subUnit}</text>
       
       <!-- 渲染副图柱状图 -->
@@ -4114,10 +4176,14 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
         // 最大交汇线采用高辨识度亮金色/亮橙色 #f59e0b，普通压力红色，支撑绿色
         const color = isMax ? '#f59e0b' : (isUp ? '#f43f5e' : '#10b981');
         const txtColor = isMax ? '#fef08a' : (isUp ? '#fca5a5' : '#86efac');
-        const amtText = line.crossedAmountYi !== undefined 
-          ? `${line.type}: ¥${line.price.toFixed(2)} (最大交汇:${line.crossedAmountYi}亿)`
-          : `${line.type}: ¥${line.price.toFixed(2)}`;
-        const tagW = line.crossedAmountYi !== undefined ? 200 : 110;
+        // 需求1: 自动画线还要著名这个辅助线交汇了几个交易日，显示: 交易日:x
+        let amtText = `${line.type}: ¥${line.price.toFixed(2)}`;
+        let tagW = 120;
+        if (line.crossedAmountYi !== undefined) {
+          const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
+          amtText = `${line.type}: ¥${line.price.toFixed(2)} (最大交汇: ${line.crossedAmountYi}亿${daysPart})`;
+          tagW = line.crossedDays !== undefined ? 285 : 205;
+        }
         return `
           <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="${isMax ? '2' : '1.5'}" stroke-dasharray="${isMax ? '6,3' : '5,3'}"/>
           <rect x="${m.left + innerW - tagW}" y="${yPos - 9}" width="${tagW}" height="18" fill="rgba(15, 23, 42, 0.95)" rx="3" stroke="${color}" stroke-width="1.2"/>
@@ -4671,12 +4737,14 @@ function renderActiveIndexChart() {
       return;
     }
 
-    // 切片
+    // 需求2: 指数切片 (5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部)
     let winCount = klines.length;
     if (indexState.period === 'kline5') winCount = Math.min(klines.length, 5);
     else if (indexState.period === 'kline10') winCount = Math.min(klines.length, 10);
     else if (indexState.period === 'kline20') winCount = Math.min(klines.length, 20);
     else if (indexState.period === 'kline60') winCount = Math.min(klines.length, 60);
+    else if (indexState.period === 'kline120') winCount = Math.min(klines.length, 120);
+    else if (indexState.period === 'kline180') winCount = Math.min(klines.length, 180);
     else if (indexState.period === 'all') winCount = klines.length;
 
     if (klines.length > winCount) {
@@ -4750,12 +4818,14 @@ function renderActiveIndexChart() {
       if (autoLevels && autoLevels.length > 0) {
         const peakLine = autoLevels[0];
         const lineY = getY(peakLine.price);
+        const daysPart = peakLine.crossedDays !== undefined ? `, 交易日: ${peakLine.crossedDays}天` : '';
+        const tagW = peakLine.crossedDays !== undefined ? 310 : 235;
         autoLinesSvg = `
           <g class="auto-line-single-peak">
             <line x1="${margin.left}" y1="${lineY}" x2="${margin.left + plotWidth}" y2="${lineY}" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="6,4"/>
-            <rect x="${margin.left + plotWidth - 235}" y="${lineY - 12}" width="235" height="24" rx="4" fill="#0f172a" stroke="#f59e0b" stroke-width="1.2" opacity="0.95"/>
-            <text x="${margin.left + plotWidth - 225}" y="${lineY + 4}" fill="#f59e0b" font-size="11" font-weight="700" font-family="monospace">
-              ${peakLine.type}: ${peakLine.price} (最大交汇: ${peakLine.crossedAmountYi}亿)
+            <rect x="${margin.left + plotWidth - tagW}" y="${lineY - 12}" width="${tagW}" height="24" rx="4" fill="#0f172a" stroke="#f59e0b" stroke-width="1.2" opacity="0.95"/>
+            <text x="${margin.left + plotWidth - tagW + 10}" y="${lineY + 4}" fill="#f59e0b" font-size="11" font-weight="700" font-family="monospace">
+              ${peakLine.type}: ${peakLine.price} (最大交汇: ${peakLine.crossedAmountYi}亿${daysPart})
             </text>
           </g>
         `;
