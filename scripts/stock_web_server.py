@@ -549,6 +549,48 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        # 3.1.0.1 需求1/2: 一级「股东研究」全景列表端点 /api/shareholders/list
+        if url_path == "/api/shareholders/list":
+            from scripts.shareholder_engine import Top10ShareholdersEngine
+            query_params = {}
+            if "?" in self.path:
+                q_str = self.path.split("?", 1)[1]
+                for part in q_str.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        query_params[k.strip()] = urllib.parse.unquote(v.strip())
+
+            kw = query_params.get("keyword", "").strip().lower()
+            cat = query_params.get("category", "all").strip().lower()
+            sort_by = query_params.get("sort_by", "total_holding_amount") # total_holding_amount | company_count
+            sort_dir = query_params.get("sort_dir", "desc")
+
+            all_stocks = list(DATA_MANAGER.stocks_dict.values())
+            # 聚合股东数据 (缓存或实时聚合)
+            shareholders = Top10ShareholdersEngine.aggregate_market_shareholders(all_stocks)
+
+            # 筛选
+            if cat in ("individual", "institution"):
+                shareholders = [h for h in shareholders if h["category"] == cat]
+            if kw:
+                shareholders = [
+                    h for h in shareholders
+                    if kw in h["holder_name"].lower() or any(kw in c["name"].lower() for c in h["companies"])
+                ]
+
+            # 排序
+            reverse = (sort_dir == "desc")
+            if sort_by == "company_count":
+                shareholders.sort(key=lambda x: (x["company_count"], x["total_holding_amount"]), reverse=reverse)
+            else:
+                shareholders.sort(key=lambda x: (x["total_holding_amount"], x["company_count"]), reverse=reverse)
+
+            self._send_json(200, {
+                "total": len(shareholders),
+                "data": shareholders
+            })
+            return
+
         # 3.1.1 需求2: 独立数据采集中心导出端点 /api/crawler/export?format=json|csv
         if url_path == "/api/crawler/export":
             query_params = {}

@@ -1416,24 +1416,97 @@ body {
   border-left: 2px solid #38bdf8 !important;
 }
 
-/* 飞书多维表格可拖动冻结分割线 (需求1: 极简纤细贴边微光竖线，移除悬浮tag) */
+/* 飞书多维表格绝对固定冻结分割线 (图2需求: 无论表格横向如何滚动，冻结线都绝对固定在左侧冻结列边缘) */
 .table-freeze-line {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 2px;
   background: #38bdf8;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.8), 0 0 16px rgba(56, 189, 248, 0.4);
-  z-index: 35; /* 高于 sticky 列 (20) */
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.9), 0 0 20px rgba(56, 189, 248, 0.5);
+  z-index: 40; /* 高于 sticky 列 (20) 和 表头 (30) */
   cursor: col-resize;
   pointer-events: auto;
-  transition: left 0.04s ease-out, width 0.15s, background-color 0.15s;
+  transition: width 0.15s, background-color 0.15s;
 }
 
 .table-freeze-line:hover {
   width: 4px;
-  background: #0284c7;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 1);
+  background: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 1);
+}
+
+/* 股东研究专有样式 */
+.shareholder-id-badge {
+  font-family: monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #94a3b8;
+  padding: 0.15rem 0.45rem;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 4px;
+}
+
+.shareholder-name-cell {
+  font-weight: 700;
+  color: #f1f5f9;
+  font-size: 0.95rem;
+}
+
+.sh-cat-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.sh-cat-individual {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.sh-cat-institution {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.sh-companies-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-width: 580px;
+}
+
+.sh-company-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sh-company-pill:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.sh-company-pill .pct {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  font-family: monospace;
 }
 
 /* 冻结列样式 (position: sticky) */

@@ -19,7 +19,7 @@
       <span class="brand-tag">全市场主板+创业板</span>
     </div>
 
-    <!-- 需求1: 顶栏页面 Tab 极简命名 (股票列表 | 仪表盘 | 宏观环境 | 数据中心) -->
+    <!-- 需求1: 顶栏主导航 Tab (股票列表 | 仪表盘 | 宏观环境 | 股东研究 | 数据中心) 对齐图1 -->
     <nav class="nav-tabs">
       <button id="tabBtnFilter" class="nav-tab-btn active" onclick="switchMainTab('filter')">
         <span>📈 股票列表</span>
@@ -29,6 +29,9 @@
       </button>
       <button id="tabBtnWorld" class="nav-tab-btn" onclick="switchMainTab('world')">
         <span>🌍 宏观环境</span>
+      </button>
+      <button id="tabBtnShareholders" class="nav-tab-btn" onclick="switchMainTab('shareholders')">
+        <span>👥 股东研究</span>
       </button>
       <button id="tabBtnCrawler" class="nav-tab-btn" onclick="switchMainTab('crawler')">
         <span>🗄️ 数据中心</span>
@@ -982,7 +985,76 @@
     </div>
 
     <!-- ==================================================== -->
-    <!-- 视图 4: 独立数据采集控制中心 (Tab: crawler)          -->
+    <!-- 视图 4: 一级股东研究穿透全景 (Tab: shareholders)       -->
+    <!-- ==================================================== -->
+    <div id="viewShareholdersTab" class="tab-view hidden">
+      <div class="shareholders-dashboard">
+
+        <!-- 顶部搜索与属性筛选控制卡片 -->
+        <div class="filter-card" style="margin-bottom: 1.2rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h2 style="font-size: 1.25rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.3rem;">
+                👥 全市场十大流通股东深度穿透与资本网络
+              </h2>
+              <p style="font-size: 0.84rem; color: var(--text-secondary);">
+                穿透追踪全市场核心股东、牛散与国家队/机构重仓版图，清晰洞察持股市值与跨企业协同关系。
+              </p>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
+              <!-- 属性筛选 -->
+              <div class="segmented-control" id="shCategoryControl">
+                <button type="button" class="seg-btn active" data-cat="all" onclick="filterShareholderCategory('all')">全部属性</button>
+                <button type="button" class="seg-btn" data-cat="institution" onclick="filterShareholderCategory('institution')">🏢 机构</button>
+                <button type="button" class="seg-btn" data-cat="individual" onclick="filterShareholderCategory('individual')">👤 个人牛散</button>
+              </div>
+
+              <!-- 搜索框 -->
+              <div class="search-input-wrapper" style="width: 260px;">
+                <input type="text" id="shKeywordInput" class="search-input" placeholder="搜索股东名称 / 占股企业..." onkeydown="if(event.key==='Enter') executeShareholderSearch()">
+                <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.82rem;" onclick="executeShareholderSearch()">搜索</button>
+              </div>
+
+              <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.82rem;" onclick="resetShareholderFilters()">
+                ↺ 重置
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 股东研究专业数据列表 (图1需求: 股东ID、股东名称、股东属性、占股企业、占股企业数量、占股企业总金额(亿)) -->
+        <div class="table-container" style="max-height: 72vh; overflow-y: auto;">
+          <table class="stock-table" id="shareholdersTable">
+            <thead>
+              <tr>
+                <th style="width: 120px;">股东ID</th>
+                <th style="width: 220px;">股东名称</th>
+                <th style="width: 130px;">股东属性</th>
+                <th>占股企业 (点击查看行情详情)</th>
+                <th style="width: 140px; cursor: pointer;" onclick="sortShareholderTable('company_count')">
+                  占股企业数量 ⇅
+                </th>
+                <th style="width: 180px; cursor: pointer;" onclick="sortShareholderTable('total_holding_amount')">
+                  占股企业总金额 (亿) ⇅
+                </th>
+              </tr>
+            </thead>
+            <tbody id="shareholdersTableBody">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                  正在穿透汇总全市场十大流通股东持仓网络...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- 视图 5: 独立数据采集控制中心 (Tab: crawler)          -->
     <!-- ==================================================== -->
     <div id="viewCrawlerTab" class="tab-view hidden">
       <div class="crawler-dashboard">

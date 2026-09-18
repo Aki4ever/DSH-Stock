@@ -73,13 +73,20 @@ const dom = {
   tabBtnFilter: document.getElementById('tabBtnFilter'),
   tabBtnDashboard: document.getElementById('tabBtnDashboard'),
   tabBtnWorld: document.getElementById('tabBtnWorld'),
+  tabBtnShareholders: document.getElementById('tabBtnShareholders'),
   tabBtnCrawler: document.getElementById('tabBtnCrawler'),
   viewFilterTab: document.getElementById('viewFilterTab'),
   viewDashboardTab: document.getElementById('viewDashboardTab'),
   viewWorldTab: document.getElementById('viewWorldTab'),
+  viewShareholdersTab: document.getElementById('viewShareholdersTab'),
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
   viewStockDetailTab: document.getElementById('viewStockDetailTab'),
   btnBackToStockList: document.getElementById('btnBackToStockList'),
+
+  // 股东研究独立页面 DOM
+  shCategoryControl: document.getElementById('shCategoryControl'),
+  shKeywordInput: document.getElementById('shKeywordInput'),
+  shareholdersTableBody: document.getElementById('shareholdersTableBody'),
 
   // 外部宏观环境 DOM
   worldHeaderScopeTitle: document.getElementById('worldHeaderScopeTitle'),
@@ -326,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * 顶栏 Tab 页面无缝切换 (四足鼎立: filter | dashboard | world | crawler)
+ * 顶栏 Tab 页面无缝切换 (对齐图1: filter | dashboard | world | shareholders | crawler)
  */
 function switchMainTab(tabId) {
   appState.currentTab = tabId;
@@ -334,17 +341,21 @@ function switchMainTab(tabId) {
   if (dom.tabBtnFilter) dom.tabBtnFilter.classList.toggle('active', tabId === 'filter');
   if (dom.tabBtnDashboard) dom.tabBtnDashboard.classList.toggle('active', tabId === 'dashboard');
   if (dom.tabBtnWorld) dom.tabBtnWorld.classList.toggle('active', tabId === 'world');
+  if (dom.tabBtnShareholders) dom.tabBtnShareholders.classList.toggle('active', tabId === 'shareholders');
   if (dom.tabBtnCrawler) dom.tabBtnCrawler.classList.toggle('active', tabId === 'crawler');
 
   if (dom.viewFilterTab) dom.viewFilterTab.classList.toggle('hidden', tabId !== 'filter');
   if (dom.viewDashboardTab) dom.viewDashboardTab.classList.toggle('hidden', tabId !== 'dashboard');
   if (dom.viewWorldTab) dom.viewWorldTab.classList.toggle('hidden', tabId !== 'world');
+  if (dom.viewShareholdersTab) dom.viewShareholdersTab.classList.toggle('hidden', tabId !== 'shareholders');
   if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.toggle('hidden', tabId !== 'crawler');
 
   if (tabId === 'dashboard') {
     loadDashboardOverview();
   } else if (tabId === 'world') {
     loadWorldMacroIntelligence();
+  } else if (tabId === 'shareholders') {
+    loadShareholdersOverview();
   } else if (tabId === 'crawler') {
     pollCrawlerStatus();
     loadCrawlerAuditList();
@@ -1284,10 +1295,10 @@ function initFeishuTableDragAndFreeze() {
     }
   });
 
-  // 4. 监听表格滚动：水平滚动时冻结线原位锁定不动！
+  // 4. 监听表格滚动：水平滚动时冻结线原位绝对锁定不动 (对齐飞书 Base 机制)
+  // 无需在 scroll 回调中重设 freezeLine.style.left，因为飞书冻结线物理坐标严格恒等于 totalFrozenWidth
   container.addEventListener('scroll', () => {
-    // 冻结线直接基于容器视口定位，无需改变 left 像素，确保原地不动
-    updateFreezeLinePosition();
+    // 飞书机制: 滚动时冻结线永远在同一个视口物理像素上，纹丝不动
   });
 
   // 初始应用冻结并定位冻结线
@@ -3176,6 +3187,7 @@ async function openStockDetail(code) {
   if (dom.viewFilterTab) dom.viewFilterTab.classList.add('hidden');
   if (dom.viewDashboardTab) dom.viewDashboardTab.classList.add('hidden');
   if (dom.viewWorldTab) dom.viewWorldTab.classList.add('hidden');
+  if (dom.viewShareholdersTab) dom.viewShareholdersTab.classList.add('hidden');
   if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.add('hidden');
 
   if (dom.viewStockDetailTab) {
@@ -3430,7 +3442,22 @@ function renderActiveStockChart() {
     bindChartCrosshair('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
     bindChartZoomAndDrawing('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
   } else {
-    let klines = stock.daily_bars && stock.daily_bars.length > 0 ? stock.daily_bars : generateClientFallbackDaily(stock.price);
+    // 需求5: 所有K线图必须源自真实数据，如果没有真实数据就提示无数据源
+    let klines = (stock.daily_bars && Array.isArray(stock.daily_bars) && stock.daily_bars.length > 0) 
+      ? stock.daily_bars 
+      : null;
+
+    if (!klines || klines.length === 0) {
+      dom.chartSvgContainer.innerHTML = `
+        <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
+          <div style="font-size: 2.2rem; margin-bottom: 0.8rem;">⚠️</div>
+          <div style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.4rem;">暂无官方真实 K 线数据源</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">该标的尚未获取到公开历史日K数据，系统严格遵循金融合规底座，绝不伪造虚假走势。</div>
+        </div>
+      `;
+      hideTooltip();
+      return;
+    }
     
     // 需求3: K线支持自定义时间区间筛选
     const sDate = dom.klineStartDate ? dom.klineStartDate.value : '';
@@ -3442,7 +3469,7 @@ function renderActiveStockChart() {
         return true;
       });
       if (klines.length === 0) {
-        klines = stock.daily_bars || generateClientFallbackDaily(stock.price);
+        klines = stock.daily_bars || [];
       }
     } else {
       // 滚轮或预设缩放 (需求1: 5天 / 10天 / 20天 / 60天 / 全部 走势图Tab自适应)
@@ -4060,6 +4087,152 @@ function generateClientFallbackDaily(price) {
 /**
  * 需求1: 关闭股票详情全屏页面，返回股票列表视图
  */
+// ====================================================
+// 需求1/2: 一级股东研究全景控制逻辑 (加载、筛选、排序与渲染)
+// ====================================================
+
+let shareholderState = {
+  category: 'all',
+  keyword: '',
+  sortBy: 'total_holding_amount',
+  sortDir: 'desc',
+  data: []
+};
+
+async function loadShareholdersOverview() {
+  const tbody = document.getElementById('shareholdersTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <div class="spinner"></div>
+        <div>正在深度穿透全市场十大流通股东持仓网络与重仓企业...</div>
+      </td>
+    </tr>
+  `;
+
+  try {
+    const params = new URLSearchParams({
+      category: shareholderState.category,
+      keyword: shareholderState.keyword,
+      sort_by: shareholderState.sortBy,
+      sort_dir: shareholderState.sortDir
+    });
+
+    const res = await fetch(`/api/shareholders/list?${params.toString()}`);
+    if (!res.ok) throw new Error('拉取股东列表失败');
+    const json = await res.json();
+    shareholderState.data = json.data || [];
+    renderShareholdersTable(shareholderState.data);
+  } catch (err) {
+    console.error('加载股东研究异常:', err);
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; color: var(--color-up); padding: 2rem;">
+          获取股东全景列表失败: ${err.message}
+        </td>
+      </tr>
+    `;
+  }
+}
+
+function renderShareholdersTable(list) {
+  const tbody = document.getElementById('shareholdersTableBody');
+  if (!tbody) return;
+
+  if (!list || list.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+          没有找到匹配的股东持仓记录
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = list.map(item => {
+    const isInd = item.category === 'individual';
+    const catBadge = isInd 
+      ? `<span class="sh-cat-tag sh-cat-individual">👤 个人牛散</span>`
+      : `<span class="sh-cat-tag sh-cat-institution">🏢 机构</span>`;
+
+    // 占股企业标签组 (点击可直达企业详情)
+    const companyPills = (item.companies || []).map(c => `
+      <span class="sh-company-pill" title="点击查看 ${c.name} 行情全景与K线" onclick="openStockDetail('${c.code}')">
+        <strong>${c.name}</strong>
+        <span class="pct">${c.hold_pct}%</span>
+      </span>
+    `).join('');
+
+    return `
+      <tr>
+        <td><span class="shareholder-id-badge">${item.holder_id}</span></td>
+        <td><span class="shareholder-name-cell">${item.holder_name}</span></td>
+        <td>${catBadge}</td>
+        <td>
+          <div class="sh-companies-container">
+            ${companyPills || '<span style="color: var(--text-muted);">--</span>'}
+          </div>
+        </td>
+        <td>
+          <strong style="color: #38bdf8; font-family: monospace; font-size: 1.05rem;">
+            ${item.company_count}
+          </strong> 家
+        </td>
+        <td>
+          <strong style="color: #f59e0b; font-family: monospace; font-size: 1.05rem;">
+            ${item.total_holding_amount > 0 ? item.total_holding_amount.toLocaleString() : '0.00'}
+          </strong> 亿
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterShareholderCategory(cat) {
+  shareholderState.category = cat;
+  if (dom.shCategoryControl) {
+    dom.shCategoryControl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-cat') === cat);
+    });
+  }
+  loadShareholdersOverview();
+}
+
+function executeShareholderSearch() {
+  if (dom.shKeywordInput) {
+    shareholderState.keyword = dom.shKeywordInput.value.trim();
+  }
+  loadShareholdersOverview();
+}
+
+function resetShareholderFilters() {
+  shareholderState.category = 'all';
+  shareholderState.keyword = '';
+  shareholderState.sortBy = 'total_holding_amount';
+  shareholderState.sortDir = 'desc';
+
+  if (dom.shCategoryControl) {
+    dom.shCategoryControl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-cat') === 'all');
+    });
+  }
+  if (dom.shKeywordInput) dom.shKeywordInput.value = '';
+  loadShareholdersOverview();
+}
+
+function sortShareholderTable(field) {
+  if (shareholderState.sortBy === field) {
+    shareholderState.sortDir = shareholderState.sortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    shareholderState.sortBy = field;
+    shareholderState.sortDir = 'desc';
+  }
+  loadShareholdersOverview();
+}
+
 function closeStockDetailPage() {
   if (dom.viewStockDetailTab) {
     dom.viewStockDetailTab.classList.add('hidden');
@@ -4069,6 +4242,8 @@ function closeStockDetailPage() {
     if (dom.viewDashboardTab) dom.viewDashboardTab.classList.remove('hidden');
   } else if (appState.currentTab === 'world') {
     if (dom.viewWorldTab) dom.viewWorldTab.classList.remove('hidden');
+  } else if (appState.currentTab === 'shareholders') {
+    if (dom.viewShareholdersTab) dom.viewShareholdersTab.classList.remove('hidden');
   } else if (appState.currentTab === 'crawler') {
     if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.remove('hidden');
   } else {

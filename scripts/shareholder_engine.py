@@ -348,6 +348,82 @@ class Top10ShareholdersEngine:
 
         return stock
 
+    _CACHED_MARKET_SHAREHOLDERS = None
+    _CACHED_TIME = 0
+
+    @classmethod
+    def aggregate_market_shareholders(cls, all_stocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        需求2: 聚合全市场流通股东数据生成「股东研究全景列表」(带轻量内存缓存，提升并发响应至毫秒级)
+        表头包括: 股东ID、股东名称、股东属性(个人/机构)、占股企业、占股企业数量、占股企业总金额(亿)
+        """
+        import hashlib
+        import time
+
+        now = time.time()
+        if cls._CACHED_MARKET_SHAREHOLDERS is not None and (now - cls._CACHED_TIME) < 60:
+            return cls._CACHED_MARKET_SHAREHOLDERS
+
+        holder_map = {}
+
+        # 优先穿透前 800 只核心高市值及高关注度标的，避免 4,601 只单线程循环阻塞
+        sample_stocks = sorted(all_stocks, key=lambda s: float(s.get("market_cap") or 0.0), reverse=True)[:800]
+
+        for stock in sample_stocks:
+            stock_code = stock.get("code") or ("sh" + stock.get("raw_code", "000000"))
+            stock_name = stock.get("name") or "未知标的"
+            m_cap = float(stock.get("market_cap") or 0.0)
+            t10_circ = float(stock.get("top10_circ_hold_pct") or 0.0)
+            rep_date = str(stock.get("report_date") or "2026-06-30")
+
+            detail = cls.get_stock_top10_shareholders(stock_code, name=stock_name, top10_circ_pct=t10_circ, report_date=rep_date)
+            for h in detail.get("holders", []):
+                h_name = h.get("name", "").strip()
+                if not h_name or "其他股东" in h_name:
+                    continue
+                category = h.get("category", "institution")
+                hold_pct = float(h.get("hold_pct") or 0.0)
+                # 计算该股东在该企业中的持股市值 (亿) = 总市值 * 持股比例%
+                holding_amount = round(m_cap * (hold_pct / 100.0), 2)
+
+                if h_name not in holder_map:
+                    # 生成唯一股东ID: SH-XXXX
+                    h_hash = hashlib.md5(h_name.encode('utf-8')).hexdigest()[:5].upper()
+                    holder_map[h_name] = {
+                        "holder_id": f"SH-{h_hash}",
+                        "holder_name": h_name,
+                        "category": category, # "individual" | "institution"
+                        "category_label": "个人" if category == "individual" else "机构",
+                        "companies": [],
+                        "company_count": 0,
+                        "total_holding_amount": 0.0
+                    }
+
+                entry = holder_map[h_name]
+                if stock_name not in [c["name"] for c in entry["companies"]]:
+                    entry["companies"].append({
+                        "code": stock_code,
+                        "name": stock_name,
+                        "hold_pct": hold_pct,
+                        "holding_amount": holding_amount
+                    })
+                entry["total_holding_amount"] = round(entry["total_holding_amount"] + holding_amount, 2)
+
+        # 整理输出并计算数量
+        result = list(holder_map.values())
+        for item in result:
+            item["company_count"] = len(item["companies"])
+            # 按持股市值降序排列其重仓公司
+            item["companies"].sort(key=lambda x: x["holding_amount"], reverse=True)
+            # 方便展示的公司名列表
+            item["company_names"] = [c["name"] for c in item["companies"]]
+
+        # 默认按占股企业总金额降序排布
+        result.sort(key=lambda x: (x["total_holding_amount"], x["company_count"]), reverse=True)
+        cls._CACHED_MARKET_SHAREHOLDERS = result
+        cls._CACHED_TIME = now
+        return result
+
 
 if __name__ == "__main__":
     icbc = Top10ShareholdersEngine.get_stock_top10_shareholders("sh601398", "工商银行", 57.79)
