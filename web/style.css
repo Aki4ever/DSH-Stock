@@ -1201,6 +1201,75 @@ body {
   font-size: 0.78rem;
 }
 
+/* 需求2: 股东穿透 ! 图标按钮样式 */
+.btn-holder-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  font-size: 11px;
+  font-weight: 800;
+  font-family: monospace;
+  cursor: pointer;
+  margin-left: 5px;
+  transition: all 0.2s ease;
+  vertical-align: middle;
+}
+
+.btn-holder-info:hover {
+  background: #38bdf8;
+  color: #0b1329;
+  transform: scale(1.15);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+}
+
+/* 股东异动三兄弟徽章 */
+.badge-holder-new {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  white-space: nowrap;
+}
+
+.badge-holder-change {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  white-space: nowrap;
+}
+
+.badge-holder-exit {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  white-space: nowrap;
+}
+
+.badge-holder-none {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* 需求1: 格式塔置顶宏观视界一级 Tab 顶栏 */
 .macro-scope-top-bar {
   margin-bottom: 1.2rem;

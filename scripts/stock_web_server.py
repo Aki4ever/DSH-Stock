@@ -395,6 +395,11 @@ class StockDataManager:
         end_idx = start_idx + page_size
         paged_data = matched[start_idx:end_idx]
 
+        # 需求2与需求3: 批量注入分红/总市值(%)及股东异动三兄弟指标
+        from scripts.shareholder_engine import Top10ShareholdersEngine
+        for s in paged_data:
+            Top10ShareholdersEngine.enrich_stock_holder_metrics(s)
+
         return paged_data, stats
 
 
@@ -655,6 +660,25 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "code": 200,
                 "symbol": symbol,
                 "data": events_data
+            })
+            return
+
+        # 3.8 需求2: 单只股票十大流通股东深度穿透端点 /api/stock/<code/shareholders
+        if url_path.startswith("/api/stock/") and url_path.endswith("/shareholders"):
+            parts = url_path.split("/")
+            symbol = parts[3] if len(parts) >= 4 else ""
+            stock_info = DATA_MANAGER.get_stock_detail(symbol) or {}
+            stk_name = str(stock_info.get("name") or "")
+            t10_circ = float(stock_info.get("top10_circ_hold_pct") or 0.0)
+            rep_date = str(stock_info.get("report_date") or "2024-06-30")
+            from scripts.shareholder_engine import Top10ShareholdersEngine
+            holders_data = Top10ShareholdersEngine.get_stock_top10_shareholders(
+                symbol, name=stk_name, top10_circ_pct=t10_circ, report_date=rep_date
+            )
+            self._send_json(200, {
+                "code": 200,
+                "symbol": symbol,
+                "data": holders_data
             })
             return
 

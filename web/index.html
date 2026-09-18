@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>【v2.3.0】A股多维量化筛选器 - DSH Stock Web</title>
+  <title>【v2.5.0】A股多维量化筛选器 - DSH Stock Web</title>
   <link rel="stylesheet" href="/web/style.css">
 </head>
 <body>
@@ -13,23 +13,23 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v2.3.0</span>
+      <span id="appVersionBadge" class="version-badge">v2.5.0</span>
       <span class="brand-tag">全市场主板+创业板</span>
     </div>
 
-    <!-- 顶栏页面 Tab 切换器 (四足鼎立: 筛选 | 仪表盘 | 外部宏观环境 | 采集中心) -->
+    <!-- 需求1: 顶栏页面 Tab 极简命名 (股票列表 | 仪表盘 | 宏观环境 | 数据中心) -->
     <nav class="nav-tabs">
       <button id="tabBtnFilter" class="nav-tab-btn active" onclick="switchMainTab('filter')">
-        <span>📊 行情与量化筛选</span>
+        <span>📈 股票列表</span>
       </button>
       <button id="tabBtnDashboard" class="nav-tab-btn" onclick="switchMainTab('dashboard')">
-        <span>📈 全市场全景仪表盘</span>
+        <span>📊 仪表盘</span>
       </button>
       <button id="tabBtnWorld" class="nav-tab-btn" onclick="switchMainTab('world')">
-        <span>🌍 外部宏观环境</span>
+        <span>🌍 宏观环境</span>
       </button>
       <button id="tabBtnCrawler" class="nav-tab-btn" onclick="switchMainTab('crawler')">
-        <span>🕷️ 独立数据采集中心</span>
+        <span>🗄️ 数据中心</span>
       </button>
     </nav>
 
@@ -357,11 +357,18 @@
               <th onclick="sortTable('circulating_cap')">流通市值 (亿) ⇅</th>
               <th onclick="sortTable('pe')">市盈率 PE ⇅</th>
               <th onclick="sortTable('dividend_count')">分红次数 ⇅</th>
-              <th onclick="sortTable('dividend_total_amount')">累计分红总额(亿) ⇅</th>
-              <th onclick="sortTable('listing_years')">上市总时长 ⇅</th>
+              <th onclick="sortTable('dividend_total_amount')">累计分红(亿) ⇅</th>
+              <!-- 需求2: 分红/总市值比率列 (高股息真实回报核心指标) -->
+              <th onclick="sortTable('div_to_cap_pct')" style="color: #38bdf8;" title="累计分红总额 / 最新总市值">分红/总市值 ⇅</th>
+              <th onclick="sortTable('listing_years')">上市时长 ⇅</th>
+              <!-- 需求2: 十大流通股东持股占比与穿透 ! 按钮 -->
               <th onclick="sortTable('top10_circ_hold_pct')">十大流通股东 ⇅</th>
+              <!-- 需求3: 股东异动三兄弟列 (新进、变动、退出) -->
+              <th>新进股东</th>
+              <th>变动股东</th>
+              <th>退出股东</th>
               <th onclick="sortTable('top10_hold_pct')">十大股东 ⇅</th>
-              <th>报告披露期</th>
+              <th>报告期</th>
               <th style="text-align: center;">操作</th>
             </tr>
           </thead>
@@ -1197,7 +1204,45 @@
         </div><!-- /#paneDividend -->
 
         <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
-          <button class="btn btn-secondary" onclick="closeStockDetail()">⬅️ 返回筛选列表</button>
+          <button class="btn btn-secondary" onclick="closeStockDetail()">⬅️ 返回股票列表</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 需求2: 十大流通股东专属穿透详情弹窗 (模态抽屉) -->
+  <div id="top10HoldersModal" class="modal-backdrop" style="display: none; z-index: 1050;">
+    <div class="modal-content" style="max-width: 900px; max-height: 88vh; overflow-y: auto;">
+      <div class="modal-header">
+        <div>
+          <h3 style="font-size: 1.2rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 0.5rem;">
+            <span>👥 前十大流通股东穿透详情</span>
+            <span id="holderModalStockBadge" class="brand-tag" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-size: 0.8rem;">贵州茅台 (600519)</span>
+          </h3>
+          <p style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.25rem;">
+            披露报告期: <span id="holderModalReportDate" style="color: #cbd5e1; font-weight: 600;">2024-06-30</span> ｜ 
+            十大流通股东合计持股: <strong id="holderModalTotalPct" style="color: #38bdf8;">--%</strong>
+          </p>
+        </div>
+        <button class="modal-close" onclick="closeTop10HoldersModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1rem 1.2rem;">
+        <table class="fin-data-table" style="width: 100%;">
+          <thead>
+            <tr>
+              <th style="width: 50px;">排名</th>
+              <th>股东名称</th>
+              <th style="text-align: right;">持股比例 (%)</th>
+              <th style="text-align: right;">与上期相比变动</th>
+              <th>股东与企业关系 / 属性</th>
+            </tr>
+          </thead>
+          <tbody id="holderModalTableBody">
+            <!-- 由 JS 动态插入十大流通股东明细 -->
+          </tbody>
+        </table>
+        <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
+          <button class="btn btn-secondary" onclick="closeTop10HoldersModal()">关闭</button>
         </div>
       </div>
     </div>
