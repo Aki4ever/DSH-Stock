@@ -534,8 +534,11 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow-x: auto;
+  max-height: 75vh; /* 开启纵向滚动吸顶 */
+  overflow-y: auto;
   box-shadow: var(--shadow-main);
   margin-bottom: 1.2rem;
+  position: relative;
 }
 
 .stock-table {
@@ -544,6 +547,21 @@ body {
   text-align: left;
   font-size: 0.86rem;
   white-space: nowrap;
+}
+
+/* 需求3: 向上滑动时表头吸附到顶部冻结住 (Sticky Header) */
+.stock-table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  background-color: #0b1329 !important;
+  z-index: 30 !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* 当表头单元格既是冻结列又是吸顶表头时，获得最高 z-index 45 */
+.stock-table thead th.col-frozen {
+  z-index: 45 !important;
+  background-color: #0b1329 !important;
 }
 
 .stock-table th {
@@ -1346,7 +1364,26 @@ body {
   cursor: default;
 }
 
-/* 同名流通股东企业标签 */
+/* 同名流通股东机构与企业标签 */
+.peer-holders-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: center;
+  max-width: 240px;
+  margin: 0 auto;
+}
+
+.peer-holder-tag {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.42rem;
+  background: rgba(192, 132, 252, 0.12);
+  color: #d8b4fe;
+  border: 1px solid rgba(192, 132, 252, 0.3);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 .peer-stocks-box {
   display: flex;
   flex-wrap: wrap;
@@ -1364,6 +1401,16 @@ body {
   border: 1px solid rgba(56, 189, 248, 0.25);
   border-radius: 4px;
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.peer-stock-tag:hover {
+  background: rgba(56, 189, 248, 0.3);
+  color: #ffffff;
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
 }
 
 /* 顶栏数据截取有效期常显徽章 */

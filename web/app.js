@@ -9,7 +9,7 @@
 
 // 全局应用状态
 const appState = {
-  version: 'v1.6.0',
+  version: 'v2.9.0',
   currentTab: 'filter', // 'filter' | 'dashboard' | 'crawler'
   market: 'all',
   board: 'all',
@@ -48,7 +48,7 @@ const appState = {
     'raw_code', 'name', 'market', 'board', 'constituent', 'price', 'change_pct',
     'market_cap', 'circulating_cap', 'pe', 'dividend_count', 'dividend_total_amount',
     'div_to_cap_pct', 'listing_years', 'div_freq', 'ipo_date', 'top10_circ_hold_pct', 'holder_new_count',
-    'holder_change_count', 'holder_exit_count', 'peer_companies', 'top10_hold_pct', 'report_date', 'action'
+    'holder_change_count', 'holder_exit_count', 'peer_holders', 'peer_companies', 'top10_hold_pct', 'report_date', 'action'
   ],
   freezeColCount: 2, // 默认冻结前 2 列 (代码、股票名称)
 
@@ -132,6 +132,7 @@ const dom = {
   mainStockTable: document.getElementById('mainStockTable'),
   stockTableHeaderRow: document.getElementById('stockTableHeaderRow'),
   tableFreezeLine: document.getElementById('tableFreezeLine'),
+  dataValidityBadge: document.getElementById('dataValidityBadge'),
 
   // Filter 控件
   filterDateInput: document.getElementById('filterDateInput'),
@@ -466,6 +467,21 @@ function setWorldQuickDateRange(rangeType, evt = null) {
 }
 
 /**
+ * 需求1: 动态更新顶栏真实快照截取日期
+ */
+function updateDataValidityDateBadge(dateStr) {
+  if (!dom.dataValidityBadge || !dateStr) return;
+  let formatted = dateStr;
+  if (dateStr.includes('-')) {
+    const p = dateStr.split('-');
+    if (p.length === 3) {
+      formatted = `${p[0]}年${parseInt(p[1], 10)}月${parseInt(p[2], 10)}日`;
+    }
+  }
+  dom.dataValidityBadge.textContent = `📅 数据截取: ${formatted}`;
+}
+
+/**
  * 仪表盘快速日期区间设定
  */
 function setDashboardDateRange(rangeType, evt = null) {
@@ -792,6 +808,11 @@ async function executeFilter() {
     const stats = result.stats || {};
     appState.totalMatched = stats.matched_count || 0;
 
+    // 需求1: 真实且同步的数据快照截取日期更新
+    if (stats.filter_date || stats.snapshot_date) {
+      updateDataValidityDateBadge(stats.filter_date || stats.snapshot_date);
+    }
+
     dom.matchedCount.textContent = (stats.matched_count || 0).toLocaleString();
     dom.statAvgPrice.textContent = `¥${(stats.avg_price || 0).toFixed(2)}`;
 
@@ -957,7 +978,13 @@ function renderStockTable() {
     // 需求3: 同名流通股东企业网络标签呈现 (点击弹出专属跨企业网络穿透弹窗)
     const peers = stock.peer_companies || [];
     const peerHtml = peers.length > 0 
-      ? `<div class="peer-stocks-box" style="cursor: pointer;" onclick="event.stopPropagation(); openPeerCompaniesModal('${stock.code}', '${stock.name}')">${peers.map(p => `<span class="peer-stock-tag" title="点击查看与 ${stock.name} 具有共同股东的关联企业详情">${p}</span>`).join('')}</div>`
+      ? `<div class="peer-stocks-box">${peers.map(p => `<span class="peer-stock-tag" title="点击直接打开 ${p} 的全量K线与行情详情" onclick="event.stopPropagation(); openStockDetailByName('${p}')">${p}</span>`).join('')}</div>`
+      : `<span style="color: var(--text-muted); font-size: 0.78rem;">--</span>`;
+
+    // 需求4: 同名流通股东名称标签呈现
+    const peerHolders = stock.peer_holders || [];
+    const peerHoldersHtml = peerHolders.length > 0
+      ? `<div class="peer-holders-box">${peerHolders.map(h => `<span class="peer-holder-tag" title="重合流通股东: ${h}">${h}</span>`).join('')}</div>`
       : `<span style="color: var(--text-muted); font-size: 0.78rem;">--</span>`;
 
     // 动态按用户自定义 columnOrder 排序列
@@ -982,6 +1009,7 @@ function renderStockTable() {
       holder_new_count: () => `<td>${btnNew}</td>`,
       holder_change_count: () => `<td>${btnChange}</td>`,
       holder_exit_count: () => `<td>${btnExit}</td>`,
+      peer_holders: () => `<td>${peerHoldersHtml}</td>`,
       peer_companies: () => `<td>${peerHtml}</td>`,
       top10_hold_pct: () => `<td style="color: #c084fc; font-weight: 600;">${top10Hold}</td>`,
       report_date: () => `<td style="color: var(--text-muted); font-size: 0.8rem;">${reportDate}</td>`,
@@ -1036,6 +1064,11 @@ function initFeishuTableDragAndFreeze() {
           const insertAt = savedOrder.indexOf('div_freq');
           if (insertAt !== -1) savedOrder.splice(insertAt + 1, 0, 'ipo_date');
           else savedOrder.push('ipo_date');
+        }
+        if (!savedOrder.includes('peer_holders')) {
+          const insertAt = savedOrder.indexOf('peer_companies');
+          if (insertAt !== -1) savedOrder.splice(insertAt, 0, 'peer_holders');
+          else savedOrder.push('peer_holders');
         }
         appState.columnOrder = savedOrder;
         reorderHeaderDomByColumnOrder();
@@ -1238,7 +1271,7 @@ function applyTableFreezeColumns() {
 }
 
 /**
- * 更新冻结分割线像素位置 (固定在表格可视容器左边缘起的绝对视口位置，原地不动！)
+ * 需求2: 更新冻结分割线像素位置 (绝对物理锚定！未主动拖拽调整前，固定在左侧固定像素位置，无论表格横滑还是竖滑绝不移动！)
  */
 function updateFreezeLinePosition() {
   const table = dom.mainStockTable;
@@ -1250,12 +1283,11 @@ function updateFreezeLinePosition() {
   const freezeCount = appState.freezeColCount || 2;
   const ths = Array.from(headerRow.querySelectorAll('th'));
   if (ths.length >= freezeCount && freezeCount > 0) {
-    // 计算前 freezeCount 列的总宽度（即固定在可视区左侧的像素宽度）
     let totalFrozenWidth = 0;
     for (let i = 0; i < freezeCount; i++) {
       totalFrozenWidth += ths[i].offsetWidth;
     }
-    // 关键修复：直接等于前 N 列的固定宽度，不叠加 scrollLeft，实现表格移动时冻结线在原地！
+    // 强制锚定在左侧可视边缘后的恒定像素坐标上，无论 table 水平滚多远，冻结线在原地绝对静止！
     freezeLine.style.left = `${totalFrozenWidth}px`;
     freezeLine.style.display = 'block';
   } else {
@@ -1430,8 +1462,8 @@ function renderPeerCompaniesTable(peers, currentStockName) {
         </span>
       </td>
       <td style="text-align: center;">
-        <button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.75rem;" onclick="event.stopPropagation(); closePeerCompaniesModal(); searchAndOpenStockByName('${peerName}')">
-          透视该标的 ➔
+        <button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.75rem;" onclick="event.stopPropagation(); closePeerCompaniesModal(); openStockDetailByName('${peerName}')">
+          透视该标的K线 ➔
         </button>
       </td>
     `;
@@ -1439,9 +1471,53 @@ function renderPeerCompaniesTable(peers, currentStockName) {
   });
 }
 
-function searchAndOpenStockByName(name) {
+/**
+ * 需求5: 根据股票名称秒级定位并直接呼出该股票的详情与K线图谱
+ */
+function openStockDetailByName(name) {
+  if (!name) return;
+  const cleanTargetName = name.trim();
+
+  // 1. 优先在当前已检索到的列表中精准查找
+  if (appState.stocksList && appState.stocksList.length > 0) {
+    const found = appState.stocksList.find(s => s.name === cleanTargetName || s.name.includes(cleanTargetName));
+    if (found) {
+      openStockDetail(found.code);
+      return;
+    }
+  }
+
+  // 2. 常见关联白马股快速映射
+  const commonMap = {
+    '工商银行': 'sh601398',
+    '贵州茅台': 'sh600519',
+    '中国平安': 'sh601318',
+    '招商银行': 'sh600036',
+    '宁德时代': 'sz300750',
+    '五粮液': 'sz000858',
+    '比亚迪': 'sz002594',
+    '美的集团': 'sz000333',
+    '格力电器': 'sz000651',
+    '三一重工': 'sh600031',
+    '中信证券': 'sh600030',
+    '中国中免': 'sh601888',
+    '恒瑞医药': 'sh600276',
+    '伊利股份': 'sh600887',
+    '紫金矿业': 'sh601899',
+    '中国银行': 'sh601988',
+    '农业银行': 'sh601288',
+    '中国石化': 'sh600028',
+    '中国石油': 'sh601857'
+  };
+
+  if (commonMap[cleanTargetName]) {
+    openStockDetail(commonMap[cleanTargetName]);
+    return;
+  }
+
+  // 3. 兜底通过关键字搜索过滤
   if (dom.keywordInput) {
-    dom.keywordInput.value = name;
+    dom.keywordInput.value = cleanTargetName;
     executeFilter();
   }
 }
@@ -2379,6 +2455,9 @@ async function checkServerHealth() {
       updateServerStatusUI(data.status || 'running', latency, data);
       if (data.version && data.version !== appState.version) {
         syncVersionAndTitle(data.version);
+      }
+      if (data.snapshot_date) {
+        updateDataValidityDateBadge(data.snapshot_date);
       }
     } else {
       updateServerStatusUI('offline');

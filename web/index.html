@@ -13,7 +13,7 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v2.6.0</span>
+      <span id="appVersionBadge" class="version-badge">v2.9.0</span>
       <!-- 需求1: 顶部常显数据快照截取有效期 -->
       <span id="dataValidityBadge" class="data-validity-badge" title="当前全市场量化行情与财务底册快照截取时间">📅 数据截取: 2026年9月17日</span>
       <span class="brand-tag">全市场主板+创业板</span>
@@ -491,6 +491,13 @@
                 <div class="col-header-box">
                   <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
                   <span class="col-title">退出股东</span> <span class="sort-indicator">⇅</span>
+                </div>
+              </th>
+              <!-- 需求4: 新增列同名流通股东 -->
+              <th data-col="peer_holders" draggable="true">
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title" title="展示对应的所有同名的流通股东机构名称">同名流通股东</span>
                 </div>
               </th>
               <!-- 需求2: 新增同名流通股东企业列 -->

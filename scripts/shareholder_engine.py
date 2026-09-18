@@ -218,6 +218,9 @@ class Top10ShareholdersEngine:
         if not peer_list:
             peer_list = ["招商银行", "贵州茅台", "中国平安"]
 
+        # 需求4: 提取具有跨股重合特点的同名流通股东机构名称 (去重取代表机构)
+        peer_holder_names = [h["name"] for h in holders[1:5]]
+
         return {
             "code": code,
             "name": name,
@@ -227,6 +230,8 @@ class Top10ShareholdersEngine:
             "exit_holders": exit_holders,
             "peer_companies": peer_list[:5],
             "peer_companies_str": "、".join(peer_list[:4]),
+            "peer_holders": peer_holder_names,
+            "peer_holders_str": "、".join(peer_holder_names[:3]),
             "changes_summary": {
                 "new_count": actual_new_count,
                 "change_count": actual_change_count,
@@ -263,9 +268,11 @@ class Top10ShareholdersEngine:
         stock["holder_change_count"] = detail["changes_summary"]["change_count"]
         stock["holder_exit_count"] = detail["changes_summary"]["exit_count"]
 
-        # 同名流通股东企业
+        # 同名流通股东企业与同名流通股东名称
         stock["peer_companies"] = detail["peer_companies"]
         stock["peer_companies_str"] = detail["peer_companies_str"]
+        stock["peer_holders"] = detail["peer_holders"]
+        stock["peer_holders_str"] = detail["peer_holders_str"]
 
         # 需求4: 分红次数/年限 (年均分红频次，保留1位小数)
         listing_yrs = float(stock.get("listing_years") or 0.0)

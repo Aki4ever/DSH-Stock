@@ -387,6 +387,9 @@ class StockDataManager:
         total_cap = round(sum(s["market_cap"] for s in matched), 2) if total_matched > 0 else 0.0
         total_circ_cap = round(sum(s["circulating_cap"] for s in matched), 2) if total_matched > 0 else 0.0
 
+        # 需求1: 真实且同步的数据快照截取日期
+        real_snapshot_date = filter_date or datetime.now().strftime("%Y-%m-%d")
+
         stats = {
             "total_universe_count": len(candidates),
             "matched_count": total_matched,
@@ -394,7 +397,8 @@ class StockDataManager:
             "avg_change_pct": avg_change,
             "total_market_cap": total_cap,
             "total_circ_cap": total_circ_cap,
-            "filter_date": filter_date or datetime.now().strftime("%Y-%m-%d"),
+            "filter_date": real_snapshot_date,
+            "snapshot_date": real_snapshot_date,
             "page": page,
             "page_size": page_size,
             "server_state": current_state
@@ -708,6 +712,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "csi50_count": len(DATA_MANAGER.csi50_set),
                 "csi100_count": len(DATA_MANAGER.csi100_set),
                 "db_path": DB_FILE,
+                "snapshot_date": datetime.now().strftime("%Y-%m-%d"),
                 "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             self._send_json(200, data)
