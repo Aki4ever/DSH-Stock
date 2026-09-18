@@ -2923,6 +2923,47 @@ function setChartZoomWindow(windowSize) {
 }
 
 /**
+ * 需求1/2: 计算序列的统计概要数据 (平均值、最小值、最大值、中位数)
+ * @param {Array<number>} arr 数值数组
+ * @returns {{mean: number, min: number, max: number, median: number}}
+ */
+function calculateDistributionSummary(arr) {
+  if (!arr || arr.length === 0) {
+    return { mean: 0, min: 0, max: 0, median: 0 };
+  }
+  const valid = arr.map(v => Number(v) || 0).filter(v => !isNaN(v));
+  if (valid.length === 0) {
+    return { mean: 0, min: 0, max: 0, median: 0 };
+  }
+
+  // 1. 最小值与最大值
+  let min = valid[0];
+  let max = valid[0];
+  let sum = 0;
+  for (let i = 0; i < valid.length; i++) {
+    const v = valid[i];
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+  }
+
+  // 2. 平均值
+  const mean = sum / valid.length;
+
+  // 3. 中位数 (按升序排列取中)
+  const sorted = [...valid].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+
+  return {
+    mean: roundTo(mean, 2),
+    min: roundTo(min, 2),
+    max: roundTo(max, 2),
+    median: roundTo(median, 2)
+  };
+}
+
+/**
  * 需求2: 智能自动画线算法 (仅画 1 根线，这根线必须使得交汇金额达到全局最大值)
  * 判定公式: Low_t <= P <= High_t, 求解 argmax_P Sum(Amount_t)
  */
@@ -3953,6 +3994,40 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
   const maxSubVal = Math.max(...subVals, 0.1) * 1.1;
   const subValToH = (v) => (v / maxSubVal) * (sh - 10);
 
+  // 需求1/2: 统计当前可视K线窗口内副图的四维分布概要 (平均、最小、最大、中位数)
+  const subStats = calculateDistributionSummary(subVals);
+  let summaryBadgesSvg = '';
+  if (isVol) {
+    // 交易量四维分布概要 (万手折算或手)
+    const fmtVol = (val) => {
+      if (val >= 100000000) return (val / 100000000).toFixed(2) + '亿手';
+      if (val >= 10000) return (val / 10000).toFixed(1) + '万手';
+      return Math.round(val) + '手';
+    };
+    summaryBadgesSvg = `
+      <g class="sub-summary-group">
+        <text x="${m.left + 115}" y="${subTopY + 14}" fill="#38bdf8" font-size="10" font-family="monospace">
+          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#38bdf8">${fmtVol(subStats.mean)}</tspan>
+          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${fmtVol(subStats.min)}</tspan>
+          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${fmtVol(subStats.max)}</tspan>
+          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${fmtVol(subStats.median)}</tspan>
+        </text>
+      </g>
+    `;
+  } else {
+    // 交易额四维分布概要 (单位: 亿)
+    summaryBadgesSvg = `
+      <g class="sub-summary-group">
+        <text x="${m.left + 115}" y="${subTopY + 14}" fill="#f59e0b" font-size="10" font-family="monospace">
+          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#f59e0b">${subStats.mean.toFixed(2)}亿</tspan>
+          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${subStats.min.toFixed(2)}亿</tspan>
+          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${subStats.max.toFixed(2)}亿</tspan>
+          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${subStats.median.toFixed(2)}亿</tspan>
+        </text>
+      </g>
+    `;
+  }
+
   let candles = '';
   let subBars = '';
   let ma5Path = '';
@@ -4055,6 +4130,7 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
       <!-- 副图区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
       <text x="${m.left + 8}" y="${subTopY + 14}" fill="#94a3b8" font-size="10" font-weight="600">${subTitle}</text>
+      ${summaryBadgesSvg}
       <text x="${m.left - 8}" y="${subTopY + 14}" fill="#64748b" font-size="10" text-anchor="end" font-family="monospace">${maxSubVal.toFixed(1)}${subUnit}</text>
       
       <!-- 副图柱状图 -->
@@ -4627,6 +4703,19 @@ function renderActiveIndexChart() {
     const getY = p => margin.top + (1 - (p - minPrice) / (maxPrice - minPrice)) * (mainHeight - margin.top);
     const getSubY = a => subTop + (1 - (a / maxAmount)) * subHeight;
 
+    // 需求1: 计算大盘指数K线当前可视周期内成交额的四维分布概要 (平均、最小、最大、中位数)
+    const indexAmtStats = calculateDistributionSummary(klines.map(k => k.amount_yi));
+    const indexSummarySvg = `
+      <g class="sub-summary-group">
+        <text x="${margin.left + 160}" y="${subTop + 16}" fill="#f59e0b" font-size="10" font-family="monospace">
+          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#f59e0b">${indexAmtStats.mean.toFixed(2)}亿</tspan>
+          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${indexAmtStats.min.toFixed(2)}亿</tspan>
+          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${indexAmtStats.max.toFixed(2)}亿</tspan>
+          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${indexAmtStats.median.toFixed(2)}亿</tspan>
+        </text>
+      </g>
+    `;
+
     // 蜡烛与仅成交金额柱
     let candlesSvg = '';
     let subBarsSvg = '';
@@ -4690,6 +4779,7 @@ function renderActiveIndexChart() {
         <!-- 副图网格 (仅成交金额) -->
         <rect x="${margin.left}" y="${subTop}" width="${plotWidth}" height="${subHeight}" fill="none" stroke="rgba(51, 65, 85, 0.4)"/>
         <text x="${margin.left + 8}" y="${subTop + 16}" fill="#f59e0b" font-size="11" font-weight="700">💰 副图: 成交金额 (亿元)</text>
+        ${indexSummarySvg}
 
         <!-- 蜡烛与副图 -->
         ${candlesSvg}
