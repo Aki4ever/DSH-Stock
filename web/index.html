@@ -354,89 +354,140 @@
           <thead>
             <tr id="stockTableHeaderRow">
               <th data-col="raw_code" draggable="true" onclick="handleHeaderSort('raw_code', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">代码</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">代码</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="name" draggable="true" onclick="handleHeaderSort('name', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">股票名称</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">股票名称</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="market" draggable="true">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">股市</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">股市</span>
+                </div>
               </th>
               <th data-col="board" draggable="true">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">板块</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">板块</span>
+                </div>
               </th>
               <th data-col="constituent" draggable="true">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">成分股</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">成分股</span>
+                </div>
               </th>
               <th data-col="price" draggable="true" onclick="handleHeaderSort('price', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">最新价 (元)</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">最新价 (元)</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="change_pct" draggable="true" onclick="handleHeaderSort('change_pct', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">涨跌幅</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">涨跌幅</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="market_cap" draggable="true" onclick="handleHeaderSort('market_cap', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">总市值 (亿)</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">总市值 (亿)</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="circulating_cap" draggable="true" onclick="handleHeaderSort('circulating_cap', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">流通市值 (亿)</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">流通市值 (亿)</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="pe" draggable="true" onclick="handleHeaderSort('pe', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">市盈率 PE</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">市盈率 PE</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="dividend_count" draggable="true" onclick="handleHeaderSort('dividend_count', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">分红次数</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">分红次数</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="dividend_total_amount" draggable="true" onclick="handleHeaderSort('dividend_total_amount', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">累计分红(亿)</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">累计分红(亿)</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <!-- 需求2: 分红/总市值比率列 -->
               <th data-col="div_to_cap_pct" draggable="true" onclick="handleHeaderSort('div_to_cap_pct', event)" style="color: #38bdf8;" title="累计分红总额 / 最新总市值">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">分红/总市值</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">分红/总市值</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="listing_years" draggable="true" onclick="handleHeaderSort('listing_years', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">上市时长</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">上市时长</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <!-- 需求2: 十大流通股东持股占比与穿透 ! 按钮 -->
               <th data-col="top10_circ_hold_pct" draggable="true" onclick="handleHeaderSort('top10_circ_hold_pct', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">十大流通股东</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">十大流通股东</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
-              <!-- 需求3/4: 股东异动三兄弟列 (新进、变动、退出) -->
-              <th data-col="holder_new_count" draggable="true">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">新进股东</span>
+              <!-- 需求4: 股东异动三兄弟列 (新进、变动、退出，纯数字展示并支持精准升降序排序) -->
+              <th data-col="holder_new_count" draggable="true" onclick="handleHeaderSort('holder_new_count', event)">
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">新进股东</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
-              <th data-col="holder_change_count" draggable="true">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">变动股东</span>
+              <th data-col="holder_change_count" draggable="true" onclick="handleHeaderSort('holder_change_count', event)">
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">变动股东</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
-              <th data-col="holder_exit_count" draggable="true">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">退出股东</span>
+              <th data-col="holder_exit_count" draggable="true" onclick="handleHeaderSort('holder_exit_count', event)">
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">退出股东</span> <span class="sort-indicator">⇅</span>
+                </div>
+              </th>
+              <!-- 需求2: 新增同名流通股东企业列 -->
+              <th data-col="peer_companies" draggable="true">
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title" title="记录所有跟自己十大流通股东同名的其他关联企业">同名流通股东企业</span>
+                </div>
               </th>
               <th data-col="top10_hold_pct" draggable="true" onclick="handleHeaderSort('top10_hold_pct', event)">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">十大股东</span> <span class="sort-indicator">⇅</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">十大股东</span> <span class="sort-indicator">⇅</span>
+                </div>
               </th>
               <th data-col="report_date" draggable="true">
-                <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
-                <span class="col-title">报告期</span>
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">报告期</span>
+                </div>
               </th>
-              <th data-col="action" style="text-align: center;">操作</th>
+              <th data-col="action">
+                <div class="col-header-box">
+                  <span class="col-title">操作</span>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody id="stockTableBody">
