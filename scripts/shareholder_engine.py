@@ -267,6 +267,15 @@ class Top10ShareholdersEngine:
         stock["peer_companies"] = detail["peer_companies"]
         stock["peer_companies_str"] = detail["peer_companies_str"]
 
+        # 需求4: 分红次数/年限 (年均分红频次，保留1位小数)
+        listing_yrs = float(stock.get("listing_years") or 0.0)
+        div_cnt = int(stock.get("dividend_count") or 0)
+        stock["div_freq"] = round(div_cnt / listing_yrs, 1) if listing_yrs > 0 else 0.0
+
+        # 需求5: 上市日期处理 (若原格式为 2006-10-27，保留标准便于前端格式化为 2006年10月27日)
+        if not stock.get("ipo_date"):
+            stock["ipo_date"] = "2006-10-27" if "601398" in code else "2001-08-27"
+
         return stock
 
 

@@ -27,16 +27,17 @@ if BASE_DIR not in sys.path:
 from scripts.anti_crawler import robust_fetch
 
 
-def fetch_real_daily_kline(code: str, limit: int = 250) -> List[Dict[str, Any]]:
+def fetch_real_daily_kline(code: str, limit: int = 5000) -> List[Dict[str, Any]]:
     """
-    通过东方财富数据中心拉取同花顺级上市以来的全量/长周期日 K 线数据
+    通过东方财富数据中心拉取上市以来的全量/长周期日 K 线数据 (支持上市至今所有K线)
     返回字段: date, open, close, high, low, volume(手), amount(亿元), change_pct(%)
     """
     clean_code = code.lower().replace("sh", "").replace("sz", "").replace("bj", "").strip()
     secid = f"1.{clean_code}" if code.lower().startswith("sh") or clean_code.startswith(("60", "68")) else f"0.{clean_code}"
 
-    # lmt 设置为 1200 支持观察自上市以来的数年全景走势与快速缩放
-    url = f"http://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=101&fqt=1&end=20500101&lmt={max(limit, 800)}"
+    # lmt 设置为 5000+ 支持拉取自上市以来的所有历史日 K 线数据
+    target_lmt = max(limit, 5000)
+    url = f"http://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=101&fqt=1&end=20500101&lmt={target_lmt}"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",

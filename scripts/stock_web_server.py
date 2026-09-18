@@ -247,8 +247,8 @@ class StockDataManager:
             is_mock=stock.get("is_mock", False)
         )
 
-        # 获取真实日K线与真实分时走势
-        daily_bars = fetch_real_daily_kline(norm, limit=60)
+        # 获取上市以来的全量真实日K线与真实分时走势 (支持全周期上市至今走势)
+        daily_bars = fetch_real_daily_kline(norm, limit=5000)
         timeline_data = fetch_real_timeline(norm)
 
         # 获取上市公司基本资料与四大深度财务报表
@@ -295,6 +295,9 @@ class StockDataManager:
         f_max_top10_circ = to_float(params.get("max_top10_circ"))
         f_min_top10 = to_float(params.get("min_top10"))
         f_max_top10 = to_float(params.get("max_top10"))
+        # 需求2: 上市时长区间 (年)
+        f_min_listing_years = to_float(params.get("min_listing_years"))
+        f_max_listing_years = to_float(params.get("max_listing_years"))
         keyword = str(params.get("keyword", "")).strip().lower()
 
         page = int(params.get("page", 1))
@@ -365,6 +368,12 @@ class StockDataManager:
             if f_min_top10 is not None and s["top10_hold_pct"] < f_min_top10:
                 continue
             if f_max_top10 is not None and s["top10_hold_pct"] > f_max_top10:
+                continue
+            # 需求2: 上市时长联合判定
+            s_listing_years = float(s.get("listing_years") or 0.0)
+            if f_min_listing_years is not None and s_listing_years < f_min_listing_years:
+                continue
+            if f_max_listing_years is not None and s_listing_years > f_max_listing_years:
                 continue
 
             matched.append(dict(s))

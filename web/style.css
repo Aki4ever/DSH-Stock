@@ -1255,33 +1255,24 @@ body {
   border-left: 2px solid #38bdf8 !important;
 }
 
-/* 飞书多维表格可拖动冻结分割线 (原位视口绝对定位) */
+/* 飞书多维表格可拖动冻结分割线 (需求1: 极简纤细贴边微光竖线，移除悬浮tag) */
 .table-freeze-line {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, #38bdf8, rgba(56, 189, 248, 0.4));
-  box-shadow: 2px 0 10px rgba(56, 189, 248, 0.6);
+  width: 2px;
+  background: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.8), 0 0 16px rgba(56, 189, 248, 0.4);
   z-index: 35; /* 高于 sticky 列 (20) */
   cursor: col-resize;
   pointer-events: auto;
-  transition: left 0.05s ease-out;
+  transition: left 0.04s ease-out, width 0.15s, background-color 0.15s;
 }
 
-.freeze-line-handle {
-  position: absolute;
-  top: 6px;
-  left: -28px;
+.table-freeze-line:hover {
+  width: 4px;
   background: #0284c7;
-  color: #ffffff;
-  font-size: 0.68rem;
-  font-weight: 700;
-  padding: 0.15rem 0.45rem;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  white-space: nowrap;
-  pointer-events: none;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 1);
 }
 
 /* 冻结列样式 (position: sticky) */

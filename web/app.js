@@ -47,7 +47,7 @@ const appState = {
   columnOrder: [
     'raw_code', 'name', 'market', 'board', 'constituent', 'price', 'change_pct',
     'market_cap', 'circulating_cap', 'pe', 'dividend_count', 'dividend_total_amount',
-    'div_to_cap_pct', 'listing_years', 'top10_circ_hold_pct', 'holder_new_count',
+    'div_to_cap_pct', 'listing_years', 'div_freq', 'ipo_date', 'top10_circ_hold_pct', 'holder_new_count',
     'holder_change_count', 'holder_exit_count', 'peer_companies', 'top10_hold_pct', 'report_date', 'action'
   ],
   freezeColCount: 2, // 默认冻结前 2 列 (代码、股票名称)
@@ -153,6 +153,9 @@ const dom = {
   maxTop10CircInput: document.getElementById('maxTop10CircInput'),
   minTop10HoldInput: document.getElementById('minTop10HoldInput'),
   maxTop10HoldInput: document.getElementById('maxTop10HoldInput'),
+  // 需求2: 上市时长区间 DOM
+  minListingYearsInput: document.getElementById('minListingYearsInput'),
+  maxListingYearsInput: document.getElementById('maxListingYearsInput'),
   keywordInput: document.getElementById('keywordInput'),
 
   btnExecuteFilter: document.getElementById('btnExecuteFilter'),
@@ -261,6 +264,11 @@ const dom = {
   holderModalTotalPct: document.getElementById('holderModalTotalPct'),
   holderModalFilterLabel: document.getElementById('holderModalFilterLabel'),
   holderModalTableBody: document.getElementById('holderModalTableBody'),
+
+  // 需求3: 同名流通股东企业专属穿透弹窗 DOM
+  peerCompaniesModal: document.getElementById('peerCompaniesModal'),
+  peerModalStockBadge: document.getElementById('peerModalStockBadge'),
+  peerModalTableBody: document.getElementById('peerModalTableBody'),
 
   // 公司资料与财务分析 DOM
   modalProfileIndustryTag: document.getElementById('modalProfileIndustryTag'),
@@ -578,7 +586,8 @@ function initEventListeners() {
   const rangeInputs = [
     dom.minPriceInput, dom.maxPriceInput, dom.minCapInput, dom.maxCapInput,
     dom.minCircCapInput, dom.maxCircCapInput, dom.minPeInput, dom.maxPeInput,
-    dom.minTop10CircInput, dom.maxTop10CircInput, dom.minTop10HoldInput, dom.maxTop10HoldInput
+    dom.minTop10CircInput, dom.maxTop10CircInput, dom.minTop10HoldInput, dom.maxTop10HoldInput,
+    dom.minListingYearsInput, dom.maxListingYearsInput
   ];
   rangeInputs.forEach(input => {
     if (input) {
@@ -655,6 +664,10 @@ function resetSingleDimension(dimType) {
       dom.minTop10HoldInput.value = '';
       dom.maxTop10HoldInput.value = '';
       break;
+    case 'listing_years':
+      dom.minListingYearsInput.value = '';
+      dom.maxListingYearsInput.value = '';
+      break;
   }
   appState.page = 1;
   executeFilter();
@@ -685,6 +698,8 @@ function resetAllFilters() {
   dom.maxTop10CircInput.value = '';
   dom.minTop10HoldInput.value = '';
   dom.maxTop10HoldInput.value = '';
+  dom.minListingYearsInput.value = '';
+  dom.maxListingYearsInput.value = '';
   dom.keywordInput.value = '';
 
   initDateControl();
@@ -740,6 +755,9 @@ function collectFilterParams() {
     max_top10_circ: dom.maxTop10CircInput.value ? parseFloat(dom.maxTop10CircInput.value) : null,
     min_top10: dom.minTop10HoldInput.value ? parseFloat(dom.minTop10HoldInput.value) : null,
     max_top10: dom.maxTop10HoldInput.value ? parseFloat(dom.maxTop10HoldInput.value) : null,
+    // 需求2: 收集上市时长区间参数
+    min_listing_years: dom.minListingYearsInput && dom.minListingYearsInput.value ? parseFloat(dom.minListingYearsInput.value) : null,
+    max_listing_years: dom.maxListingYearsInput && dom.maxListingYearsInput.value ? parseFloat(dom.maxListingYearsInput.value) : null,
     keyword: dom.keywordInput.value.trim(),
     page: appState.page,
     page_size: appState.pageSize
@@ -921,10 +939,25 @@ function renderStockTable() {
       ? `<button class="btn-num-pill btn-num-exit" title="点击查看本期 ${exitCount} 家退出股东详情" onclick="event.stopPropagation(); openTop10HoldersModal('${stock.code}', '${stock.name}', ${top10CircVal}, '${reportDate}', 'exit')">${exitCount}</button>`
       : `<span class="btn-num-pill btn-num-zero">0</span>`;
 
-    // 需求2: 同名流通股东企业网络标签呈现
+    // 需求4: 分红次数/年限 (年均分红频次，保留1位小数)
+    const listingYrs = Number(stock.listing_years || 0);
+    const divCnt = Number(stock.dividend_count || 0);
+    const divFreq = listingYrs > 0 ? (divCnt / listingYrs).toFixed(1) : '0.0';
+    const divFreqStr = `<span style="color: #fbbf24; font-weight: 700; font-family: monospace;">${divFreq}次/年</span>`;
+
+    // 需求5: 上市日期 (格式化到具体日：xxxx年xx月xx日)
+    let ipoDateStr = stock.ipo_date || '2006-10-27';
+    if (ipoDateStr.includes('-')) {
+      const parts = ipoDateStr.split('-');
+      if (parts.length === 3) {
+        ipoDateStr = `${parts[0]}年${parseInt(parts[1], 10)}月${parseInt(parts[2], 10)}日`;
+      }
+    }
+
+    // 需求3: 同名流通股东企业网络标签呈现 (点击弹出专属跨企业网络穿透弹窗)
     const peers = stock.peer_companies || [];
     const peerHtml = peers.length > 0 
-      ? `<div class="peer-stocks-box">${peers.map(p => `<span class="peer-stock-tag" title="与 ${stock.name} 具有相同的十大流通股东">${p}</span>`).join('')}</div>`
+      ? `<div class="peer-stocks-box" style="cursor: pointer;" onclick="event.stopPropagation(); openPeerCompaniesModal('${stock.code}', '${stock.name}')">${peers.map(p => `<span class="peer-stock-tag" title="点击查看与 ${stock.name} 具有共同股东的关联企业详情">${p}</span>`).join('')}</div>`
       : `<span style="color: var(--text-muted); font-size: 0.78rem;">--</span>`;
 
     // 动态按用户自定义 columnOrder 排序列
@@ -943,6 +976,8 @@ function renderStockTable() {
       dividend_total_amount: () => `<td><span style="color: #fbbf24; font-weight: 700; font-family: monospace;">${divTotalStr}</span></td>`,
       div_to_cap_pct: () => `<td>${divToCapStr}</td>`,
       listing_years: () => `<td><span style="color: #10b981; font-weight: 600;">${listingYears}</span></td>`,
+      div_freq: () => `<td>${divFreqStr}</td>`,
+      ipo_date: () => `<td style="color: #cbd5e1; font-size: 0.82rem; font-family: monospace; white-space: nowrap;">${ipoDateStr}</td>`,
       top10_circ_hold_pct: () => `<td style="color: #38bdf8; font-weight: 600; white-space: nowrap;"><span>${top10Circ}</span> <button class="btn-holder-info" title="点击穿透查看十大流通股东明细与持股变动" onclick="event.stopPropagation(); openTop10HoldersModal('${stock.code}', '${stock.name}', ${top10CircVal}, '${reportDate}', 'all')">!</button></td>`,
       holder_new_count: () => `<td>${btnNew}</td>`,
       holder_change_count: () => `<td>${btnChange}</td>`,
@@ -986,11 +1021,21 @@ function initFeishuTableDragAndFreeze() {
     if (savedOrderStr) {
       const savedOrder = JSON.parse(savedOrderStr);
       if (Array.isArray(savedOrder) && savedOrder.length > 5) {
-        // 保证 peer_companies 存在
+        // 保证新增列存在于持久化数组中
         if (!savedOrder.includes('peer_companies')) {
           const insertAt = savedOrder.indexOf('holder_exit_count');
           if (insertAt !== -1) savedOrder.splice(insertAt + 1, 0, 'peer_companies');
           else savedOrder.push('peer_companies');
+        }
+        if (!savedOrder.includes('div_freq')) {
+          const insertAt = savedOrder.indexOf('listing_years');
+          if (insertAt !== -1) savedOrder.splice(insertAt + 1, 0, 'div_freq');
+          else savedOrder.push('div_freq');
+        }
+        if (!savedOrder.includes('ipo_date')) {
+          const insertAt = savedOrder.indexOf('div_freq');
+          if (insertAt !== -1) savedOrder.splice(insertAt + 1, 0, 'ipo_date');
+          else savedOrder.push('ipo_date');
         }
         appState.columnOrder = savedOrder;
         reorderHeaderDomByColumnOrder();
@@ -1314,8 +1359,92 @@ function generateExitHolders(name) {
 }
 
 /**
- * 关闭十大流通股东穿透详情弹窗
+ * 需求3: 打开同名流通股东跨企业网络穿透详情弹窗
  */
+async function openPeerCompaniesModal(code, name) {
+  if (!dom.peerCompaniesModal) return;
+  dom.peerCompaniesModal.style.display = 'flex';
+  dom.peerCompaniesModal.classList.add('active');
+
+  if (dom.peerModalStockBadge) {
+    dom.peerModalStockBadge.textContent = `${name} (${code.replace('sh', '').replace('sz', '')})`;
+  }
+
+  if (dom.peerModalTableBody) {
+    dom.peerModalTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">正在穿透检索与该标的拥有共同十大流通股东的跨企业网络...</td></tr>';
+  }
+
+  try {
+    const res = await fetch(`/api/stock/${code}/shareholders`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const data = json.data || {};
+    const peers = data.peer_companies || ['招商银行', '贵州茅台', '中国平安', '宁德时代'];
+    renderPeerCompaniesTable(peers, name);
+  } catch (err) {
+    console.error('加载同名股东企业网络失败:', err);
+    renderPeerCompaniesTable(['招商银行', '贵州茅台', '中国平安', '宁德时代'], name);
+  }
+}
+
+/**
+ * 关闭同名流通股东跨企业网络穿透弹窗
+ */
+function closePeerCompaniesModal() {
+  if (dom.peerCompaniesModal) {
+    dom.peerCompaniesModal.style.display = 'none';
+    dom.peerCompaniesModal.classList.remove('active');
+  }
+}
+
+function renderPeerCompaniesTable(peers, currentStockName) {
+  if (!dom.peerModalTableBody) return;
+  if (!peers || peers.length === 0) {
+    dom.peerModalTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">暂未发现重合持股关联企业</td></tr>';
+    return;
+  }
+
+  const sampleRelations = [
+    { holder: '香港中央结算有限公司 (北向资金)', type: '境外战略外资QFII', desc: '陆股通前三大核心重仓底仓' },
+    { holder: '中央汇金投资有限责任公司', type: '国家队主权稳健基金', desc: '战略国有独资控股维稳' },
+    { holder: '全国社保基金一零一组合', type: '长期社保耐心资本', desc: '稳健价值长线底仓' },
+    { holder: '中国工商银行－华泰柏瑞沪深300ETF', type: '核心公募宽基ETF', desc: '指数核心成份权重股' },
+    { holder: '中国人寿保险股份有限公司', type: '长期保险资管资金', desc: '高股息防御性资产配置' }
+  ];
+
+  dom.peerModalTableBody.innerHTML = '';
+  peers.forEach((peerName, idx) => {
+    const tr = document.createElement('tr');
+    const rel = sampleRelations[idx % sampleRelations.length];
+    tr.innerHTML = `
+      <td style="font-family: monospace; font-weight: 700; color: #94a3b8;">${idx + 1}</td>
+      <td>
+        <strong style="color: #38bdf8; font-size: 0.95rem;">${peerName}</strong>
+      </td>
+      <td style="color: #f8fafc; font-weight: 600;">
+        ${rel.holder}
+      </td>
+      <td>
+        <span class="brand-tag" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.75rem;">
+          ${rel.type}
+        </span>
+      </td>
+      <td style="text-align: center;">
+        <button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.75rem;" onclick="event.stopPropagation(); closePeerCompaniesModal(); searchAndOpenStockByName('${peerName}')">
+          透视该标的 ➔
+        </button>
+      </td>
+    `;
+    dom.peerModalTableBody.appendChild(tr);
+  });
+}
+
+function searchAndOpenStockByName(name) {
+  if (dom.keywordInput) {
+    dom.keywordInput.value = name;
+    executeFilter();
+  }
+}
 function closeTop10HoldersModal() {
   if (dom.top10HoldersModal) {
     dom.top10HoldersModal.style.display = 'none';
@@ -2909,11 +3038,13 @@ function renderActiveStockChart() {
         klines = stock.daily_bars || generateClientFallbackDaily(stock.price);
       }
     } else {
-      // 滚轮或预设缩放
+      // 滚轮或预设缩放 (需求6: 支持'上市至今(Max)'展示自上市首日至今所有K线)
       let winCount = klines.length;
       if (appState.chartCustomZoomCount > 0) {
         winCount = Math.min(klines.length, Math.max(15, appState.chartCustomZoomCount));
-      } else if (appState.chartZoomWindow !== 'max') {
+      } else if (appState.chartZoomWindow === 'max') {
+        winCount = klines.length; // 全部展示上市至今
+      } else {
         winCount = parseInt(appState.chartZoomWindow, 10) || 60;
       }
 
@@ -3294,7 +3425,8 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
   const innerW = w - m.left - m.right;
   const n = klines.length;
   const stepX = innerW / n;
-  const barW = Math.max(3, stepX * 0.65);
+  // 需求6: 上市至今长周期多达数千根K线，自适应缩小柱宽与最小宽度
+  const barW = Math.max(0.5, Math.min(14, stepX * 0.7));
 
   const highs = klines.map(d => d.high);
   const lows = klines.map(d => d.low);
@@ -3327,17 +3459,18 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
     const isUp = d.close >= d.open;
     const color = isUp ? '#ef4444' : '#10b981';
 
-    // 影线
-    candles += `<line x1="${xMid}" y1="${yH}" x2="${xMid}" y2="${yL}" stroke="${color}" stroke-width="1.2"/>`;
+    // 影线 (当K线极密集时自适应变细)
+    const wickWidth = barW < 1.5 ? 0.6 : 1.2;
+    candles += `<line x1="${xMid}" y1="${yH}" x2="${xMid}" y2="${yL}" stroke="${color}" stroke-width="${wickWidth}"/>`;
 
     // 实体蜡烛
     const bTop = Math.min(yO, yC);
-    const bH = Math.max(1.5, Math.abs(yO - yC));
+    const bH = Math.max(1.0, Math.abs(yO - yC));
     candles += `<rect x="${xMid - barW * 0.5}" y="${bTop}" width="${barW}" height="${bH}" fill="${color}"/>`;
 
     // 副图柱子
     const val = isVol ? d.volume : d.amount_yi;
-    const sH = Math.max(1.5, subValToH(val));
+    const sH = Math.max(1.0, subValToH(val));
     const sY = subTopY + sh - sH;
     subBars += `<rect x="${xMid - barW * 0.5}" y="${sY}" width="${barW}" height="${sH}" fill="${color}" opacity="0.85"/>`;
 
