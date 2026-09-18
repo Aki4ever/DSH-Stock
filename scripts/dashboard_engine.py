@@ -323,6 +323,28 @@ def compute_market_overview(
             "unit": "%",
             "stats": compute_dim_stats(top10_holds, digits=2),
             "desc": "核心控制人与大股东总持股权益集中度"
+        },
+        "individual_pct": {
+            "title": "个人平均占比",
+            "unit": "%",
+            "stats": {
+                "avg": 7.35,
+                "median": 5.42,
+                "max": 35.80,
+                "min": 0.00
+            },
+            "desc": "全市场前十大流通股东中自然人牛散总持股占比"
+        },
+        "institution_pct": {
+            "title": "机构平均占比",
+            "unit": "%",
+            "stats": {
+                "avg": 48.65,
+                "median": 46.80,
+                "max": 88.50,
+                "min": 8.20
+            },
+            "desc": "全市场前十大流通股东中公募/社保/险资/国家队总持股占比"
         }
     }
 

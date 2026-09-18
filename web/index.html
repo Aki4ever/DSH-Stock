@@ -314,6 +314,58 @@
             </div>
           </div>
 
+          <!-- 需求2: 控件 12: 个人占比区间筛选 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>👤 个人占比 (%)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('individual')" title="清空个人占比限制">↺ 清空</button>
+              </div>
+            </div>
+            <div class="range-inputs">
+              <input type="number" id="minIndividualPctInput" class="input-number" placeholder="最小%" min="0" max="100" step="0.5">
+              <span class="range-divider">~</span>
+              <input type="number" id="maxIndividualPctInput" class="input-number" placeholder="最大%" min="0" max="100" step="0.5">
+            </div>
+          </div>
+
+          <!-- 需求2: 控件 13: 机构占比区间筛选 -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>🏢 机构占比 (%)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('institution')" title="清空机构占比限制">↺ 清空</button>
+              </div>
+            </div>
+            <div class="range-inputs">
+              <input type="number" id="minInstitutionPctInput" class="input-number" placeholder="最小%" min="0" max="100" step="0.5">
+              <span class="range-divider">~</span>
+              <input type="number" id="maxInstitutionPctInput" class="input-number" placeholder="最大%" min="0" max="100" step="0.5">
+            </div>
+          </div>
+
+          <!-- 需求5: 控件 14: 盈利时长 (最近1年 / 最近2年 / 最近3年 单选) -->
+          <div class="filter-item">
+            <div class="filter-label">
+              <div class="label-left">
+                <span>💰 盈利时长 (单选)</span>
+              </div>
+              <div class="label-right">
+                <button type="button" class="btn-item-reset" onclick="resetSingleDimension('profit_years')" title="重置盈利时长">↺ 不限</button>
+              </div>
+            </div>
+            <div class="segmented-control" id="profitYearsControl">
+              <button type="button" class="seg-btn active" data-val="all">全部(不限)</button>
+              <button type="button" class="seg-btn" data-val="1">最近1年</button>
+              <button type="button" class="seg-btn" data-val="2">最近2年</button>
+              <button type="button" class="seg-btn" data-val="3">最近3年</button>
+            </div>
+          </div>
+
         </div>
 
         <!-- 操作按钮栏 (含一键全局重置) -->
@@ -465,6 +517,20 @@
                 <div class="col-header-box">
                   <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
                   <span class="col-title">上市日期</span> <span class="sort-indicator">⇅</span>
+                </div>
+              </th>
+              <!-- 需求6: 新增商誉(亿)列 -->
+              <th data-col="goodwill" draggable="true" onclick="handleHeaderSort('goodwill', event)" title="企业资产负债表中的商誉账面价值(亿元)">
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">商誉(亿)</span> <span class="sort-indicator">⇅</span>
+                </div>
+              </th>
+              <!-- 需求7: 新增商誉/总市值列 -->
+              <th data-col="goodwill_to_cap_pct" draggable="true" onclick="handleHeaderSort('goodwill_to_cap_pct', event)" title="商誉(亿) / 最新总市值(亿) 的比率">
+                <div class="col-header-box">
+                  <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
+                  <span class="col-title">商誉/总市值</span> <span class="sort-indicator">⇅</span>
                 </div>
               </th>
               <!-- 需求2: 十大流通股东持股占比与穿透 ! 按钮 -->
@@ -648,9 +714,9 @@
           </div>
         </div>
 
-        <!-- 10 大维度核心统计学指标矩阵 (4分位: Min, Max, Mean, Median) -->
+        <!-- 需求1: 12 大维度核心统计学指标矩阵 (新增个人占比与机构占比两大筹码维度) -->
         <div style="font-weight: 700; font-size: 1.05rem; margin-top: 1.4rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
-          <span>📋 10 大量化维度统计学全景透视</span>
+          <span>📋 12 大量化维度统计学全景透视 (含筹码个人/机构占比)</span>
           <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">(包含最小值、最大值、算术平均值、50%中位数)</span>
         </div>
 
@@ -1020,15 +1086,13 @@
         <button class="btn-close" onclick="closeStockDetail()">&times;</button>
       </div>
 
-      <!-- 需求5: 股票详情 8 大维度可扩展 Tab 导航栏 -->
-      <div class="modal-dimension-tabs" id="modalDimensionTabs">
-        <button type="button" class="modal-dim-tab active" data-dim="all" onclick="switchDetailDimension('all')">📋 全部信息</button>
-        <button type="button" class="modal-dim-tab" data-dim="basic" onclick="switchDetailDimension('basic')">🎯 基本盘</button>
-        <button type="button" class="modal-dim-tab" data-dim="dynamic" onclick="switchDetailDimension('dynamic')">⚡ 最新动态</button>
+      <!-- 需求4: 股票详情分 Tab 吸附顶部并规范为 6 大维度 (最新动态 / 公司资料 / 股东研究 / 财务分析 / 资本运作 / 分红融资) -->
+      <div class="modal-dimension-tabs modal-dimension-sticky" id="modalDimensionTabs">
+        <button type="button" class="modal-dim-tab active" data-dim="dynamic" onclick="switchDetailDimension('dynamic')">⚡ 最新动态</button>
+        <button type="button" class="modal-dim-tab" data-dim="profile" onclick="switchDetailDimension('profile')">🏢 公司资料</button>
         <button type="button" class="modal-dim-tab" data-dim="shareholders" onclick="switchDetailDimension('shareholders')">👥 股东研究</button>
         <button type="button" class="modal-dim-tab" data-dim="finance" onclick="switchDetailDimension('finance')">📊 财务分析</button>
-        <button type="button" class="modal-dim-tab" data-dim="block" onclick="switchDetailDimension('block')">🤝 大宗交易</button>
-        <button type="button" class="modal-dim-tab" data-dim="profile" onclick="switchDetailDimension('profile')">🏢 公司资料</button>
+        <button type="button" class="modal-dim-tab" data-dim="block" onclick="switchDetailDimension('block')">🤝 资本运作</button>
         <button type="button" class="modal-dim-tab" data-dim="dividend" onclick="switchDetailDimension('dividend')">💰 分红融资</button>
       </div>
 
@@ -1119,10 +1183,12 @@
             <span id="chartDataSourceBadge" class="brand-tag" style="font-size: 0.7rem;">官方实时行情源</span>
           </div>
           <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
-            <!-- 主图时段切换 (分时 / 日K) -->
+            <!-- 需求3: 主图时段规范化升级为 4 个 Tab (分时图 / 20天K线 / 60天K线 / 全部) -->
             <div class="segmented-control" id="chartPeriodControl">
-              <button type="button" class="seg-btn active" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 当日分时 (11:30中枢)</button>
-              <button type="button" class="seg-btn" data-period="daily" onclick="switchChartPeriod('daily')">📊 上市全景K线 (缩放控制)</button>
+              <button type="button" class="seg-btn active" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 分时图</button>
+              <button type="button" class="seg-btn" data-period="kline20" onclick="switchChartPeriod('kline20')">📊 20天K线</button>
+              <button type="button" class="seg-btn" data-period="kline60" onclick="switchChartPeriod('kline60')">📈 60天K线</button>
+              <button type="button" class="seg-btn" data-period="all" onclick="switchChartPeriod('all')">🌟 全部</button>
             </div>
             <!-- K线缩放区间控制 -->
             <div class="segmented-control" id="chartZoomControl" style="display: none;">

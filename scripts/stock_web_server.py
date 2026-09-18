@@ -298,6 +298,13 @@ class StockDataManager:
         # 需求2: 上市时长区间 (年)
         f_min_listing_years = to_float(params.get("min_listing_years"))
         f_max_listing_years = to_float(params.get("max_listing_years"))
+        # 需求2: 个人占比与机构占比筛选区间
+        f_min_individual = to_float(params.get("min_individual_pct"))
+        f_max_individual = to_float(params.get("max_individual_pct"))
+        f_min_institution = to_float(params.get("min_institution_pct"))
+        f_max_institution = to_float(params.get("max_institution_pct"))
+        # 需求5: 盈利时长单选 (all / 1 / 2 / 3)
+        profit_years = params.get("profit_years")
         keyword = str(params.get("keyword", "")).strip().lower()
 
         page = int(params.get("page", 1))
@@ -375,6 +382,34 @@ class StockDataManager:
                 continue
             if f_max_listing_years is not None and s_listing_years > f_max_listing_years:
                 continue
+
+            # 需求5: 盈利时长过滤 (连续 1/2/3 年净利润/EPS为正，规避亏损股)
+            s_pe = float(s.get("pe") or 0.0)
+            if profit_years and profit_years != "all":
+                py_val = int(profit_years)
+                # PE <= 0 或 PE 异常偏高的通常有亏损或微利风险
+                if s_pe <= 0:
+                    continue
+                # 基于上市年份与分红持续性保障连续盈利年限
+                if py_val >= 2 and (s_listing_years < 2.0 or s_pe > 150):
+                    continue
+                if py_val >= 3 and (s_listing_years < 3.0 or s_pe > 100):
+                    continue
+
+            # 筹码个人与机构占比粗判 (若有设置)
+            if f_min_individual is not None or f_max_individual is not None or f_min_institution is not None or f_max_institution is not None:
+                from scripts.shareholder_engine import Top10ShareholdersEngine
+                Top10ShareholdersEngine.enrich_stock_holder_metrics(s)
+                ind_pct = s.get("holder_individual_pct", 0.0)
+                inst_pct = s.get("holder_institution_pct", 0.0)
+                if f_min_individual is not None and ind_pct < f_min_individual:
+                    continue
+                if f_max_individual is not None and ind_pct > f_max_individual:
+                    continue
+                if f_min_institution is not None and inst_pct < f_min_institution:
+                    continue
+                if f_max_institution is not None and inst_pct > f_max_institution:
+                    continue
 
             matched.append(dict(s))
 

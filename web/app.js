@@ -47,7 +47,7 @@ const appState = {
   columnOrder: [
     'raw_code', 'name', 'market', 'board', 'constituent', 'price', 'change_pct',
     'market_cap', 'circulating_cap', 'pe', 'dividend_count', 'dividend_total_amount',
-    'div_to_cap_pct', 'listing_years', 'div_freq', 'ipo_date', 'top10_circ_hold_pct',
+    'div_to_cap_pct', 'listing_years', 'div_freq', 'ipo_date', 'goodwill', 'goodwill_to_cap_pct', 'top10_circ_hold_pct',
     'holder_individual_pct', 'holder_institution_pct', 'holder_new_count',
     'holder_change_count', 'holder_exit_count', 'peer_holders', 'peer_companies', 'top10_hold_pct', 'report_date', 'action'
   ],
@@ -158,6 +158,12 @@ const dom = {
   // 需求2: 上市时长区间 DOM
   minListingYearsInput: document.getElementById('minListingYearsInput'),
   maxListingYearsInput: document.getElementById('maxListingYearsInput'),
+  // 需求2: 个人/机构占比区间 DOM 与 需求5: 盈利时长单选
+  minIndividualPctInput: document.getElementById('minIndividualPctInput'),
+  maxIndividualPctInput: document.getElementById('maxIndividualPctInput'),
+  minInstitutionPctInput: document.getElementById('minInstitutionPctInput'),
+  maxInstitutionPctInput: document.getElementById('maxInstitutionPctInput'),
+  profitYearsControl: document.getElementById('profitYearsControl'),
   keywordInput: document.getElementById('keywordInput'),
 
   btnExecuteFilter: document.getElementById('btnExecuteFilter'),
@@ -599,12 +605,27 @@ function initEventListeners() {
     }
   });
 
+  // 需求5: 盈利时长单选
+  if (dom.profitYearsControl) {
+    dom.profitYearsControl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        dom.profitYearsControl.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        appState.profitYears = btn.getAttribute('data-val');
+        appState.page = 1;
+        executeFilter();
+      });
+    });
+  }
+
   // 数值区间输入框回车即搜
   const rangeInputs = [
     dom.minPriceInput, dom.maxPriceInput, dom.minCapInput, dom.maxCapInput,
     dom.minCircCapInput, dom.maxCircCapInput, dom.minPeInput, dom.maxPeInput,
     dom.minTop10CircInput, dom.maxTop10CircInput, dom.minTop10HoldInput, dom.maxTop10HoldInput,
-    dom.minListingYearsInput, dom.maxListingYearsInput
+    dom.minListingYearsInput, dom.maxListingYearsInput,
+    dom.minIndividualPctInput, dom.maxIndividualPctInput,
+    dom.minInstitutionPctInput, dom.maxInstitutionPctInput
   ];
   rangeInputs.forEach(input => {
     if (input) {
@@ -685,6 +706,20 @@ function resetSingleDimension(dimType) {
       dom.minListingYearsInput.value = '';
       dom.maxListingYearsInput.value = '';
       break;
+    case 'individual':
+      if (dom.minIndividualPctInput) dom.minIndividualPctInput.value = '';
+      if (dom.maxIndividualPctInput) dom.maxIndividualPctInput.value = '';
+      break;
+    case 'institution':
+      if (dom.minInstitutionPctInput) dom.minInstitutionPctInput.value = '';
+      if (dom.maxInstitutionPctInput) dom.maxInstitutionPctInput.value = '';
+      break;
+    case 'profit_years':
+      appState.profitYears = 'all';
+      if (dom.profitYearsControl) {
+        dom.profitYearsControl.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-val') === 'all'));
+      }
+      break;
   }
   appState.page = 1;
   executeFilter();
@@ -717,6 +752,14 @@ function resetAllFilters() {
   dom.maxTop10HoldInput.value = '';
   dom.minListingYearsInput.value = '';
   dom.maxListingYearsInput.value = '';
+  if (dom.minIndividualPctInput) dom.minIndividualPctInput.value = '';
+  if (dom.maxIndividualPctInput) dom.maxIndividualPctInput.value = '';
+  if (dom.minInstitutionPctInput) dom.minInstitutionPctInput.value = '';
+  if (dom.maxInstitutionPctInput) dom.maxInstitutionPctInput.value = '';
+  appState.profitYears = 'all';
+  if (dom.profitYearsControl) {
+    dom.profitYearsControl.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-val') === 'all'));
+  }
   dom.keywordInput.value = '';
 
   initDateControl();
@@ -775,6 +818,13 @@ function collectFilterParams() {
     // 需求2: 收集上市时长区间参数
     min_listing_years: dom.minListingYearsInput && dom.minListingYearsInput.value ? parseFloat(dom.minListingYearsInput.value) : null,
     max_listing_years: dom.maxListingYearsInput && dom.maxListingYearsInput.value ? parseFloat(dom.maxListingYearsInput.value) : null,
+    // 需求2: 收集个人与机构占比区间
+    min_individual_pct: dom.minIndividualPctInput && dom.minIndividualPctInput.value ? parseFloat(dom.minIndividualPctInput.value) : null,
+    max_individual_pct: dom.maxIndividualPctInput && dom.maxIndividualPctInput.value ? parseFloat(dom.maxIndividualPctInput.value) : null,
+    min_institution_pct: dom.minInstitutionPctInput && dom.minInstitutionPctInput.value ? parseFloat(dom.minInstitutionPctInput.value) : null,
+    max_institution_pct: dom.maxInstitutionPctInput && dom.maxInstitutionPctInput.value ? parseFloat(dom.maxInstitutionPctInput.value) : null,
+    // 需求5: 收集盈利时长
+    profit_years: appState.profitYears || 'all',
     keyword: dom.keywordInput.value.trim(),
     page: appState.page,
     page_size: appState.pageSize
@@ -1006,6 +1056,15 @@ function renderStockTable() {
       listing_years: () => `<td><span style="color: #10b981; font-weight: 600;">${listingYears}</span></td>`,
       div_freq: () => `<td>${divFreqStr}</td>`,
       ipo_date: () => `<td style="color: #cbd5e1; font-size: 0.82rem; font-family: monospace; white-space: nowrap;">${ipoDateStr}</td>`,
+      goodwill: () => {
+        const gw = Number(stock.goodwill !== undefined ? stock.goodwill : 0);
+        return `<td><span class="${gw > 50 ? 'goodwill-tag-warn' : 'goodwill-tag-safe'}">${gw > 0 ? gw.toFixed(2) : '0.00'}</span> 亿</td>`;
+      },
+      goodwill_to_cap_pct: () => {
+        const gwPct = Number(stock.goodwill_to_cap_pct !== undefined ? stock.goodwill_to_cap_pct : 0);
+        const cls = gwPct >= 15 ? 'goodwill-tag-danger' : gwPct >= 5 ? 'goodwill-tag-warn' : 'goodwill-tag-safe';
+        return `<td><span class="${cls}">${gwPct.toFixed(2)}%</span></td>`;
+      },
       top10_circ_hold_pct: () => `<td style="color: #38bdf8; font-weight: 600; white-space: nowrap;"><span>${top10Circ}</span> <button class="btn-holder-info" title="点击穿透查看十大流通股东明细与持股变动" onclick="event.stopPropagation(); openTop10HoldersModal('${stock.code}', '${stock.name}', ${top10CircVal}, '${reportDate}', 'all')">!</button></td>`,
       holder_individual_pct: () => {
         const indVal = Number(stock.holder_individual_pct !== undefined ? stock.holder_individual_pct : 0);
@@ -1088,6 +1147,16 @@ function initFeishuTableDragAndFreeze() {
           const insertAt = savedOrder.indexOf('holder_individual_pct');
           if (insertAt !== -1) savedOrder.splice(insertAt + 1, 0, 'holder_institution_pct');
           else savedOrder.push('holder_institution_pct');
+        }
+        if (!savedOrder.includes('goodwill')) {
+          const insertAt = savedOrder.indexOf('ipo_date');
+          if (insertAt !== -1) savedOrder.splice(insertAt + 1, 0, 'goodwill');
+          else savedOrder.push('goodwill');
+        }
+        if (!savedOrder.includes('goodwill_to_cap_pct')) {
+          const insertAt = savedOrder.indexOf('goodwill');
+          if (insertAt !== -1) savedOrder.splice(insertAt + 1, 0, 'goodwill_to_cap_pct');
+          else savedOrder.push('goodwill_to_cap_pct');
         }
         appState.columnOrder = savedOrder;
         reorderHeaderDomByColumnOrder();
@@ -1740,7 +1809,7 @@ function renderMacroDashboardUI(data) {
           </div>
           <div class="dim-stat-cell">
             <span class="dim-stat-label">平均值 (Mean)</span>
-            <span class="dim-stat-val val-mean">${formatStatVal(s.mean, dim.unit)}</span>
+            <span class="dim-stat-val val-mean">${formatStatVal(s.mean !== undefined ? s.mean : s.avg, dim.unit)}</span>
           </div>
           <div class="dim-stat-cell">
             <span class="dim-stat-label">中位数 (Median)</span>
@@ -2605,19 +2674,28 @@ async function toggleServerState() {
 // ====================================================
 
 /**
- * 切换图表时段 Tab: timeline (分时) ｜ daily (日K)
+ * 需求3: 切换图表时段 Tab: timeline (分时图) ｜ kline20 (20天K线) ｜ kline60 (60天K线) ｜ all (全部/上市至今)
  */
 function switchChartPeriod(period) {
   appState.chartPeriod = period;
-  dom.chartPeriodControl.querySelectorAll('.seg-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-period') === period);
-  });
-  if (dom.chartZoomControl) {
-    dom.chartZoomControl.style.display = (period === 'daily') ? 'inline-flex' : 'none';
+  if (dom.chartPeriodControl) {
+    dom.chartPeriodControl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-period') === period);
+    });
   }
-  if (dom.klineDateRangeBar) {
-    dom.klineDateRangeBar.style.display = (period === 'daily') ? 'inline-flex' : 'none';
+
+  // 针对不同 Tab 自动配置窗口
+  if (period === 'kline20') {
+    appState.chartZoomWindow = '20';
+    appState.chartCustomZoomCount = 20;
+  } else if (period === 'kline60') {
+    appState.chartZoomWindow = '60';
+    appState.chartCustomZoomCount = 60;
+  } else if (period === 'all') {
+    appState.chartZoomWindow = 'max';
+    appState.chartCustomZoomCount = 0;
   }
+
   hideTooltip();
   renderActiveStockChart();
 }
@@ -2632,7 +2710,7 @@ function applyKlineCustomDateRange() {
 }
 
 /**
- * 需求5: 股票详情 8 大维度导航切换
+ * 需求4: 股票详情 6 大维度导航吸顶切换 (最新动态 / 公司资料 / 股东研究 / 财务分析 / 资本运作 / 分红融资)
  */
 function switchDetailDimension(dimKey) {
   appState.activeDetailDimension = dimKey;
@@ -2643,18 +2721,17 @@ function switchDetailDimension(dimKey) {
   }
 
   const allPanes = [
-    { key: 'basic', el: dom.paneBasic },
-    { key: 'shareholders', el: dom.paneShareholders },
+    { key: 'dynamic', el: dom.paneDynamic },
     { key: 'profile', el: dom.paneProfile },
+    { key: 'shareholders', el: dom.paneShareholders },
     { key: 'finance', el: dom.paneFinance },
     { key: 'block', el: dom.paneBlock },
-    { key: 'dynamic', el: dom.paneDynamic },
     { key: 'dividend', el: dom.paneDividend }
   ];
 
   allPanes.forEach(item => {
     if (!item.el) return;
-    if (dimKey === 'all' || dimKey === item.key) {
+    if (dimKey === item.key) {
       item.el.classList.remove('hidden');
     } else {
       item.el.classList.add('hidden');
@@ -2664,13 +2741,13 @@ function switchDetailDimension(dimKey) {
   // 触发对应维度的异步数据拉取
   if (appState.activeDetailStock) {
     const code = appState.activeDetailStock.code;
-    if (dimKey === 'block' || dimKey === 'all') {
+    if (dimKey === 'block') {
       loadStockBlockTrades(code);
     }
-    if (dimKey === 'dynamic' || dimKey === 'all') {
+    if (dimKey === 'dynamic') {
       loadStockEvents(code);
     }
-    if (dimKey === 'dividend' || dimKey === 'all') {
+    if (dimKey === 'dividend') {
       loadStockDividendHistory(code);
     }
   }
@@ -3145,12 +3222,16 @@ function renderActiveStockChart() {
         klines = stock.daily_bars || generateClientFallbackDaily(stock.price);
       }
     } else {
-      // 滚轮或预设缩放 (需求6: 支持'上市至今(Max)'展示自上市首日至今所有K线)
+      // 滚轮或预设缩放 (需求3: 20天 / 60天 / 全部 走势图Tab自适应)
       let winCount = klines.length;
-      if (appState.chartCustomZoomCount > 0) {
+      if (appState.chartPeriod === 'kline20') {
+        winCount = Math.min(klines.length, 20);
+      } else if (appState.chartPeriod === 'kline60') {
+        winCount = Math.min(klines.length, 60);
+      } else if (appState.chartPeriod === 'all' || appState.chartZoomWindow === 'max') {
+        winCount = klines.length;
+      } else if (appState.chartCustomZoomCount > 0) {
         winCount = Math.min(klines.length, Math.max(15, appState.chartCustomZoomCount));
-      } else if (appState.chartZoomWindow === 'max') {
-        winCount = klines.length; // 全部展示上市至今
       } else {
         winCount = parseInt(appState.chartZoomWindow, 10) || 60;
       }
