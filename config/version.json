@@ -1,7 +1,7 @@
 {
-  "version": "v3.1.0",
+  "version": "v3.2.0",
   "app_name": "A股多维量化筛选器",
   "subtitle": "DSH Stock Web",
   "release_date": "2026-09-18",
-  "description": "仪表盘筹码双维度、商誉风险雷达、盈利时长单选、K线4周期Tab规范化与个股详情6大分栏吸顶重构"
+  "description": "专业股票终端页面化重构：股票详情从弹窗升级为独立全屏页面、左上角常驻返回股票列表、6大F10核心研报维度Tab深度隔离与吸顶切换"
 }

@@ -78,6 +78,8 @@ const dom = {
   viewDashboardTab: document.getElementById('viewDashboardTab'),
   viewWorldTab: document.getElementById('viewWorldTab'),
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
+  viewStockDetailTab: document.getElementById('viewStockDetailTab'),
+  btnBackToStockList: document.getElementById('btnBackToStockList'),
 
   // 外部宏观环境 DOM
   worldHeaderScopeTitle: document.getElementById('worldHeaderScopeTitle'),
@@ -637,15 +639,10 @@ function initEventListeners() {
     }
   });
 
-  // 详情浮层关闭
-  dom.stockDetailModal.addEventListener('click', (e) => {
-    if (e.target === dom.stockDetailModal) {
-      closeStockDetail();
-    }
-  });
+  // 详情页快捷键返回
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && dom.stockDetailModal.classList.contains('active')) {
-      closeStockDetail();
+    if (e.key === 'Escape' && dom.viewStockDetailTab && !dom.viewStockDetailTab.classList.contains('hidden')) {
+      closeStockDetailPage();
     }
   });
 }
@@ -2959,10 +2956,23 @@ function renderStockEventsUI(data) {
 }
 
 /**
- * 打开股票详情浮层
+ * 需求1: 打开股票详情独立全屏页面 (Page View)
  */
 async function openStockDetail(code) {
-  dom.stockDetailModal.classList.add('active');
+  // 1. 隐藏其他视图，展示全屏详情视图
+  if (dom.viewFilterTab) dom.viewFilterTab.classList.add('hidden');
+  if (dom.viewDashboardTab) dom.viewDashboardTab.classList.add('hidden');
+  if (dom.viewWorldTab) dom.viewWorldTab.classList.add('hidden');
+  if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.add('hidden');
+
+  if (dom.viewStockDetailTab) {
+    dom.viewStockDetailTab.classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // 默认激活第一个维度 Tab (最新动态)
+  switchDetailDimension('dynamic');
+
   dom.modalStockName.textContent = '标的详情加载中...';
   dom.modalStockCode.textContent = code;
   dom.chartSvgContainer.innerHTML = '<div style="padding: 2.5rem; color: var(--text-muted);"><div class="spinner"></div><div>正在从官方金融网关稳健拉取行情走势、公司全景与四大财务报表...</div></div>';
@@ -3783,8 +3793,27 @@ function generateClientFallbackDaily(price) {
   return res;
 }
 
-function closeStockDetail() {
-  dom.stockDetailModal.classList.remove('active');
+/**
+ * 需求1: 关闭股票详情全屏页面，返回股票列表视图
+ */
+function closeStockDetailPage() {
+  if (dom.viewStockDetailTab) {
+    dom.viewStockDetailTab.classList.add('hidden');
+  }
+  // 切回对应的主 Tab (通常是列表 filter)
+  if (appState.currentTab === 'dashboard') {
+    if (dom.viewDashboardTab) dom.viewDashboardTab.classList.remove('hidden');
+  } else if (appState.currentTab === 'world') {
+    if (dom.viewWorldTab) dom.viewWorldTab.classList.remove('hidden');
+  } else if (appState.currentTab === 'crawler') {
+    if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.remove('hidden');
+  } else {
+    if (dom.viewFilterTab) dom.viewFilterTab.classList.remove('hidden');
+  }
   appState.activeDetailStock = null;
   hideTooltip();
+}
+
+function closeStockDetail() {
+  closeStockDetailPage();
 }
