@@ -536,6 +536,19 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(200, CRAWLER_JOB.get_snapshot())
             return
 
+        # 3.1.0 需求1: 数据中心抓取审计列表端点 /api/crawler/audit-list (ID、抓取日期、抓取状态、抓取指纹)
+        if url_path == "/api/crawler/audit-list":
+            from scripts.stock_db import list_crawl_audit_records, get_latest_crawl_fingerprint
+            records = list_crawl_audit_records(limit=30)
+            latest_fp = get_latest_crawl_fingerprint()
+            self._send_json(200, {
+                "records": records,
+                "total": len(records),
+                "latest_fingerprint": latest_fp,
+                "freshness_check": "ACTIVE"
+            })
+            return
+
         # 3.1.1 需求2: 独立数据采集中心导出端点 /api/crawler/export?format=json|csv
         if url_path == "/api/crawler/export":
             query_params = {}

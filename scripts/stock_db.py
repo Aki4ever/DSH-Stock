@@ -108,6 +108,25 @@ def init_db():
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_fp_hash ON data_fingerprints(data_hash);")
 
+        # 5. 数据中心抓取审计流水表 (crawl_audit_records - v3.4.0)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS crawl_audit_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            crawl_date TEXT NOT NULL,
+            status TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            target_scope TEXT DEFAULT '',
+            total_items INTEGER DEFAULT 0,
+            updated_items INTEGER DEFAULT 0,
+            skipped_items INTEGER DEFAULT 0,
+            details TEXT DEFAULT '',
+            created_at TEXT DEFAULT ''
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawl_date ON crawl_audit_records(crawl_date);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawl_fp ON crawl_audit_records(fingerprint);")
+
         conn.commit()
 
 
@@ -358,6 +377,65 @@ def load_all_stocks_from_db() -> List[Dict[str, Any]]:
             d["low"] = d["low_p"]
             result.append(d)
         return result
+
+
+def record_crawl_audit(
+    task_id: str,
+    crawl_date: str,
+    status: str,
+    fingerprint: str,
+    target_scope: str = "全市场A股",
+    total_items: int = 0,
+    updated_items: int = 0,
+    skipped_items: int = 0,
+    details: str = ""
+) -> int:
+    """持久化记录一次数据中心抓取审计流水"""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO crawl_audit_records (
+            task_id, crawl_date, status, fingerprint, target_scope,
+            total_items, updated_items, skipped_items, details, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, (
+            task_id, crawl_date, status, fingerprint, target_scope,
+            total_items, updated_items, skipped_items, details, now_str
+        ))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_latest_crawl_fingerprint(target_scope: str = "") -> Optional[Dict[str, Any]]:
+    """查询指定抓取范围最新一次成功的抓取指纹"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if target_scope:
+            cursor.execute("""
+            SELECT * FROM crawl_audit_records
+            WHERE target_scope = ? AND status LIKE '%成功%'
+            ORDER BY id DESC LIMIT 1;
+            """, (target_scope,))
+        else:
+            cursor.execute("""
+            SELECT * FROM crawl_audit_records
+            WHERE status LIKE '%成功%'
+            ORDER BY id DESC LIMIT 1;
+            """)
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def list_crawl_audit_records(limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+    """分页获取抓取审计流水记录"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT * FROM crawl_audit_records
+        ORDER BY id DESC LIMIT ? OFFSET ?;
+        """, (limit, offset))
+        return [dict(r) for r in cursor.fetchall()]
 
 
 if __name__ == "__main__":

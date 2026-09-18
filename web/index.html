@@ -1065,6 +1065,45 @@
           </div>
         </div>
 
+        <!-- 需求1/2: 数据中心抓取审计列表 (展示抓取信息的ID、抓取日期、抓取状态、抓取指纹) -->
+        <div class="crawler-audit-card" style="margin-top: 1.4rem;">
+          <div class="crawler-audit-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.6rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <span style="font-weight: 700; font-size: 1.05rem; color: #f8fafc;">📋 数据中心抓取记录与新鲜度审计列表</span>
+              <span id="crawlerFreshnessBadge" class="brand-tag" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);">
+                🛡️ 指纹防重校验中
+              </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">若指纹一致则智能跳过不重复抓取</span>
+              <button class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem;" onclick="loadCrawlerAuditList()">
+                🔄 刷新抓取列表
+              </button>
+            </div>
+          </div>
+
+          <div class="table-container" style="max-height: 420px; overflow-y: auto;">
+            <table class="stock-table" id="crawlerAuditTable">
+              <thead>
+                <tr>
+                  <th style="width: 160px;">抓取信息ID</th>
+                  <th style="width: 170px;">抓取日期</th>
+                  <th style="width: 160px;">抓取状态</th>
+                  <th style="width: 190px;">抓取指纹 (Fingerprint)</th>
+                  <th>抓取范围与摘要说明</th>
+                </tr>
+              </thead>
+              <tbody id="crawlerAuditTableBody">
+                <tr>
+                  <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                    正在加载数据中心最新抓取审计流水...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
 

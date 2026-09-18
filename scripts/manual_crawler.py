@@ -24,7 +24,10 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from scripts.anti_crawler import robust_fetch, parse_shareholder_data
-from scripts.stock_db import save_quotes_batch, save_shareholder_item, check_and_update_fingerprint
+from scripts.stock_db import (
+    save_quotes_batch, save_shareholder_item, check_and_update_fingerprint,
+    record_crawl_audit, get_latest_crawl_fingerprint
+)
 
 
 class ManualCrawlerJob:
@@ -205,7 +208,28 @@ class ManualCrawlerJob:
             self.status = "completed"
             self.progress_pct = 100.0
             self.end_time = time.time()
-            self.phase_text = f"✅ 数据采集与数据库持久化全部完成！共更新 {updated_so_far} 只标的最新行情。"
+            self.phase_text = f"✅ 数据采集与数据库持久化全部完成！共更新 {updated_so_far} 只标的最新行情，指纹命中跳过 {self.skipped_count} 条。"
+
+        # 需求1/2: 生成本次抓取批次特征指纹并写入审计流水
+        import hashlib
+        fp_raw = f"{self.mode}:{total}:{updated_so_far}:{self.skipped_count}:{datetime.now().strftime('%Y-%m-%d')}"
+        batch_fp = hashlib.sha256(fp_raw.encode('utf-8')).hexdigest()[:16]
+        crawl_status_str = "成功(全新更新)" if updated_so_far > 0 else "成功(指纹一致/免抓)"
+        
+        try:
+            record_crawl_audit(
+                task_id=self.job_id,
+                crawl_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                status=crawl_status_str,
+                fingerprint=batch_fp,
+                target_scope="核心资产CSI100" if self.mode == "core" else "全市场A股",
+                total_items=total,
+                updated_items=updated_so_far,
+                skipped_items=self.skipped_count,
+                details=f"完成模式: {self.mode}, 处理: {total} 只, 更新: {updated_so_far} 只, 幂等跳过: {self.skipped_count} 只"
+            )
+        except Exception as e:
+            print(f"[Crawler] 写入抓取审计流水异常: {e}")
 
 
 # 全局采集器实例

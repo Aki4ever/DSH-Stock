@@ -347,6 +347,7 @@ function switchMainTab(tabId) {
     loadWorldMacroIntelligence();
   } else if (tabId === 'crawler') {
     pollCrawlerStatus();
+    loadCrawlerAuditList();
   }
 }
 
@@ -2498,6 +2499,8 @@ function updateCrawlerDashboardUI(snap) {
     dom.crawlerStatusText.textContent = `✅ 数据采集已圆满完成！全部数据已沉淀入库。${skipTip}`;
     dom.crawlerCompleteBanner.style.display = 'flex';
     dom.crawlerCompleteMsg.textContent = `恭喜！已顺利完成 ${snap.updated_count || 0} 只标的最新行情采集与 SQLite 事务持久化${skipTip}，耗时 ${(snap.elapsed_sec || 0).toFixed(1)} 秒。`;
+    // 采集完成后刷新抓取审计列表
+    loadCrawlerAuditList();
   } else if (snap.status === 'cancelled') {
     dom.crawlerPulseDot.style.backgroundColor = '#ef4444';
     dom.crawlerPulseDot.style.boxShadow = 'none';
@@ -2507,6 +2510,71 @@ function updateCrawlerDashboardUI(snap) {
     dom.crawlerPulseDot.style.backgroundColor = '#94a3b8';
     dom.crawlerPulseDot.style.boxShadow = 'none';
     dom.crawlerStatusText.textContent = `就绪待命中 (未开始抓取任务)`;
+  }
+}
+
+/**
+ * 需求1/2: 数据中心拉取并渲染抓取审计流水列表 (展示抓取信息的ID、抓取日期、抓取状态、抓取指纹)
+ */
+async function loadCrawlerAuditList() {
+  const tbody = document.getElementById('crawlerAuditTableBody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch('/api/crawler/audit-list', { cache: 'no-store' });
+    if (!res.ok) throw new Error('拉取审计记录失败');
+    const json = await res.json();
+    const records = json.records || [];
+
+    if (records.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            暂无抓取审计记录，可点击上方「一键全量抓取」或「核心资产增量抓取」生成首个抓取指纹。
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = records.map(rec => {
+      const isNew = (rec.status || '').includes('全新') || (rec.status || '').includes('全量');
+      const isSkip = (rec.status || '').includes('免抓') || (rec.status || '').includes('一致') || (rec.status || '').includes('跳过');
+      const pillCls = isNew ? 'audit-status-new' : isSkip ? 'audit-status-skip' : 'audit-status-fail';
+      const statusIcon = isNew ? '✅' : isSkip ? '⚡' : '❌';
+      
+      const fpShort = rec.fingerprint || 'fp:--';
+
+      return `
+        <tr>
+          <td><strong style="font-family: monospace; color: #f1f5f9; font-size: 0.9rem;">#${rec.task_id}</strong></td>
+          <td style="font-family: monospace; color: #cbd5e1; font-size: 0.85rem;">${rec.crawl_date}</td>
+          <td>
+            <span class="audit-status-pill ${pillCls}">
+              ${statusIcon} ${rec.status}
+            </span>
+          </td>
+          <td>
+            <span class="fingerprint-badge" title="数据内容指纹: ${fpShort}">
+              fp:${fpShort}
+            </span>
+          </td>
+          <td style="color: var(--text-secondary); font-size: 0.82rem;">
+            <strong style="color: #93c5fd;">[${rec.target_scope || '全市场'}]</strong> ${rec.details || '--'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (err) {
+    console.error('加载抓取审计列表异常:', err);
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; color: var(--color-up); padding: 1.5rem;">
+          获取抓取审计流水异常: ${err.message}
+        </td>
+      </tr>
+    `;
   }
 }
 
