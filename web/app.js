@@ -70,6 +70,12 @@ const dom = {
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
 
   // 外部宏观环境 DOM
+  worldHeaderScopeTitle: document.getElementById('worldHeaderScopeTitle'),
+  worldHeaderScopeDesc: document.getElementById('worldHeaderScopeDesc'),
+  worldScoreCardSubLabel: document.getElementById('worldScoreCardSubLabel'),
+  worldTimelineChartTitle: document.getElementById('worldTimelineChartTitle'),
+  badgeScopeDomestic: document.getElementById('badgeScopeDomestic'),
+  badgeScopeInternational: document.getElementById('badgeScopeInternational'),
   worldStartDate: document.getElementById('worldStartDate'),
   worldEndDate: document.getElementById('worldEndDate'),
   worldTotalScore: document.getElementById('worldTotalScore'),
@@ -1310,7 +1316,7 @@ async function loadWorldMacroIntelligence() {
     }
 
     renderWorldCommodities(data.commodities || []);
-    renderWorldScoreTimelineChart(data.score_timeline);
+    // 依据当前置顶选中的国内/国际Tab，深度联动渲染时序走势图与事件流
     switchMacroScope(appState.macroScope || 'domestic');
   } catch (err) {
     console.error('加载全球外部环境情报异常:', err);
@@ -1326,18 +1332,18 @@ async function loadWorldMacroIntelligence() {
 /**
  * 需求3: 渲染外部宏观对 A 股总评分历史时序走势图谱 (SVG)
  */
-function renderWorldScoreTimelineChart(timeline) {
+function renderWorldScoreTimelineChart(timeline, scopeTitle = '外部宏观') {
   if (!dom.worldScoreChartSvgContainer || !timeline) return;
 
   const stats = timeline.stats || {};
   if (dom.statScoreLatest) dom.statScoreLatest.textContent = `${(stats.latest_score || 0) >= 0 ? '+' : ''}${stats.latest_score || 0} 分`;
-  if (dom.statScoreMax) dom.statScoreMax.textContent = `+${stats.max_score || 0} 分`;
+  if (dom.statScoreMax) dom.statScoreMax.textContent = `${(stats.max_score || 0) >= 0 ? '+' : ''}${stats.max_score || 0} 分`;
   if (dom.statScoreMin) dom.statScoreMin.textContent = `${stats.min_score || 0} 分`;
   if (dom.statScoreAvg) dom.statScoreAvg.textContent = `${(stats.avg_score || 0) >= 0 ? '+' : ''}${stats.avg_score || 0} 分`;
 
   const points = timeline.points || [];
   if (points.length === 0) {
-    dom.worldScoreChartSvgContainer.innerHTML = '<div style="padding: 2rem; color: var(--text-muted);">暂无时序数据</div>';
+    dom.worldScoreChartSvgContainer.innerHTML = '<div style="padding: 2rem; color: var(--text-muted);">暂无该维度时序数据</div>';
     return;
   }
 
@@ -1348,8 +1354,10 @@ function renderWorldScoreTimelineChart(timeline) {
   const innerH = h - m.top - m.bottom;
 
   const scores = points.map(p => p.total_score);
-  const maxS = Math.max(500, Math.max(...scores) * 1.15);
-  const minS = Math.min(-300, Math.min(...scores) * 1.15);
+  const maxScoreVal = Math.max(...scores);
+  const minScoreVal = Math.min(...scores);
+  const maxS = Math.max(200, Math.ceil((maxScoreVal * 1.15) / 100) * 100);
+  const minS = Math.min(-100, Math.floor((minScoreVal * 1.15) / 100) * 100);
 
   const scoreToY = (s) => m.top + ((maxS - s) / (maxS - minS)) * innerH;
   const zeroY = scoreToY(0);
@@ -1381,7 +1389,7 @@ function renderWorldScoreTimelineChart(timeline) {
     const color = p.total_score >= 0 ? '#ef4444' : '#10b981';
     dots += `
       <circle cx="${x}" cy="${y}" r="3.5" fill="${color}" stroke="#0b1329" stroke-width="1.5">
-        <title>${p.date} 综合冲击分: ${p.total_score >= 0 ? '+' : ''}${p.total_score}分&#10;事件: ${p.events_desc}</title>
+        <title>${p.date} [${scopeTitle}] 影响评分: ${p.total_score >= 0 ? '+' : ''}${p.total_score}分&#10;核心事件: ${p.events_desc}</title>
       </circle>
     `;
   });
@@ -1399,29 +1407,27 @@ function renderWorldScoreTimelineChart(timeline) {
         </linearGradient>
       </defs>
 
-      <!-- 背景网格框 -->
-      <rect x="${m.left}" y="${m.top}" width="${innerW}" height="${innerH}" fill="#0f172a" stroke="#1e293b"/>
+      <!-- 网格与零刻度多空分界线 -->
+      <line x1="${m.left}" y1="${zeroY}" x2="${m.left + innerW}" y2="${zeroY}" stroke="#475569" stroke-width="1.2" stroke-dasharray="4,4"/>
+      <text x="${m.left + 8}" y="${zeroY - 6}" fill="#94a3b8" font-size="10" font-family="monospace">⚖️ 0 分多空分界线</text>
 
-      <!-- 零轴多空分水岭虚线 -->
-      <line x1="${m.left}" y1="${zeroY}" x2="${m.left + innerW}" y2="${zeroY}" stroke="#64748b" stroke-dasharray="4,4" stroke-width="1.2"/>
-      <text x="${m.left + 8}" y="${zeroY - 5}" fill="#94a3b8" font-size="10" font-weight="bold">⚖️ 0 分多空分界线</text>
-
-      <!-- 面积与折线 -->
+      <!-- 走势区域填充 -->
       <path d="${pathArea}" fill="url(#scoreGrad)"/>
-      <path d="${pathLine}" fill="none" stroke="#ef4444" stroke-width="2.2"/>
 
-      <!-- 数据点 -->
+      <!-- 走势主折线 -->
+      <path d="${pathLine}" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+      <!-- 关键节点数据点 -->
       ${dots}
 
-      <!-- Y轴刻度与标签 -->
-      <text x="${m.left - 8}" y="${m.top + 10}" fill="#ef4444" font-size="11" text-anchor="end" font-family="monospace">+${Math.round(maxS)}分</text>
-      <text x="${m.left - 8}" y="${zeroY + 4}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">0分</text>
-      <text x="${m.left - 8}" y="${m.top + innerH}" fill="#10b981" font-size="11" text-anchor="end" font-family="monospace">${Math.round(minS)}分</text>
+      <!-- Y轴极值标注 -->
+      <text x="${m.left - 8}" y="${m.top + 5}" fill="#ef4444" font-size="10" text-anchor="end" font-family="monospace">+${maxS}分</text>
+      <text x="${m.left - 8}" y="${m.top + innerH}" fill="#10b981" font-size="10" text-anchor="end" font-family="monospace">${minS}分</text>
 
-      <!-- X轴日期 -->
-      <text x="${m.left}" y="${m.top + innerH + 18}" fill="#64748b" font-size="10" text-anchor="start">${firstDate}</text>
-      <text x="${m.left + innerW * 0.5}" y="${m.top + innerH + 18}" fill="#64748b" font-size="10" text-anchor="middle">${midDate}</text>
-      <text x="${m.left + innerW}" y="${m.top + innerH + 18}" fill="#64748b" font-size="10" text-anchor="end">${lastDate}</text>
+      <!-- X轴时间标注 -->
+      <text x="${m.left}" y="${h - 8}" fill="#64748b" font-size="10" text-anchor="start">${firstDate}</text>
+      <text x="${m.left + innerW * 0.5}" y="${h - 8}" fill="#64748b" font-size="10" text-anchor="middle">${midDate}</text>
+      <text x="${m.left + innerW}" y="${h - 8}" fill="#64748b" font-size="10" text-anchor="end">${lastDate}</text>
     </svg>
   `;
 }
@@ -1476,7 +1482,7 @@ function renderWorldCommodities(items) {
 }
 
 /**
- * 需求3: 切换国内核心部委宏观与国际外围宏观 Tab
+ * 需求3: 切换国内核心部委宏观与国际外围宏观 Tab (格式塔置顶与全维度深度联动)
  */
 function switchMacroScope(scope) {
   appState.macroScope = scope;
@@ -1495,6 +1501,23 @@ function switchMacroScope(scope) {
     dom.worldCommoditySection.style.display = (scope === 'international') ? 'block' : 'none';
   }
 
+  // 联动顶部卡片标题与说明文字
+  if (dom.worldHeaderScopeTitle) {
+    dom.worldHeaderScopeTitle.textContent = (scope === 'domestic')
+      ? '🇨🇳 国内核心部委宏观情报全景'
+      : '🌐 国际外围宏观与全球大宗情报';
+  }
+  if (dom.worldHeaderScopeDesc) {
+    dom.worldHeaderScopeDesc.innerHTML = (scope === 'domestic')
+      ? '穿透国家四大权威部委官方信源（财政部/发改委/中国政府网/金融监管总局），每条政策均提供 <strong>[-1000, +1000]</strong> 的 A 股量化冲击打分。'
+      : '穿透全球官方信源与大宗汇率行情（美联储/欧洲央行/中东地缘/大宗商品），每条大事均提供 <strong>[-1000, +1000]</strong> 的 A 股量化冲击打分。';
+  }
+  if (dom.worldScoreCardSubLabel) {
+    dom.worldScoreCardSubLabel.textContent = (scope === 'domestic')
+      ? '国内核心部委对 A 股综合量化总分 (单项 -1000 ~ +1000 动态加总)'
+      : '国际外围宏观对 A 股综合量化总分 (单项 -1000 ~ +1000 动态加总)';
+  }
+
   // 重置国家过滤器
   if (scope === 'domestic') {
     appState.worldFilterCountry = 'cn';
@@ -1511,9 +1534,10 @@ function switchMacroScope(scope) {
     }
   }
 
-  // 重新渲染事件流与总分卡
+  // 重新渲染事件流、总分卡与图2时序走势图
   const data = appState.worldMacroData || {};
   const agg = data.aggregate_score || {};
+  
   if (scope === 'domestic') {
     const dScore = agg.domestic_score !== undefined ? agg.domestic_score : agg.total_score;
     if (dom.worldTotalScore) {
@@ -1523,7 +1547,18 @@ function switchMacroScope(scope) {
     if (dom.worldEventsCount) {
       dom.worldEventsCount.textContent = agg.domestic_count || (data.domestic_events || []).length;
     }
+    if (dom.badgeScopeDomestic) {
+      dom.badgeScopeDomestic.textContent = `${agg.domestic_count || 8}件政经要闻`;
+    }
+    if (dom.worldTimelineChartTitle) {
+      dom.worldTimelineChartTitle.textContent = '🇨🇳 国内核心部委宏观对 A 股影响评分历史走势图谱';
+    }
+
     renderWorldEvents(data.domestic_events || data.world_events || []);
+    
+    // 需求2: 时序走势图动态切换为纯国内部委时序
+    const domTimeline = data.timeline_domestic || data.score_timeline;
+    renderWorldScoreTimelineChart(domTimeline, '国内核心部委');
   } else {
     const iScore = agg.international_score !== undefined ? agg.international_score : agg.total_score;
     if (dom.worldTotalScore) {
@@ -1533,7 +1568,18 @@ function switchMacroScope(scope) {
     if (dom.worldEventsCount) {
       dom.worldEventsCount.textContent = agg.international_count || (data.international_events || []).length;
     }
+    if (dom.badgeScopeInternational) {
+      dom.badgeScopeInternational.textContent = `${agg.international_count || 10}件全球大事`;
+    }
+    if (dom.worldTimelineChartTitle) {
+      dom.worldTimelineChartTitle.textContent = '🌐 国际外围宏观对 A 股影响评分历史走势图谱';
+    }
+
     renderWorldEvents(data.international_events || data.world_events || []);
+
+    // 需求2: 时序走势图动态切换为纯国际外围时序
+    const intTimeline = data.timeline_international || data.score_timeline;
+    renderWorldScoreTimelineChart(intTimeline, '国际外围');
   }
 }
 

@@ -74,8 +74,16 @@ class WorldMacroEngine:
             sentiment_color = "#059669"
             sentiment_icon = "🌪️"
 
-        # 构建历史时序总评分走势图数据
-        score_timeline = cls._build_score_timeline(all_events, start_date, end_date)
+        # 构建历史时序总评分走势图数据 (全量、国内、国际三轨并进)
+        timeline_all = cls._build_score_timeline(all_events, start_date, end_date)
+        timeline_domestic = cls._build_score_timeline(
+            [e for e in all_events if e.get("scope") == "domestic"],
+            start_date, end_date
+        )
+        timeline_international = cls._build_score_timeline(
+            [e for e in all_events if e.get("scope") != "domestic"],
+            start_date, end_date
+        )
 
         return {
             "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -95,7 +103,10 @@ class WorldMacroEngine:
                 "sentiment_icon": sentiment_icon,
                 "max_possible_range": "[-1000, +1000] / 单事件"
             },
-            "score_timeline": score_timeline,
+            "score_timeline": timeline_all,
+            "timeline_all": timeline_all,
+            "timeline_domestic": timeline_domestic,
+            "timeline_international": timeline_international,
             "commodities": commodities,
             "world_events": filtered_events,
             "domestic_events": domestic_events,
