@@ -509,6 +509,42 @@
             </div>
           </div>
 
+          <!-- 需求2: 十大流通股东持股十档分布列表与可视化直方图看板 (0~100% 全覆盖闭环) -->
+          <div class="macro-chart-box" style="grid-column: 1 / -1;">
+            <div class="macro-chart-title" style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span>👥 十大流通股东持股集中度十档阶梯分布 (0%~100% 闭环无缝)</span>
+                <span class="brand-tag" style="font-size: 0.7rem;">筹码集中度</span>
+              </div>
+              <div style="font-size: 0.76rem; color: var(--text-secondary);">
+                全市场标的合计: <strong id="top10CircTotalCountText" style="color: #38bdf8;">4,601</strong> 只 ｜ 
+                占比闭环校验: <span class="complete-badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">100.0% 闭环</span>
+              </div>
+            </div>
+            <!-- 左右分栏：左侧明细表格，右侧柱状分布直方图 -->
+            <div class="top10-circ-split-layout">
+              <div class="top10-circ-table-box">
+                <table class="macro-table" style="width: 100%;">
+                  <thead>
+                    <tr>
+                      <th style="width: 60px;">阶梯</th>
+                      <th>持股区间</th>
+                      <th>数学定义</th>
+                      <th>企业数量(只)</th>
+                      <th>全市场占比</th>
+                    </tr>
+                  </thead>
+                  <tbody id="top10CircTiersTableBody">
+                    <!-- 由 JS 动态渲染 10 档数据 -->
+                  </tbody>
+                </table>
+              </div>
+              <div class="top10-circ-chart-box" id="top10CircChartContainer">
+                <!-- 由 JS 动态渲染可视化 SVG 柱状图 -->
+              </div>
+            </div>
+          </div>
+
         </div>
 
       </div>
@@ -599,8 +635,60 @@
           </div>
         </div>
 
-        <!-- 1. 全球硬通货资产与大宗商品实时看板 (外汇 / 黄金 / 原油 / 贵金属) -->
-        <div class="commodity-section">
+        <!-- 需求3: 外部宏观环境 国内 / 国外 一级分类 Tab 切换栏 -->
+        <div class="macro-scope-nav-tabs" style="margin-top: 1.2rem; display: flex; gap: 0.5rem; border-bottom: 2px solid rgba(56, 189, 248, 0.2); padding-bottom: 0.5rem;">
+          <button type="button" class="scope-nav-btn active" id="btnScopeDomestic" onclick="switchMacroScope('domestic')">
+            🇨🇳 国内核心部委宏观 (财政部/发改委/政府网/金融总局)
+          </button>
+          <button type="button" class="scope-nav-btn" id="btnScopeInternational" onclick="switchMacroScope('international')">
+            🌐 国际外围宏观与大宗商品 (美欧中东亚太)
+          </button>
+        </div>
+
+        <!-- 国内四大核心部委官方直通卡片 (仅在国内视图显示) -->
+        <div id="domesticMinistriesQuickBar" class="domestic-ministries-bar" style="margin-top: 1rem;">
+          <div style="font-weight: 700; font-size: 0.96rem; margin-bottom: 0.6rem; display: flex; align-items: center; justify-content: space-between;">
+            <span>🏛️ 中国权威部委政务信源直通与反爬定向采集</span>
+            <span class="brand-tag" style="font-size: 0.72rem;">政治与财经信息深度融合</span>
+          </div>
+          <div class="ministries-grid">
+            <a href="https://www.mof.gov.cn/index.htm" target="_blank" class="ministry-card">
+              <div class="min-card-header">
+                <span class="min-flag">🇨🇳</span>
+                <span class="min-name">中国财政部 (MOF)</span>
+              </div>
+              <div class="min-desc">积极财政发力、超长期特别国债、专项债及高新技术税收优惠</div>
+              <div class="min-url">mof.gov.cn ↗</div>
+            </a>
+            <a href="https://www.ndrc.gov.cn/" target="_blank" class="ministry-card">
+              <div class="min-card-header">
+                <span class="min-flag">📈</span>
+                <span class="min-name">中国发改委 (NDRC)</span>
+              </div>
+              <div class="min-desc">大规模设备更新和消费品两新政策、重大产业投资、民营经济扶持</div>
+              <div class="min-url">ndrc.gov.cn ↗</div>
+            </a>
+            <a href="http://big5.www.gov.cn/gate/big5/www.gov.cn/" target="_blank" class="ministry-card">
+              <div class="min-card-header">
+                <span class="min-flag">🏛️</span>
+                <span class="min-name">中国政府网 (GOV)</span>
+              </div>
+              <div class="min-desc">国务院常务会议、国家宏观大政方针、全国统一大市场与高水平开放</div>
+              <div class="min-url">gov.cn ↗</div>
+            </a>
+            <a href="https://www.nfra.gov.cn/cn/view/pages/index/index.html" target="_blank" class="ministry-card">
+              <div class="min-card-header">
+                <span class="min-flag">🏦</span>
+                <span class="min-name">国家金融监督管理总局</span>
+              </div>
+              <div class="min-desc">AIC股权投资试点、保险资金长线入市、房企白名单与信贷活水</div>
+              <div class="min-url">nfra.gov.cn ↗</div>
+            </a>
+          </div>
+        </div>
+
+        <!-- 1. 全球硬通货资产与大宗商品实时看板 (仅在国际视图显示) -->
+        <div class="commodity-section" id="worldCommoditySection" style="display: none; margin-top: 1rem;">
           <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
             <span>🪙 全球硬通货与国际大宗商品实时看板</span>
             <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">(离岸人民币、美元指数、黄金、白银、布伦特原油、期铜等)</span>

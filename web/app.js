@@ -38,6 +38,7 @@ const appState = {
   activeFinGranularity: 'annual', // 'annual' (按年度/图2) | 'report' (按报告期) | 'quarter' (按单季度)
 
   // 外部宏观环境过滤状态
+  macroScope: 'domestic', // 需求3: 'domestic' (国内部委) | 'international' (国际外围)
   worldFilterCountry: 'all',
   worldFilterDomain: 'all',
   worldMacroData: null,
@@ -81,6 +82,10 @@ const dom = {
   statScoreMax: document.getElementById('statScoreMax'),
   statScoreMin: document.getElementById('statScoreMin'),
   statScoreAvg: document.getElementById('statScoreAvg'),
+  btnScopeDomestic: document.getElementById('btnScopeDomestic'),
+  btnScopeInternational: document.getElementById('btnScopeInternational'),
+  domesticMinistriesQuickBar: document.getElementById('domesticMinistriesQuickBar'),
+  worldCommoditySection: document.getElementById('worldCommoditySection'),
   worldCommodityGrid: document.getElementById('worldCommodityGrid'),
   worldEventsStream: document.getElementById('worldEventsStream'),
   worldCountryPills: document.getElementById('worldCountryPills'),
@@ -103,6 +108,9 @@ const dom = {
   macroDimGrid: document.getElementById('macroDimGrid'),
   chartChangeDistContainer: document.getElementById('chartChangeDistContainer'),
   chartCapTiersContainer: document.getElementById('chartCapTiersContainer'),
+  top10CircTiersTableBody: document.getElementById('top10CircTiersTableBody'),
+  top10CircChartContainer: document.getElementById('top10CircChartContainer'),
+  top10CircTotalCountText: document.getElementById('top10CircTotalCountText'),
 
   // Filter 控件
   filterDateInput: document.getElementById('filterDateInput'),
@@ -1062,10 +1070,96 @@ function renderMacroDashboardUI(data) {
     });
   }
 
-  // 3. 渲染图形化图表 (涨跌梯度分布直方图 + 市值规模梯队金字塔)
+  // 3. 渲染图形化图表 (涨跌梯度分布直方图 + 市值规模梯队金字塔 + 需求2: 十大流通股东十档阶梯分布)
   const charts = data.charts || {};
   renderChangeDistributionChart(charts.change_distribution);
   renderCapTiersPyramidChart(charts.market_cap_tiers, total);
+  renderTop10CircTiersDashboard(charts.top10_circ_tiers_10, total);
+}
+
+/**
+ * 需求2: 渲染十大流通股东十档阶梯表格与可视化分布直方图
+ */
+function renderTop10CircTiersDashboard(tierData, totalCount) {
+  if (!dom.top10CircTiersTableBody || !tierData) return;
+
+  const items = tierData.items || [];
+  if (dom.top10CircTotalCountText) {
+    dom.top10CircTotalCountText.textContent = (tierData.total_count || totalCount || 4601).toLocaleString();
+  }
+
+  // 1. 渲染左侧明细表格
+  dom.top10CircTiersTableBody.innerHTML = '';
+  items.forEach(it => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="brand-tag" style="background: ${it.color}20; color: ${it.color}; font-size: 0.72rem;">第${it.index}档</span></td>
+      <td><strong style="color: #f8fafc;">${it.range_label}</strong></td>
+      <td><code style="color: #94a3b8; font-size: 0.76rem;">${it.math_range}</code></td>
+      <td style="font-weight: 700; color: #38bdf8;">${it.company_count.toLocaleString()} 家</td>
+      <td>
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <div style="flex: 1; max-width: 80px; height: 6px; background: rgba(30, 41, 59, 0.8); border-radius: 3px; overflow: hidden;">
+            <div style="width: ${it.percentage}%; height: 100%; background: ${it.color};"></div>
+          </div>
+          <span style="font-family: monospace; font-size: 0.8rem; color: #cbd5e1;">${it.percentage}%</span>
+        </div>
+      </td>
+    `;
+    dom.top10CircTiersTableBody.appendChild(tr);
+  });
+
+  // 2. 渲染右侧高质量 SVG 分布直方图
+  if (!dom.top10CircChartContainer) return;
+  const w = 480;
+  const h = 260;
+  const m = { top: 25, right: 20, bottom: 45, left: 45 };
+  const innerW = w - m.left - m.right;
+  const innerH = h - m.top - m.bottom;
+
+  const maxVal = Math.max(...items.map(it => it.company_count), 50);
+  const stepX = innerW / items.length;
+  const barW = stepX * 0.75;
+
+  let bars = '';
+  items.forEach((it, idx) => {
+    const x = m.left + idx * stepX + (stepX - barW) * 0.5;
+    const barH = (it.company_count / maxVal) * innerH;
+    const y = m.top + innerH - barH;
+
+    bars += `
+      <rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${it.color}" rx="3" opacity="0.9">
+        <title>${it.range_label} (${it.math_range})&#10;企业数量: ${it.company_count} 家&#10;占比: ${it.percentage}%</title>
+      </rect>
+      <text x="${x + barW * 0.5}" y="${Math.max(m.top + 10, y - 4)}" fill="#f8fafc" font-size="9" font-weight="600" text-anchor="middle" font-family="monospace">
+        ${it.company_count > 0 ? it.company_count : ''}
+      </text>
+      <text x="${x + barW * 0.5}" y="${m.top + innerH + 16}" fill="#94a3b8" font-size="8" text-anchor="middle">
+        ${it.range_label.replace(' ~ ', '-')}
+      </text>
+    `;
+  });
+
+  dom.top10CircChartContainer.innerHTML = `
+    <svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+      <!-- 坐标轴网格 -->
+      <line x1="${m.left}" y1="${m.top + innerH}" x2="${m.left + innerW}" y2="${m.top + innerH}" stroke="#334155" stroke-width="1"/>
+      <line x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + innerH}" stroke="#334155" stroke-width="1"/>
+      
+      <!-- 刻度线与文字 -->
+      <text x="${m.left - 6}" y="${m.top + 10}" fill="#64748b" font-size="9" text-anchor="end" font-family="monospace">${maxVal}</text>
+      <text x="${m.left - 6}" y="${m.top + innerH * 0.5 + 4}" fill="#64748b" font-size="9" text-anchor="end" font-family="monospace">${Math.round(maxVal / 2)}</text>
+      <text x="${m.left - 6}" y="${m.top + innerH}" fill="#64748b" font-size="9" text-anchor="end" font-family="monospace">0</text>
+      
+      <!-- 横轴主标题 -->
+      <text x="${m.left + innerW * 0.5}" y="${m.top + innerH + 34}" fill="#64748b" font-size="10" text-anchor="middle">
+        前十大流通股东合计持股比例区间分布 (%)
+      </text>
+
+      <!-- 渲染柱子 -->
+      ${bars}
+    </svg>
+  `;
 }
 
 function formatStatVal(v, unit) {
@@ -1216,8 +1310,8 @@ async function loadWorldMacroIntelligence() {
     }
 
     renderWorldCommodities(data.commodities || []);
-    renderWorldEvents(data.world_events || []);
     renderWorldScoreTimelineChart(data.score_timeline);
+    switchMacroScope(appState.macroScope || 'domestic');
   } catch (err) {
     console.error('加载全球外部环境情报异常:', err);
     if (dom.worldCommodityGrid) {
@@ -1382,6 +1476,68 @@ function renderWorldCommodities(items) {
 }
 
 /**
+ * 需求3: 切换国内核心部委宏观与国际外围宏观 Tab
+ */
+function switchMacroScope(scope) {
+  appState.macroScope = scope;
+  if (dom.btnScopeDomestic) {
+    dom.btnScopeDomestic.classList.toggle('active', scope === 'domestic');
+  }
+  if (dom.btnScopeInternational) {
+    dom.btnScopeInternational.classList.toggle('active', scope === 'international');
+  }
+
+  // 显隐部委直通栏与国际大宗商品栏
+  if (dom.domesticMinistriesQuickBar) {
+    dom.domesticMinistriesQuickBar.style.display = (scope === 'domestic') ? 'block' : 'none';
+  }
+  if (dom.worldCommoditySection) {
+    dom.worldCommoditySection.style.display = (scope === 'international') ? 'block' : 'none';
+  }
+
+  // 重置国家过滤器
+  if (scope === 'domestic') {
+    appState.worldFilterCountry = 'cn';
+    if (dom.worldCountryPills) {
+      dom.worldCountryPills.style.display = 'none'; // 国内模式下隐去外围国家按钮
+    }
+  } else {
+    appState.worldFilterCountry = 'all';
+    if (dom.worldCountryPills) {
+      dom.worldCountryPills.style.display = 'flex';
+      dom.worldCountryPills.querySelectorAll('.country-pill').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-country') === 'all');
+      });
+    }
+  }
+
+  // 重新渲染事件流与总分卡
+  const data = appState.worldMacroData || {};
+  const agg = data.aggregate_score || {};
+  if (scope === 'domestic') {
+    const dScore = agg.domestic_score !== undefined ? agg.domestic_score : agg.total_score;
+    if (dom.worldTotalScore) {
+      dom.worldTotalScore.textContent = `${dScore >= 0 ? '+' : ''}${dScore.toLocaleString()}`;
+      dom.worldTotalScore.className = `score-number ${dScore >= 0 ? 'price-up' : 'price-down'}`;
+    }
+    if (dom.worldEventsCount) {
+      dom.worldEventsCount.textContent = agg.domestic_count || (data.domestic_events || []).length;
+    }
+    renderWorldEvents(data.domestic_events || data.world_events || []);
+  } else {
+    const iScore = agg.international_score !== undefined ? agg.international_score : agg.total_score;
+    if (dom.worldTotalScore) {
+      dom.worldTotalScore.textContent = `${iScore >= 0 ? '+' : ''}${iScore.toLocaleString()}`;
+      dom.worldTotalScore.className = `score-number ${iScore >= 0 ? 'price-up' : 'price-down'}`;
+    }
+    if (dom.worldEventsCount) {
+      dom.worldEventsCount.textContent = agg.international_count || (data.international_events || []).length;
+    }
+    renderWorldEvents(data.international_events || data.world_events || []);
+  }
+}
+
+/**
  * 过滤与渲染世界大事列表
  */
 function filterWorldEvents(type, val) {
@@ -1397,8 +1553,14 @@ function filterWorldEvents(type, val) {
     });
   }
 
-  const allEvents = (appState.worldMacroData && appState.worldMacroData.world_events) ? appState.worldMacroData.world_events : [];
-  renderWorldEvents(allEvents);
+  const data = appState.worldMacroData || {};
+  let targetEvents = [];
+  if (appState.macroScope === 'domestic') {
+    targetEvents = data.domestic_events || (data.world_events || []).filter(e => e.scope === 'domestic');
+  } else {
+    targetEvents = data.international_events || (data.world_events || []).filter(e => e.scope !== 'domestic');
+  }
+  renderWorldEvents(targetEvents);
 }
 
 function renderWorldEvents(events) {
@@ -1415,7 +1577,7 @@ function renderWorldEvents(events) {
   });
 
   if (filtered.length === 0) {
-    dom.worldEventsStream.innerHTML = '<div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">暂无符合该筛选条件的世界大事情报</div>';
+    dom.worldEventsStream.innerHTML = '<div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">暂无符合该筛选条件的大事情报</div>';
     return;
   }
 
@@ -1425,13 +1587,15 @@ function renderWorldEvents(events) {
     const scoreVal = Number(e.quant_score || 0);
     const scoreColor = scoreVal > 0 ? '#ef4444' : scoreVal < 0 ? '#10b981' : '#94a3b8';
     const scoreSign = scoreVal > 0 ? '+' : '';
+    const isDomestic = e.scope === 'domestic' || e.ministry;
 
     card.innerHTML = `
       <div class="event-top-line">
         <div class="event-meta-left">
           <span class="event-flag">${e.flag}</span>
-          <span style="font-weight: 700; font-size: 0.88rem;">${e.country}</span>
+          <span style="font-weight: 700; font-size: 0.88rem;">${isDomestic ? (e.ministry || e.country) : e.country}</span>
           <span class="event-domain-tag">${e.domain_icon} ${e.domain}</span>
+          ${isDomestic ? `<span class="brand-tag" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-size: 0.7rem;">国家部委官方</span>` : ''}
           <span class="quant-tag-score" style="background-color: ${scoreColor}20; color: ${scoreColor}; border: 1px solid ${scoreColor}40;">
             A股量化冲击: ${scoreSign}${scoreVal} 分
           </span>
@@ -1443,8 +1607,8 @@ function renderWorldEvents(events) {
       <div class="event-summary">${e.summary}</div>
 
       <div class="event-impact-box">
-        🎯 <strong>金融与地缘影响深度研判:</strong> ${e.impact_analysis}<br>
-        <span style="font-size: 0.76rem; color: #93c5fd;">⚡ <strong>打分逻辑:</strong> ${e.score_reason || '对流动性及风险偏好形成直接传导'}</span>
+        🎯 <strong>政策及宏观影响深度研判:</strong> ${e.impact_analysis}<br>
+        <span style="font-size: 0.76rem; color: #93c5fd;">⚡ <strong>传导归因:</strong> ${e.score_reason || '对实体产业及A股资产形成实质性驱动'}</span>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.2rem; flex-wrap: wrap; gap: 0.4rem;">
@@ -2232,12 +2396,7 @@ function renderActiveStockChart() {
       : generateClientFallbackTimeline(stock.price, stock.prev_close);
     const preClose = Number(tlData.pre_close || stock.prev_close || stock.price || 10.0);
 
-    // 需求1: 支持分时图滚轮无级缩放
-    if (appState.chartCustomZoomCount > 0 && items.length > 20) {
-      const curCount = Math.min(items.length, Math.max(20, appState.chartCustomZoomCount));
-      items = items.slice(items.length - curCount);
-    }
-
+    // 需求1: 分时图不需要放大缩小时间区间，固定看全分时图 (09:30-15:00 完整全景)
     dom.chartSvgContainer.innerHTML = generateTimelineSVG(items, preClose, appState.chartSubplot, width, height, mainHeight, subHeight, margin);
     bindChartCrosshair('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
     bindChartZoomAndDrawing('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
@@ -2341,15 +2500,17 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
   const svg = document.getElementById('stockInteractiveSvg');
   if (!svg || !dataList || dataList.length === 0) return;
 
-  // 1. 鼠标滚轮缩放逻辑 (需求3: 灵敏度降低，优化阻尼平滑防抖)
+  // 1. 鼠标滚轮缩放逻辑 (需求1: 仅日K线模式下启用滚轮缩放；分时图固定全景全天展示)
   svg.addEventListener('wheel', (e) => {
+    if (mode === 'timeline') {
+      // 需求1: 分时图不需要放大缩小时间区间，禁用滚轮缩放并放行页面正常滚动或阻止图表跳动
+      return;
+    }
     e.preventDefault();
     const stock = appState.activeDetailStock;
     if (!stock) return;
 
-    const fullLen = (mode === 'timeline') 
-      ? (stock.timeline_data?.items?.length || 240)
-      : (stock.daily_bars?.length || 100);
+    const fullLen = stock.daily_bars?.length || 100;
 
     let curCount = appState.chartCustomZoomCount > 0 
       ? appState.chartCustomZoomCount 

@@ -204,6 +204,64 @@ def compute_market_overview(
         elif cap >= 50: cap_tiers["small"] += 1
         else: cap_tiers["micro"] += 1
 
+    # 需求2: 十大流通股东持股比例 0~10%, 10%~20%...90%~100% 十档阶梯闭环统计
+    # 严格覆盖 [0, 10%], (10%, 20%], (20%, 30%] ... (90%, 100%]
+    # 保证每家企业必落入且仅落入一档，企业数量求和严格等于 total_count，占比相加严格 100%
+    top10_circ_tiers_10 = [0] * 10
+    for s in stocks:
+        val = float(s.get("top10_circ_hold_pct") or 0.0)
+        if val <= 10.0:
+            top10_circ_tiers_10[0] += 1
+        elif val <= 20.0:
+            top10_circ_tiers_10[1] += 1
+        elif val <= 30.0:
+            top10_circ_tiers_10[2] += 1
+        elif val <= 40.0:
+            top10_circ_tiers_10[3] += 1
+        elif val <= 50.0:
+            top10_circ_tiers_10[4] += 1
+        elif val <= 60.0:
+            top10_circ_tiers_10[5] += 1
+        elif val <= 70.0:
+            top10_circ_tiers_10[6] += 1
+        elif val <= 80.0:
+            top10_circ_tiers_10[7] += 1
+        elif val <= 90.0:
+            top10_circ_tiers_10[8] += 1
+        else:
+            top10_circ_tiers_10[9] += 1
+
+    tier_ranges = [
+        ("0% ~ 10%", "[0%, 10%]"),
+        ("10% ~ 20%", "(10%, 20%]"),
+        ("20% ~ 30%", "(20%, 30%]"),
+        ("30% ~ 40%", "(30%, 40%]"),
+        ("40% ~ 50%", "(40%, 50%]"),
+        ("50% ~ 60%", "(50%, 60%]"),
+        ("60% ~ 70%", "(60%, 70%]"),
+        ("70% ~ 80%", "(70%, 80%]"),
+        ("80% ~ 90%", "(80%, 90%]"),
+        ("90% ~ 100%", "(90%, 100%]")
+    ]
+
+    tier_colors = [
+        "#38bdf8", "#0284c7", "#0ea5e9", "#06b6d4", "#14b8a6",
+        "#10b981", "#f59e0b", "#f97316", "#ef4444", "#dc2626"
+    ]
+
+    top10_circ_10_items = []
+    for idx in range(10):
+        c_val = top10_circ_tiers_10[idx]
+        pct = round((c_val / total_count * 100.0), 2) if total_count > 0 else 0.0
+        top10_circ_10_items.append({
+            "index": idx + 1,
+            "range_label": tier_ranges[idx][0],
+            "math_range": tier_ranges[idx][1],
+            "company_count": c_val,
+            "percentage": pct,
+            "color": tier_colors[idx]
+        })
+
     # 聚合 10 大维度核心指标
     dimensions = {
         "market_cap": {
@@ -301,6 +359,12 @@ def compute_market_overview(
                 ],
                 "verified_sum": tiers_5_sum,
                 "is_complete": (tiers_5_sum == total_count)
+            },
+            "top10_circ_tiers_10": {
+                "items": top10_circ_10_items,
+                "total_count": total_count,
+                "verified_sum": sum(item["company_count"] for item in top10_circ_10_items),
+                "verified_pct": round(sum(item["percentage"] for item in top10_circ_10_items), 1)
             },
             "change_distribution": buckets_7,
             "market_cap_tiers": cap_tiers

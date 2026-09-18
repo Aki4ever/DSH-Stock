@@ -1201,6 +1201,121 @@ body {
   font-size: 0.78rem;
 }
 
+/* 需求3: 国内/国外宏观一级Tab与四大部委快捷卡片 */
+.scope-nav-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #94a3b8;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px 4px 0 0;
+}
+
+.scope-nav-btn:hover {
+  color: #f1f5f9;
+  background-color: rgba(56, 189, 248, 0.08);
+}
+
+.scope-nav-btn.active {
+  color: #38bdf8;
+  border-bottom-color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.14);
+}
+
+.domestic-ministries-bar {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.9));
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.2rem;
+}
+
+.ministries-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.8rem;
+}
+
+.ministry-card {
+  background-color: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem 0.9rem;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+}
+
+.ministry-card:hover {
+  transform: translateY(-2px);
+  border-color: #38bdf8;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.15);
+}
+
+.min-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.min-flag {
+  font-size: 1.1rem;
+}
+
+.min-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.min-desc {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.min-url {
+  font-size: 0.72rem;
+  color: #38bdf8;
+  font-family: monospace;
+  margin-top: 0.2rem;
+}
+
+/* 需求2: 十大流通股东十档阶梯布局与可视化 */
+.top10-circ-split-layout {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 1.2rem;
+  padding: 1rem 1.2rem;
+}
+
+@media (max-width: 900px) {
+  .top10-circ-split-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.top10-circ-table-box {
+  overflow-x: auto;
+}
+
+.top10-circ-chart-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(15, 23, 42, 0.6);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem;
+  border: 1px solid rgba(51, 65, 85, 0.4);
+}
+
 /* 需求1: 画图工具箱按钮样式 */
 .chart-draw-toolbox {
   display: inline-flex;
