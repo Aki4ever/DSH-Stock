@@ -32,6 +32,7 @@ const appState = {
   chartSubplot: 'vol',     // 'vol' (成交量) | 'amt' (成交额)
   chartZoomWindow: 'max',  // '60' | '250' | '750' | 'max'
   chartCustomZoomCount: 0, // 鼠标滚轮动态缩放的蜡烛根数 (0表示使用默认预设)
+  showChanlunDraw: false,  // 需求4: 缠论自动画线与买卖点开关
   drawHLineMode: false,    // 需求1: 是否处于绘制水平压力/支撑线模式
   drawnHorizontalLines: [], // 用户已绘制的水平辅助线列表 [{ price, y, id }]
   rawKlineData: [],        // 原始全量日K
@@ -185,6 +186,11 @@ const dom = {
   maxCapInput: document.getElementById('maxCapInput'),
   minCircCapInput: document.getElementById('minCircCapInput'),
   maxCircCapInput: document.getElementById('maxCircCapInput'),
+  // 需求1/2: 日交易额与日均交易额区间 DOM
+  minDailyAmountInput: document.getElementById('minDailyAmountInput'),
+  maxDailyAmountInput: document.getElementById('maxDailyAmountInput'),
+  minAvgDailyAmountInput: document.getElementById('minAvgDailyAmountInput'),
+  maxAvgDailyAmountInput: document.getElementById('maxAvgDailyAmountInput'),
   minPeInput: document.getElementById('minPeInput'),
   maxPeInput: document.getElementById('maxPeInput'),
   minTop10CircInput: document.getElementById('minTop10CircInput'),
@@ -285,6 +291,9 @@ const dom = {
   klineStartDate: document.getElementById('klineStartDate'),
   klineEndDate: document.getElementById('klineEndDate'),
   chartSubPlotControl: document.getElementById('chartSubPlotControl'),
+  btnChanlunDraw: document.getElementById('btnChanlunDraw'),
+  btnChanlunScope: document.getElementById('btnChanlunScope'),
+  chanlunScopeModal: document.getElementById('chanlunScopeModal'),
   btnAutoDrawLevels: document.getElementById('btnAutoDrawLevels'),
   btnToggleHLine: document.getElementById('btnToggleHLine'),
   btnClearLines: document.getElementById('btnClearLines'),
@@ -684,7 +693,10 @@ function initEventListeners() {
   // 数值区间输入框回车即搜
   const rangeInputs = [
     dom.minPriceInput, dom.maxPriceInput, dom.minCapInput, dom.maxCapInput,
-    dom.minCircCapInput, dom.maxCircCapInput, dom.minPeInput, dom.maxPeInput,
+    dom.minCircCapInput, dom.maxCircCapInput,
+    dom.minDailyAmountInput, dom.maxDailyAmountInput,
+    dom.minAvgDailyAmountInput, dom.maxAvgDailyAmountInput,
+    dom.minPeInput, dom.maxPeInput,
     dom.minTop10CircInput, dom.maxTop10CircInput, dom.minTop10HoldInput, dom.maxTop10HoldInput,
     dom.minListingYearsInput, dom.maxListingYearsInput,
     dom.minIndividualPctInput, dom.maxIndividualPctInput,
@@ -752,6 +764,14 @@ function resetSingleDimension(dimType) {
       dom.minCircCapInput.value = '';
       dom.maxCircCapInput.value = '';
       break;
+    case 'daily_amount':
+      if (dom.minDailyAmountInput) dom.minDailyAmountInput.value = '';
+      if (dom.maxDailyAmountInput) dom.maxDailyAmountInput.value = '';
+      break;
+    case 'avg_daily_amount':
+      if (dom.minAvgDailyAmountInput) dom.minAvgDailyAmountInput.value = '';
+      if (dom.maxAvgDailyAmountInput) dom.maxAvgDailyAmountInput.value = '';
+      break;
     case 'pe':
       dom.minPeInput.value = '';
       dom.maxPeInput.value = '';
@@ -808,6 +828,10 @@ function resetAllFilters() {
   dom.maxCapInput.value = '';
   dom.minCircCapInput.value = '';
   dom.maxCircCapInput.value = '';
+  if (dom.minDailyAmountInput) dom.minDailyAmountInput.value = '';
+  if (dom.maxDailyAmountInput) dom.maxDailyAmountInput.value = '';
+  if (dom.minAvgDailyAmountInput) dom.minAvgDailyAmountInput.value = '';
+  if (dom.maxAvgDailyAmountInput) dom.maxAvgDailyAmountInput.value = '';
   dom.minPeInput.value = '';
   dom.maxPeInput.value = '';
   dom.minTop10CircInput.value = '';
@@ -874,6 +898,11 @@ function collectFilterParams() {
     max_market_cap: dom.maxCapInput.value ? parseFloat(dom.maxCapInput.value) : null,
     min_circ_cap: dom.minCircCapInput.value ? parseFloat(dom.minCircCapInput.value) : null,
     max_circ_cap: dom.maxCircCapInput.value ? parseFloat(dom.maxCircCapInput.value) : null,
+    // 需求1/2: 日交易额与日均交易额 (亿元)
+    min_daily_amount: dom.minDailyAmountInput && dom.minDailyAmountInput.value ? parseFloat(dom.minDailyAmountInput.value) : null,
+    max_daily_amount: dom.maxDailyAmountInput && dom.maxDailyAmountInput.value ? parseFloat(dom.maxDailyAmountInput.value) : null,
+    min_avg_daily_amount: dom.minAvgDailyAmountInput && dom.minAvgDailyAmountInput.value ? parseFloat(dom.minAvgDailyAmountInput.value) : null,
+    max_avg_daily_amount: dom.maxAvgDailyAmountInput && dom.maxAvgDailyAmountInput.value ? parseFloat(dom.maxAvgDailyAmountInput.value) : null,
     min_pe: dom.minPeInput.value ? parseFloat(dom.minPeInput.value) : null,
     max_pe: dom.maxPeInput.value ? parseFloat(dom.maxPeInput.value) : null,
     min_top10_circ: dom.minTop10CircInput.value ? parseFloat(dom.minTop10CircInput.value) : null,
@@ -3207,6 +3236,35 @@ function toggleDrawHLineMode() {
 }
 
 /**
+ * 需求4: 切换缠论自动画线与买卖点显示
+ */
+function toggleChanlunDraw() {
+  appState.showChanlunDraw = !appState.showChanlunDraw;
+  if (dom.btnChanlunDraw) {
+    dom.btnChanlunDraw.classList.toggle('active', appState.showChanlunDraw);
+  }
+  renderActiveStockChart();
+}
+
+/**
+ * 需求4: 打开缠论适用范围与实战指南弹窗
+ */
+function openChanlunScopeModal() {
+  if (dom.chanlunScopeModal) {
+    dom.chanlunScopeModal.style.display = 'flex';
+  }
+}
+
+/**
+ * 需求4: 关闭缠论适用范围弹窗
+ */
+function closeChanlunScopeModal() {
+  if (dom.chanlunScopeModal) {
+    dom.chanlunScopeModal.style.display = 'none';
+  }
+}
+
+/**
  * 需求1/3: 清除所有已绘制的自动及手动水平辅助线
  */
 function clearAllChartDrawLines() {
@@ -3759,15 +3817,21 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
 
     let curCount = appState.chartCustomZoomCount > 0 
       ? appState.chartCustomZoomCount 
-      : (appState.chartZoomWindow === '60' ? 60 : appState.chartZoomWindow === '250' ? 250 : fullLen);
+      : (appState.chartZoomWindow === '5' ? 5 
+        : appState.chartZoomWindow === '10' ? 10
+        : appState.chartZoomWindow === '20' ? 20
+        : appState.chartZoomWindow === '60' ? 60 
+        : appState.chartZoomWindow === '120' ? 120
+        : appState.chartZoomWindow === '180' ? 180
+        : appState.chartZoomWindow === '250' ? 250 : fullLen);
 
-    // 降低灵敏度：从原先的 12% 降到 3%~4%，保证平滑细腻缩放，每次微调 2~5 根
+    // 降低灵敏度：从原先的 12% 降到 4%，保证平滑细腻缩放
     const step = Math.max(1, Math.round(curCount * 0.04));
     if (e.deltaY < 0) {
-      // 滚轮向上 -> 放大 -> 数量变少 -> 区间变小
-      curCount = Math.max(15, curCount - step);
+      // 滚轮向上 -> 放大 -> 数量变少 -> 区间拉近 (最小 5 根)
+      curCount = Math.max(5, curCount - step);
     } else {
-      // 滚轮向下 -> 缩小 -> 数量变多 -> 区间变大
+      // 滚轮向下 -> 缩小 -> 数量变多 -> 区间推远
       curCount = Math.min(fullLen, curCount + step);
     }
 
@@ -4106,6 +4170,216 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
 }
 
 /**
+ * 需求4: 缠论形态学量化引擎 (包含关系处理、顶底分型、画笔划分与三类买卖点标记)
+ * 严格遵循 [REQ-007] 标准规范
+ * @param {Array} klines 当前可视K线序列
+ * @param {Function} getX 坐标映射函数
+ * @param {Function} getY 价格Y坐标映射函数
+ * @returns {string} SVG 片段包含缠论笔与买卖点标记徽章
+ */
+function generateChanlunOverlaySVG(klines, getX, getY) {
+  if (!klines || klines.length < 5) return '';
+
+  // 1. 包含关系预处理
+  const mergedKlines = [];
+  let isUpward = true; // 初始方向
+
+  for (let i = 0; i < klines.length; i++) {
+    const cur = {
+      index: i,
+      high: Number(klines[i].high !== undefined ? klines[i].high : klines[i].price),
+      low: Number(klines[i].low !== undefined ? klines[i].low : klines[i].price),
+      close: Number(klines[i].close !== undefined ? klines[i].close : klines[i].price),
+      rawIndex: i
+    };
+
+    if (mergedKlines.length === 0) {
+      mergedKlines.push(cur);
+      continue;
+    }
+
+    const prev = mergedKlines[mergedKlines.length - 1];
+
+    // 检查包含关系: cur包含prev 或 prev包含cur
+    const isCurContainsPrev = (cur.high >= prev.high && cur.low <= prev.low);
+    const isPrevContainsCur = (prev.high >= cur.high && prev.low <= cur.low);
+
+    if (isCurContainsPrev || isPrevContainsCur) {
+      if (isUpward) {
+        // 向上合并
+        prev.high = Math.max(prev.high, cur.high);
+        prev.low = Math.max(prev.low, cur.low);
+        prev.rawIndex = cur.rawIndex;
+      } else {
+        // 向下合并
+        prev.high = Math.min(prev.high, cur.high);
+        prev.low = Math.min(prev.low, cur.low);
+        prev.rawIndex = cur.rawIndex;
+      }
+    } else {
+      // 无包含，判定新的趋势方向
+      isUpward = (cur.high > prev.high);
+      mergedKlines.push(cur);
+    }
+  }
+
+  if (mergedKlines.length < 3) return '';
+
+  // 2. 顶底分型识别
+  const rawFractals = [];
+  for (let i = 1; i < mergedKlines.length - 1; i++) {
+    const p = mergedKlines[i - 1];
+    const c = mergedKlines[i];
+    const n = mergedKlines[i + 1];
+
+    if (c.high >= p.high && c.high >= n.high && c.low >= p.low && c.low >= n.low && (c.high > p.high || c.high > n.high)) {
+      rawFractals.push({
+        type: 'top',
+        mergedIndex: i,
+        rawIndex: c.rawIndex,
+        price: c.high
+      });
+    } else if (c.low <= p.low && c.low <= n.low && c.high <= p.high && c.high <= n.high && (c.low < p.low || c.low < n.low)) {
+      rawFractals.push({
+        type: 'bottom',
+        mergedIndex: i,
+        rawIndex: c.rawIndex,
+        price: c.low
+      });
+    }
+  }
+
+  // 3. 成笔严格过滤与交替连线
+  const biPoints = [];
+  for (const f of rawFractals) {
+    if (biPoints.length === 0) {
+      biPoints.push(f);
+      continue;
+    }
+
+    const last = biPoints[biPoints.length - 1];
+    if (last.type === f.type) {
+      // 同类型分型，取极值更优者更新（顶取更高，底取更低）
+      if (last.type === 'top' && f.price > last.price) {
+        biPoints[biPoints.length - 1] = f;
+      } else if (last.type === 'bottom' && f.price < last.price) {
+        biPoints[biPoints.length - 1] = f;
+      }
+    } else {
+      // 异类型分型，成笔距离满足
+      if (Math.abs(f.mergedIndex - last.mergedIndex) >= 1) {
+        biPoints.push(f);
+      }
+    }
+  }
+
+  if (biPoints.length < 2) return '';
+
+  // 4. 识别三类买卖点 (B1, B2, B3 / S1, S2, S3)
+  const signals = [];
+  for (let i = 1; i < biPoints.length; i++) {
+    const pt = biPoints[i];
+    const prevPt = biPoints[i - 1];
+
+    if (pt.type === 'bottom') {
+      // 底分型 -> 买点判定
+      if (i >= 2) {
+        const prevBottom = biPoints[i - 2];
+        if (prevBottom.type === 'bottom') {
+          if (pt.price < prevBottom.price) {
+            // 创出新低，属于趋势底背驰极值转折 -> 一买 (B1)
+            signals.push({ type: 'B1', pt: pt, text: 'B1 一买' });
+          } else {
+            // 次级回调不创新低 -> 二买 (B2)
+            signals.push({ type: 'B2', pt: pt, text: 'B2 二买' });
+          }
+        }
+      } else {
+        signals.push({ type: 'B1', pt: pt, text: 'B1 一买' });
+      }
+
+      // 三买判定: 若突破前期中枢高点后次级回踩不破中枢高点
+      if (i >= 3 && biPoints[i - 3].type === 'top') {
+        const priorTop = biPoints[i - 3];
+        if (pt.price > priorTop.price) {
+          signals[signals.length - 1] = { type: 'B3', pt: pt, text: 'B3 三买' };
+        }
+      }
+    } else if (pt.type === 'top') {
+      // 顶分型 -> 卖点判定
+      if (i >= 2) {
+        const prevTop = biPoints[i - 2];
+        if (prevTop.type === 'top') {
+          if (pt.price > prevTop.price) {
+            // 创出新高但背驰转折 -> 一卖 (S1)
+            signals.push({ type: 'S1', pt: pt, text: 'S1 一卖' });
+          } else {
+            // 次级反弹不创新高 -> 二卖 (S2)
+            signals.push({ type: 'S2', pt: pt, text: 'S2 二卖' });
+          }
+        }
+      } else {
+        signals.push({ type: 'S1', pt: pt, text: 'S1 一卖' });
+      }
+
+      // 三卖判定
+      if (i >= 3 && biPoints[i - 3].type === 'bottom') {
+        const priorBottom = biPoints[i - 3];
+        if (pt.price < priorBottom.price) {
+          signals[signals.length - 1] = { type: 'S3', pt: pt, text: 'S3 三卖' };
+        }
+      }
+    }
+  }
+
+  // 5. 生成笔折线 SVG
+  let biPathD = '';
+  biPoints.forEach((p, idx) => {
+    const px = getX(p.rawIndex);
+    const py = getY(p.price);
+    if (idx === 0) biPathD += `M ${px} ${py} `;
+    else biPathD += `L ${px} ${py} `;
+  });
+
+  // 笔端点圆圈
+  const circlesSvg = biPoints.map(p => {
+    const px = getX(p.rawIndex);
+    const py = getY(p.price);
+    const color = p.type === 'top' ? '#ef4444' : '#10b981';
+    return `<circle cx="${px}" cy="${py}" r="3.5" fill="${color}" stroke="#ffffff" stroke-width="1.2"/>`;
+  }).join('');
+
+  // 买卖点悬浮微章 SVG
+  const badgesSvg = signals.map(sig => {
+    const px = getX(sig.pt.rawIndex);
+    const py = getY(sig.pt.price);
+    const isBuy = sig.type.startsWith('B');
+    const badgeY = isBuy ? py + 18 : py - 18;
+    const bgColor = isBuy ? '#059669' : '#dc2626';
+    const tagW = 54;
+    return `
+      <g class="chanlun-signal-badge" transform="translate(${px - tagW / 2}, ${badgeY - 9})">
+        <rect width="${tagW}" height="18" rx="4" fill="${bgColor}" stroke="#ffffff" stroke-width="1" opacity="0.95"/>
+        <text x="${tagW / 2}" y="13" fill="#ffffff" font-size="10" font-weight="bold" text-anchor="middle" font-family="monospace">
+          ${sig.text}
+        </text>
+      </g>
+    `;
+  }).join('');
+
+  return `
+    <g class="chanlun-overlay-layer">
+      <!-- 缠论笔连线 (梦幻紫粗线) -->
+      <path d="${biPathD}" fill="none" class="chanlun-pen-line" stroke="#c084fc" stroke-width="2.2" stroke-dasharray="7,3"/>
+      <!-- 顶底分型极值端点 -->
+      ${circlesSvg}
+      <!-- 缠论三类买卖点标注 -->
+      ${badgesSvg}
+    </g>
+  `;
+}
+
+/**
  * 60日 K线矢量 SVG 发生器
  */
 function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
@@ -4232,6 +4506,9 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
       ${candles}
       <path d="${ma5Path}" fill="none" stroke="#f59e0b" stroke-width="1.3"/>
       <path d="${ma10Path}" fill="none" stroke="#38bdf8" stroke-width="1.3"/>
+
+      <!-- 需求4: 缠论笔与买卖点标记图层 (开启时渲染) -->
+      ${appState.showChanlunDraw ? generateChanlunOverlaySVG(klines, (i) => m.left + i * stepX + stepX / 2, priceToY) : ''}
 
       <!-- 十字光标虚线 -->
       <line id="crosshairX" x1="0" y1="${m.top}" x2="0" y2="${subTopY + sh}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
@@ -4506,8 +4783,10 @@ let indexState = {
   activeIndex: null,
   period: 'timeline',
   showAutoLines: false,
+  autoLinesCount: 0,
   drawingMode: 'none',
-  customLines: []
+  customLines: [],
+  customZoomCount: 0 // 需求3: 指数K线图支持滚轮自由缩放
 };
 
 /**
@@ -4667,6 +4946,7 @@ function closeIndexDetailPage() {
 
 function switchIndexChartPeriod(period) {
   indexState.period = period;
+  indexState.customZoomCount = 0; // 切换预设周期时重置自定义缩放
   if (dom.indexChartPeriodControl) {
     dom.indexChartPeriodControl.querySelectorAll('.seg-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-period') === period);
@@ -4828,9 +5108,11 @@ function renderActiveIndexChart() {
       return;
     }
 
-    // 需求2: 指数切片 (5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部)
+    // 需求2/3: 指数切片 (5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部，以及滚轮自由缩放)
     let winCount = klines.length;
-    if (indexState.period === 'kline5') winCount = Math.min(klines.length, 5);
+    if (indexState.customZoomCount > 0) {
+      winCount = Math.min(klines.length, Math.max(5, indexState.customZoomCount));
+    } else if (indexState.period === 'kline5') winCount = Math.min(klines.length, 5);
     else if (indexState.period === 'kline10') winCount = Math.min(klines.length, 10);
     else if (indexState.period === 'kline20') winCount = Math.min(klines.length, 20);
     else if (indexState.period === 'kline60') winCount = Math.min(klines.length, 60);
@@ -4960,9 +5242,29 @@ function renderActiveIndexChart() {
       </svg>
     `;
 
-    // 绑定手动画线交互
+    // 绑定手动画线交互与滚轮缩放
     const svgElem = document.getElementById('indexKLineSvg');
     if (svgElem) {
+      // 需求3: 除了分时图以外，所有K线图都可以通过放大缩小来对图形的日期区间进行缩放
+      svgElem.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const fullLen = (indexData.daily_bars && indexData.daily_bars.length) || 100;
+        let curCount = indexState.customZoomCount > 0 
+          ? indexState.customZoomCount 
+          : (winCount || 60);
+
+        const step = Math.max(1, Math.round(curCount * 0.05));
+        if (e.deltaY < 0) {
+          // 向上滚 -> 放大 -> 数量减少
+          curCount = Math.max(5, curCount - step);
+        } else {
+          // 向下滚 -> 缩小 -> 数量增加
+          curCount = Math.min(fullLen, curCount + step);
+        }
+        indexState.customZoomCount = curCount;
+        renderActiveIndexChart();
+      }, { passive: false });
+
       svgElem.addEventListener('click', (e) => {
         if (indexState.drawingMode !== 'horizontal') return;
         const rect = svgElem.getBoundingClientRect();

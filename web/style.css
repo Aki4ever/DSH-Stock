@@ -3101,3 +3101,39 @@ body {
   color: #ffffff;
   box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);
 }
+
+/* ==================================================== */
+/* 需求4: 缠论自动画笔与买卖点标记 (B1/B2/B3/S1/S2/S3) */
+/* ==================================================== */
+#btnChanlunDraw.active {
+  background: rgba(168, 85, 247, 0.25) !important;
+  color: #c084fc !important;
+  border-color: rgba(168, 85, 247, 0.6) !important;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.35);
+}
+
+#btnChanlunScope:hover {
+  background: rgba(56, 189, 248, 0.15) !important;
+  color: #38bdf8 !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+
+.chanlun-pen-line {
+  stroke: #c084fc;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chanlun-signal-badge {
+  font-family: monospace;
+  font-weight: 800;
+  font-size: 11px;
+  cursor: pointer;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  transition: transform 0.15s ease;
+}
+
+.chanlun-signal-badge:hover {
+  transform: scale(1.15);
+}

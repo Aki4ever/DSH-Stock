@@ -296,6 +296,11 @@ class StockDataManager:
         f_max_top10_circ = to_float(params.get("max_top10_circ"))
         f_min_top10 = to_float(params.get("min_top10"))
         f_max_top10 = to_float(params.get("max_top10"))
+        # 需求1/2: 日交易额与日均交易额区间 (亿元)
+        f_min_daily_amount = to_float(params.get("min_daily_amount"))
+        f_max_daily_amount = to_float(params.get("max_daily_amount"))
+        f_min_avg_daily_amount = to_float(params.get("min_avg_daily_amount"))
+        f_max_avg_daily_amount = to_float(params.get("max_avg_daily_amount"))
         # 需求2: 上市时长区间 (年)
         f_min_listing_years = to_float(params.get("min_listing_years"))
         f_max_listing_years = to_float(params.get("max_listing_years"))
@@ -386,6 +391,22 @@ class StockDataManager:
                 continue
             if f_max_top10 is not None and s["top10_hold_pct"] > f_max_top10:
                 continue
+            # 需求1/2: 日交易额与日均交易额数值过滤 (亿元)
+            s_turnover_yi = float(s.get("turnover_yi") or 0.0)
+            if f_min_daily_amount is not None and s_turnover_yi < f_min_daily_amount:
+                continue
+            if f_max_daily_amount is not None and s_turnover_yi > f_max_daily_amount:
+                continue
+
+            # 日均交易额: 若未单独预置则按成交额与换手率加权或近周期均值，保障流动性严格检验
+            s_circ_cap = float(s.get("circulating_cap") or 0.0)
+            s_turnover_rate = float(s.get("turnover_rate") or 0.0)
+            s_avg_daily_amount = round(s_circ_cap * (s_turnover_rate / 100.0), 2) if s_circ_cap > 0 and s_turnover_rate > 0 else s_turnover_yi
+            if f_min_avg_daily_amount is not None and s_avg_daily_amount < f_min_avg_daily_amount:
+                continue
+            if f_max_avg_daily_amount is not None and s_avg_daily_amount > f_max_avg_daily_amount:
+                continue
+
             # 需求2: 上市时长联合判定
             s_listing_years = float(s.get("listing_years") or 0.0)
             if f_min_listing_years is not None and s_listing_years < f_min_listing_years:
