@@ -2829,12 +2829,22 @@ function switchChartPeriod(period) {
   } else if (period === 'kline60') {
     appState.chartZoomWindow = '60';
     appState.chartCustomZoomCount = 60;
+  } else if (period === 'kline120') {
+    appState.chartZoomWindow = '120';
+    appState.chartCustomZoomCount = 120;
+  } else if (period === 'kline180') {
+    appState.chartZoomWindow = '180';
+    appState.chartCustomZoomCount = 180;
   } else if (period === 'all') {
     appState.chartZoomWindow = 'max';
     appState.chartCustomZoomCount = 0;
   }
 
   hideTooltip();
+  // 切换周期时若开启了自动画线，自动自适应重算当前周期下的多阶中枢线
+  if (appState.autoLinesCount > 0) {
+    recomputeAutoLines();
+  }
   renderActiveStockChart();
 }
 
@@ -2986,11 +2996,15 @@ function calculateDistributionSummary(arr) {
 }
 
 /**
- * 需求2: 智能自动画线算法 (仅画 1 根线，这根线必须使得交汇金额达到全局最大值)
- * 判定公式: Low_t <= P <= High_t, 求解 argmax_P Sum(Amount_t)
+ * 需求1/2: 智能自动画线算法 (支持严格求解 1~4 根辅助线)
+ * 约束条件: 第 x 根辅助线交汇交易额第 x 大，且交汇交易日集合绝不能与前面已选的所有辅助线完全重复 (S_x != S_i)
+ * @param {Array} klines 当前可视K线
+ * @param {number} currentPrice 当前参考现价
+ * @param {number} targetCount 目标画线条数 (1 ~ 4)
+ * @returns {Array} 选出的多阶筹码中枢线列表
  */
-function calculateAutoSupportResistanceLevels(klines, currentPrice) {
-  if (!klines || klines.length === 0) return [];
+function calculateAutoSupportResistanceLevels(klines, currentPrice, targetCount = 1) {
+  if (!klines || klines.length === 0 || targetCount <= 0) return [];
 
   const highs = klines.map(d => Number(d.high !== undefined ? d.high : d.price));
   const lows = klines.map(d => Number(d.low !== undefined ? d.low : d.price));
@@ -3007,28 +3021,26 @@ function calculateAutoSupportResistanceLevels(klines, currentPrice) {
     if (k.open !== undefined) candidatePrices.add(Number(k.open));
   });
 
-  // 在 [minP, maxP] 均匀采样 80 个步长点，确保覆盖所有可能的价格交叉点
-  const stepCount = 80;
+  // 在 [minP, maxP] 均匀采样 120 个步长点，确保高密度覆盖所有可能的价格交叉点
+  const stepCount = 120;
   const stepVal = (maxP - minP) / (stepCount + 1);
   for (let i = 1; i <= stepCount; i++) {
     candidatePrices.add(Number((minP + i * stepVal).toFixed(2)));
   }
 
-  // 2. 严密遍历每个候选价格，计算交汇金额之和 (Low <= P <= High)
-  let bestPrice = Number(currentPrice) || Number(klines[klines.length - 1].close || maxP);
-  let maxCrossedAmountYi = -1;
-  let bestCrossedDays = 0;
+  // 2. 计算每个候选价格的交汇交易日集合 (二进制掩码/索引签名字符串) 与交汇总金额
+  const candidatesData = [];
+  const refP = Number(currentPrice) || Number(klines[klines.length - 1].close || maxP);
 
   candidatePrices.forEach(p => {
     let currentCrossedAmt = 0;
-    let currentCrossedDays = 0;
+    const crossedDayIndices = [];
 
-    klines.forEach(item => {
+    klines.forEach((item, dayIdx) => {
       const h = Number(item.high !== undefined ? item.high : item.price);
       const l = Number(item.low !== undefined ? item.low : item.price);
-      // 交汇条件: l <= p && p <= h
       if (l <= p && p <= h) {
-        currentCrossedDays++;
+        crossedDayIndices.push(dayIdx);
         let amt = 0;
         if (item.amount_yi !== undefined) {
           amt = Number(item.amount_yi);
@@ -3042,39 +3054,101 @@ function calculateAutoSupportResistanceLevels(klines, currentPrice) {
       }
     });
 
-    if (currentCrossedAmt > maxCrossedAmountYi) {
-      maxCrossedAmountYi = currentCrossedAmt;
-      bestPrice = p;
-      bestCrossedDays = currentCrossedDays;
+    if (crossedDayIndices.length > 0) {
+      // 集合签名：如 "0,1,3,4"
+      const daySetSignature = crossedDayIndices.join(',');
+      candidatesData.push({
+        price: Number(p.toFixed(2)),
+        daySet: new Set(crossedDayIndices),
+        daySignature: daySetSignature,
+        crossedDays: crossedDayIndices.length,
+        crossedAmountYi: Number(currentCrossedAmt.toFixed(2))
+      });
     }
   });
 
-  // 3. 确定该唯一的最大交汇中枢线是压力位还是支撑位
-  const refP = Number(currentPrice) || Number(klines[klines.length - 1].close || bestPrice);
-  const typeName = bestPrice >= refP ? '最强压力' : '核心支撑';
+  // 按交汇总金额降序排列
+  candidatesData.sort((a, b) => b.crossedAmountYi - a.crossedAmountYi);
 
-  // 仅返回唯一 1 根全局最大交汇金额中枢线
-  return [{
-    id: 'max_cross_level_' + Math.round(bestPrice * 100),
-    price: Number(bestPrice.toFixed(2)),
-    type: typeName,
-    crossedDays: bestCrossedDays,
-    crossedAmountYi: Number(maxCrossedAmountYi.toFixed(2)),
-    isMaxPeak: true
-  }];
+  // 3. 贪心求解前 targetCount 根辅助线，确保每一根的 daySignature 绝不与前面任何一根完全相等
+  const selectedLevels = [];
+  const chosenDaySignatures = new Set();
+  const chosenPrices = new Set();
+
+  const rankLabels = ['最强', '次强', '三阶', '四阶'];
+  const rankColors = ['#f59e0b', '#38bdf8', '#c084fc', '#34d399']; // 金橙、天蓝、紫粉、翡翠绿
+
+  for (const cand of candidatesData) {
+    if (selectedLevels.length >= targetCount) break;
+
+    // 约束1: 交易日集合不能与已选的完全重复 (S_x != S_i)
+    if (chosenDaySignatures.has(cand.daySignature)) {
+      continue;
+    }
+
+    // 约束2: 避免价格完全贴合 (防止相邻仅相差 0.01 的细微扰动，要求价格至少有适度区分)
+    const isTooClosePrice = selectedLevels.some(l => Math.abs(l.price - cand.price) < (maxP - minP) * 0.02);
+    if (isTooClosePrice && candidatesData.length > targetCount * 5) {
+      continue;
+    }
+
+    // 录用该阶辅助线
+    const rankIdx = selectedLevels.length;
+    const isUp = cand.price >= refP;
+    const typePrefix = rankLabels[rankIdx] || `${rankIdx + 1}阶`;
+    const typeName = `${typePrefix}${isUp ? '压力' : '支撑'}`;
+
+    selectedLevels.push({
+      id: `cross_level_rank_${rankIdx + 1}_${Math.round(cand.price * 100)}`,
+      rank: rankIdx + 1,
+      price: cand.price,
+      type: typeName,
+      crossedDays: cand.crossedDays,
+      crossedAmountYi: cand.crossedAmountYi,
+      color: rankColors[rankIdx] || '#f59e0b',
+      isMaxPeak: (rankIdx === 0)
+    });
+
+    chosenDaySignatures.add(cand.daySignature);
+    chosenPrices.add(cand.price);
+  }
+
+  return selectedLevels;
 }
 
 /**
- * 需求1: 触发自动画线
+ * 需求2: 设置自动画线条数 (0=关, 1=1根, 2=2根, 3=3根, 4=4根)
  */
-function triggerAutoDrawLevels() {
-  if (!appState.activeDetailStock) return;
+function setAutoLinesCount(count) {
+  appState.autoLinesCount = parseInt(count, 10) || 0;
+
+  // 更新 UI 分段激活
+  const ctrl = document.getElementById('autoLinesCountControl');
+  if (ctrl) {
+    ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.getAttribute('data-count'), 10) === appState.autoLinesCount);
+    });
+  }
+
+  if (appState.autoLinesCount === 0) {
+    // 过滤掉所有自动画线，保留可能的手动画线
+    appState.drawnHorizontalLines = appState.drawnHorizontalLines.filter(l => !l.isAuto);
+  } else {
+    recomputeAutoLines();
+  }
+
+  renderActiveStockChart();
+}
+
+/**
+ * 重新计算当前个股在当前周期下的自动多阶筹码线
+ */
+function recomputeAutoLines() {
+  if (!appState.activeDetailStock || !appState.autoLinesCount) return;
   const stock = appState.activeDetailStock;
 
-  // 获取当前正在展示的 K 线序列
   let klines = [];
   if (appState.chartPeriod === 'timeline') {
-    // 分时图转化为类K线点位以供画线
     const tlData = stock.timeline_data || { pre_close: stock.prev_close || stock.price, items: [] };
     const items = (tlData.items && tlData.items.length > 0) ? tlData.items : generateClientFallbackTimeline(stock.price, stock.prev_close);
     klines = items.map(it => ({
@@ -3087,37 +3161,38 @@ function triggerAutoDrawLevels() {
       amount_yi: it.amount_yi || 0
     }));
   } else {
-    klines = stock.daily_bars && stock.daily_bars.length > 0 ? stock.daily_bars : generateClientFallbackDaily(stock.price);
-    // 按时间窗口切片 (支持 5天 / 10天 / 20天 / 60天 / 全部)
+    klines = (stock.daily_bars && stock.daily_bars.length > 0) ? stock.daily_bars : [];
+    if (klines.length === 0) return;
+
     let winCount = klines.length;
-    if (appState.chartPeriod === 'kline5') {
-      winCount = Math.min(klines.length, 5);
-    } else if (appState.chartPeriod === 'kline10') {
-      winCount = Math.min(klines.length, 10);
-    } else if (appState.chartPeriod === 'kline20') {
-      winCount = Math.min(klines.length, 20);
-    } else if (appState.chartPeriod === 'kline60') {
-      winCount = Math.min(klines.length, 60);
-    } else if (appState.chartPeriod === 'all' || appState.chartZoomWindow === 'max') {
-      winCount = klines.length;
-    } else if (appState.chartCustomZoomCount > 0) {
-      winCount = Math.min(klines.length, Math.max(5, appState.chartCustomZoomCount));
-    } else {
-      winCount = parseInt(appState.chartZoomWindow, 10) || 60;
-    }
+    if (appState.chartPeriod === 'kline5') winCount = Math.min(klines.length, 5);
+    else if (appState.chartPeriod === 'kline10') winCount = Math.min(klines.length, 10);
+    else if (appState.chartPeriod === 'kline20') winCount = Math.min(klines.length, 20);
+    else if (appState.chartPeriod === 'kline60') winCount = Math.min(klines.length, 60);
+    else if (appState.chartPeriod === 'kline120') winCount = Math.min(klines.length, 120);
+    else if (appState.chartPeriod === 'kline180') winCount = Math.min(klines.length, 180);
+    else if (appState.chartPeriod === 'all' || appState.chartZoomWindow === 'max') winCount = klines.length;
+    else if (appState.chartCustomZoomCount > 0) winCount = Math.min(klines.length, Math.max(5, appState.chartCustomZoomCount));
+    else winCount = parseInt(appState.chartZoomWindow, 10) || 60;
+
     if (klines.length > winCount) {
       klines = klines.slice(klines.length - winCount);
     }
   }
 
-  const levels = calculateAutoSupportResistanceLevels(klines, stock.price);
-  appState.drawnHorizontalLines = levels;
-  
-  if (dom.btnAutoDrawLevels) {
-    dom.btnAutoDrawLevels.classList.add('active');
-  }
+  const autoLevels = calculateAutoSupportResistanceLevels(klines, stock.price, appState.autoLinesCount);
+  autoLevels.forEach(l => { l.isAuto = true; });
 
-  renderActiveStockChart();
+  // 保留手动绘制的线，替换掉旧自动线
+  const manualLines = appState.drawnHorizontalLines.filter(l => !l.isAuto);
+  appState.drawnHorizontalLines = [...autoLevels, ...manualLines];
+}
+
+/**
+ * 需求1: 触发自动画线 (兼容原有入口，默认画 1 根)
+ */
+function triggerAutoDrawLevels() {
+  setAutoLinesCount(appState.autoLinesCount === 1 ? 0 : 1);
 }
 
 /**
@@ -3136,13 +3211,17 @@ function toggleDrawHLineMode() {
  */
 function clearAllChartDrawLines() {
   appState.drawnHorizontalLines = [];
+  appState.autoLinesCount = 0;
   appState.drawHLineMode = false;
   if (dom.btnToggleHLine) {
     dom.btnToggleHLine.classList.remove('active');
     dom.btnToggleHLine.innerHTML = '📏 画水平线';
   }
-  if (dom.btnAutoDrawLevels) {
-    dom.btnAutoDrawLevels.classList.remove('active');
+  const ctrl = document.getElementById('autoLinesCountControl');
+  if (ctrl) {
+    ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
+    });
   }
   renderActiveStockChart();
 }
@@ -4167,25 +4246,23 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
       <text x="${m.left + innerW * 0.5}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[Math.floor(n / 2)].date}</text>
       <text x="${m.left + innerW}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="end">${klines[n - 1].date}</text>
 
-      <!-- 需求2: 渲染用户绘制或自动测算的水平辅助线 (自动画线仅1根全局最大交汇金额中枢线) -->
-      ${appState.drawnHorizontalLines.map(line => {
+      <!-- 需求2: 渲染用户绘制或自动测算的多阶水平辅助线 (支持 1~4 根独立交易日筹码中枢线) -->
+      ${appState.drawnHorizontalLines.map((line, idx) => {
         const yPos = priceToY(line.price);
         const lastClose = Number(klines[klines.length - 1].close || klines[klines.length - 1].price);
         const isUp = line.price >= lastClose;
-        const isMax = !!line.isMaxPeak;
-        // 最大交汇线采用高辨识度亮金色/亮橙色 #f59e0b，普通压力红色，支撑绿色
-        const color = isMax ? '#f59e0b' : (isUp ? '#f43f5e' : '#10b981');
-        const txtColor = isMax ? '#fef08a' : (isUp ? '#fca5a5' : '#86efac');
+        const color = line.color || (line.isMaxPeak ? '#f59e0b' : (isUp ? '#f43f5e' : '#10b981'));
+        const txtColor = color;
         // 需求1: 自动画线还要著名这个辅助线交汇了几个交易日，显示: 交易日:x
         let amtText = `${line.type}: ¥${line.price.toFixed(2)}`;
         let tagW = 120;
         if (line.crossedAmountYi !== undefined) {
           const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
-          amtText = `${line.type}: ¥${line.price.toFixed(2)} (最大交汇: ${line.crossedAmountYi}亿${daysPart})`;
+          amtText = `${line.type}: ¥${line.price.toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
           tagW = line.crossedDays !== undefined ? 285 : 205;
         }
         return `
-          <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="${isMax ? '2' : '1.5'}" stroke-dasharray="${isMax ? '6,3' : '5,3'}"/>
+          <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="${line.rank === 1 || line.isMaxPeak ? '2.2' : '1.6'}" stroke-dasharray="6,3"/>
           <rect x="${m.left + innerW - tagW}" y="${yPos - 9}" width="${tagW}" height="18" fill="rgba(15, 23, 42, 0.95)" rx="3" stroke="${color}" stroke-width="1.2"/>
           <text x="${m.left + innerW - 6}" y="${yPos + 4}" fill="${txtColor}" font-size="10" text-anchor="end" font-family="monospace" font-weight="700">
             ${amtText}
@@ -4598,12 +4675,20 @@ function switchIndexChartPeriod(period) {
   renderActiveIndexChart();
 }
 
-function toggleIndexAutoLines() {
-  indexState.showAutoLines = !indexState.showAutoLines;
-  if (dom.btnIndexAutoLines) {
-    dom.btnIndexAutoLines.classList.toggle('active', indexState.showAutoLines);
+function setIndexAutoLinesCount(count) {
+  indexState.autoLinesCount = parseInt(count, 10) || 0;
+  indexState.showAutoLines = indexState.autoLinesCount > 0;
+  const ctrl = document.getElementById('indexAutoLinesCountControl');
+  if (ctrl) {
+    ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.getAttribute('data-count'), 10) === indexState.autoLinesCount);
+    });
   }
   renderActiveIndexChart();
+}
+
+function toggleIndexAutoLines() {
+  setIndexAutoLinesCount(indexState.autoLinesCount === 1 ? 0 : 1);
 }
 
 function setIndexDrawingMode(mode) {
@@ -4615,9 +4700,15 @@ function setIndexDrawingMode(mode) {
 
 function clearIndexChartDrawings() {
   indexState.customLines = [];
+  indexState.autoLinesCount = 0;
   indexState.showAutoLines = false;
   indexState.drawingMode = 'none';
-  if (dom.btnIndexAutoLines) dom.btnIndexAutoLines.classList.remove('active');
+  const ctrl = document.getElementById('indexAutoLinesCountControl');
+  if (ctrl) {
+    ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
+    });
+  }
   if (dom.btnIndexDrawHorizontal) dom.btnIndexDrawHorizontal.classList.remove('active');
   renderActiveIndexChart();
 }
@@ -4811,25 +4902,25 @@ function renderActiveIndexChart() {
       subBarsSvg += `<rect x="${x - candleWidth / 2}" y="${ySub}" width="${candleWidth}" height="${hSub}" fill="${color}" opacity="0.8"/>`;
     });
 
-    // 需求6: 自动画线 (只画1根全局交汇成交金额绝对最大值中枢线)
+    // 需求1/2: 指数多阶自动画线 (支持 1~4 根独立交易日筹码中枢线)
     let autoLinesSvg = '';
-    if (indexState.showAutoLines) {
-      const autoLevels = calculateAutoSupportResistanceLevels(klines, indexData.price);
-      if (autoLevels && autoLevels.length > 0) {
-        const peakLine = autoLevels[0];
-        const lineY = getY(peakLine.price);
-        const daysPart = peakLine.crossedDays !== undefined ? `, 交易日: ${peakLine.crossedDays}天` : '';
-        const tagW = peakLine.crossedDays !== undefined ? 310 : 235;
-        autoLinesSvg = `
-          <g class="auto-line-single-peak">
-            <line x1="${margin.left}" y1="${lineY}" x2="${margin.left + plotWidth}" y2="${lineY}" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="6,4"/>
-            <rect x="${margin.left + plotWidth - tagW}" y="${lineY - 12}" width="${tagW}" height="24" rx="4" fill="#0f172a" stroke="#f59e0b" stroke-width="1.2" opacity="0.95"/>
-            <text x="${margin.left + plotWidth - tagW + 10}" y="${lineY + 4}" fill="#f59e0b" font-size="11" font-weight="700" font-family="monospace">
-              ${peakLine.type}: ${peakLine.price} (最大交汇: ${peakLine.crossedAmountYi}亿${daysPart})
+    if (indexState.showAutoLines && indexState.autoLinesCount > 0) {
+      const autoLevels = calculateAutoSupportResistanceLevels(klines, indexData.price, indexState.autoLinesCount);
+      autoLinesSvg = autoLevels.map((line, idx) => {
+        const lineY = getY(line.price);
+        const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
+        const tagW = line.crossedDays !== undefined ? 300 : 225;
+        const color = line.color || '#f59e0b';
+        return `
+          <g class="auto-line-multi-peak rank-${line.rank || idx + 1}">
+            <line x1="${margin.left}" y1="${lineY}" x2="${margin.left + plotWidth}" y2="${lineY}" stroke="${color}" stroke-width="${line.rank === 1 ? '2.5' : '1.8'}" stroke-dasharray="6,4"/>
+            <rect x="${margin.left + plotWidth - tagW}" y="${lineY - 12}" width="${tagW}" height="24" rx="4" fill="#0f172a" stroke="${color}" stroke-width="1.2" opacity="0.95"/>
+            <text x="${margin.left + plotWidth - tagW + 8}" y="${lineY + 4}" fill="${color}" font-size="11" font-weight="700" font-family="monospace">
+              ${line.type}: ${line.price} (交汇: ${line.crossedAmountYi}亿${daysPart})
             </text>
           </g>
         `;
-      }
+      }).join('');
     }
 
     // 自定义水平线

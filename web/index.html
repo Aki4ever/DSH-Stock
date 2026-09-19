@@ -1344,11 +1344,18 @@
               💰 副图: 成交金额 (亿元)
             </div>
 
+            <!-- 需求2: 指数自动画图拆分为自动画1根、2根、3根、4根分段选择器 -->
+            <div class="segmented-control" id="indexAutoLinesCountControl">
+              <span style="font-size: 0.78rem; color: #94a3b8; margin: 0 0.2rem 0 0.4rem; display: flex; align-items: center;">🤖 自动线:</span>
+              <button type="button" class="seg-btn active" data-count="0" onclick="setIndexAutoLinesCount(0)">关</button>
+              <button type="button" class="seg-btn" data-count="1" onclick="setIndexAutoLinesCount(1)">1根</button>
+              <button type="button" class="seg-btn" data-count="2" onclick="setIndexAutoLinesCount(2)">2根</button>
+              <button type="button" class="seg-btn" data-count="3" onclick="setIndexAutoLinesCount(3)">3根</button>
+              <button type="button" class="seg-btn" data-count="4" onclick="setIndexAutoLinesCount(4)">4根</button>
+            </div>
+
             <!-- 自动画线与交互工具组 (需求6: 自动画线与画线功能参考股票详情) -->
             <div class="chart-tools-group">
-              <button type="button" class="btn-chart-tool" id="btnIndexAutoLines" onclick="toggleIndexAutoLines()" title="只画1根全局交汇金额最大值的最强成交中枢线">
-                <span>🤖 自动画线</span>
-              </button>
               <button type="button" class="btn-chart-tool" id="btnIndexDrawHorizontal" onclick="setIndexDrawingMode('horizontal')" title="在走势图上点击绘制水平压力/支撑辅助线">
                 <span>📏 画水平线</span>
               </button>
@@ -1433,11 +1440,18 @@
               <button type="button" class="seg-btn" data-subplot="amt" onclick="switchChartSubplot('amt')">💰 成交额(亿元)</button>
             </div>
 
-            <!-- 画图工具箱 (智能自动画线 / 手动画线 / 清除) -->
+            <!-- 需求2: 自动画图拆分为自动画1根、2根、3根、4根分段选择器 -->
+            <div class="segmented-control" id="autoLinesCountControl">
+              <span style="font-size: 0.78rem; color: #94a3b8; margin: 0 0.2rem 0 0.4rem; display: flex; align-items: center;">🤖 自动线:</span>
+              <button type="button" class="seg-btn active" data-count="0" onclick="setAutoLinesCount(0)">关</button>
+              <button type="button" class="seg-btn" data-count="1" onclick="setAutoLinesCount(1)">1根</button>
+              <button type="button" class="seg-btn" data-count="2" onclick="setAutoLinesCount(2)">2根</button>
+              <button type="button" class="seg-btn" data-count="3" onclick="setAutoLinesCount(3)">3根</button>
+              <button type="button" class="seg-btn" data-count="4" onclick="setAutoLinesCount(4)">4根</button>
+            </div>
+
+            <!-- 画图辅助工具 (手动画线 / 清除) -->
             <div class="chart-draw-toolbox">
-              <button type="button" id="btnAutoDrawLevels" class="btn-draw-tool btn-draw-auto" onclick="triggerAutoDrawLevels()" title="基于波段拐点与筹码密集理论智能绘制关键压力位/支撑位，并统计交汇交易日成交总额">
-                🤖 自动画线
-              </button>
               <button type="button" id="btnToggleHLine" class="btn-draw-tool" onclick="toggleDrawHLineMode()" title="开启画水平线模式后，在图表任意价格位置点击即可放置手动辅助线">
                 📏 画水平线
               </button>
