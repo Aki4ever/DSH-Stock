@@ -3179,7 +3179,8 @@ function recomputeAutoLines() {
   let klines = [];
   if (appState.chartPeriod === 'timeline') {
     const tlData = stock.timeline_data || { pre_close: stock.prev_close || stock.price, items: [] };
-    const items = (tlData.items && tlData.items.length > 0) ? tlData.items : generateClientFallbackTimeline(stock.price, stock.prev_close);
+    const items = (tlData.items && tlData.items.length > 0) ? tlData.items : [];
+    if (items.length === 0) return;
     klines = items.map(it => ({
       date: it.time,
       open: it.price,
@@ -3667,8 +3668,22 @@ function renderActiveStockChart() {
     const tlData = stock.timeline_data || { pre_close: stock.prev_close || stock.price, items: [] };
     let items = (tlData.items && Array.isArray(tlData.items) && tlData.items.length > 0) 
       ? tlData.items 
-      : generateClientFallbackTimeline(stock.price, stock.prev_close);
-    const preClose = Number(tlData.pre_close || stock.prev_close || stock.price || 10.0);
+      : null;
+
+    // 铁律: 严禁伪造假分时，无数据直接以文案清晰提示
+    if (!items || items.length === 0) {
+      dom.chartSvgContainer.innerHTML = `
+        <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
+          <div style="font-size: 2.2rem; margin-bottom: 0.8rem;">⏱️</div>
+          <div style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.4rem;">暂无当日真实分时数据源</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">当前处于非交易时段或官方分时未披露，系统严格遵循金融底座，绝不伪造虚假分时波动。</div>
+        </div>
+      `;
+      hideTooltip();
+      return;
+    }
+
+    const preClose = Number(tlData.pre_close || stock.prev_close || stock.price || items[0].price);
 
     // 需求1: 分时图不需要放大缩小时间区间，固定看全分时图 (09:30-15:00 完整全景)
     dom.chartSvgContainer.innerHTML = generateTimelineSVG(items, preClose, appState.chartSubplot, width, height, mainHeight, subHeight, margin);

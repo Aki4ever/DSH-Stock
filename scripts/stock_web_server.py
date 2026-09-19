@@ -285,12 +285,24 @@ class StockDataManager:
             is_mock=stock.get("is_mock", False)
         )
 
-        bars = generate_mock_kline(norm, days=60, end_price=stock["price"])
-        eval_report = evaluate_stock(norm, stock["name"], bars)
-        svg_chart = generate_stock_svg(quote_obj, bars, width=860, height=450)
+        # 技术面指标与评分必须基于真实历史K线数据，严禁生成任何mock假数据
+        real_bars_objs = []
+        if daily_bars:
+            for b in daily_bars[-60:]:
+                real_bars_objs.append(KLineBar(
+                    date=b["date"],
+                    open_p=b["open"],
+                    close_p=b["close"],
+                    high_p=b["high"],
+                    low_p=b["low"],
+                    volume=b["volume"],
+                    turnover=b.get("amount_yi", 0.0) * 100000000.0
+                ))
+        eval_report = evaluate_stock(norm, stock["name"], real_bars_objs) if real_bars_objs else None
+        svg_chart = generate_stock_svg(quote_obj, real_bars_objs, width=860, height=450) if real_bars_objs else ""
 
         detail = dict(stock)
-        detail["evaluation"] = eval_report.to_dict()
+        detail["evaluation"] = eval_report.to_dict() if eval_report else None
         detail["svg_chart"] = svg_chart
         detail["daily_bars"] = daily_bars
         detail["timeline_data"] = timeline_data
