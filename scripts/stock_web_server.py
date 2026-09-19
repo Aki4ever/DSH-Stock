@@ -53,7 +53,11 @@ from scripts.stock_db import (
     save_quotes_batch,
     save_shareholder_item,
     update_ipo_and_dividend,
-    load_all_stocks_from_db
+    load_all_stocks_from_db,
+    save_daily_klines,
+    load_daily_klines,
+    save_stock_timeline,
+    load_stock_timeline
 )
 from scripts.stock_data_engine import (
     StockQuote,
@@ -204,20 +208,31 @@ class StockDataManager:
                 sys.stderr.write(f"SQLite 批量写入行情异常: {e}\n")
 
     def get_stock_detail(self, code: str) -> Optional[Dict[str, Any]]:
-        """获取个股完整详情、最新十大股东、分红、上市时长与 SVG 走势图"""
+        """
+        需求2/3/4: 获取个股完整详情
+        原则:
+        1. 优先从本地数据库读取数据 (Local-DB-First)；
+        2. 当本地数据库查不到或核心时序数据为空时，数据中心自动触发按需抓取流程，并持久化入库落盘；
+        3. 轻便、低耦合、零现场盲目拉取。
+        """
         norm, _ = normalize_code(code)
-
-        # 在线拉取最新行情并落盘
-        self.fetch_quotes_batch([norm])
 
         with self._lock:
             stock = self.stocks_dict.get(norm)
 
+        # 1. 本地股票底册检查与按需补全
+        if not stock:
+            # 本地内存与底册无此标的，触发按需单股抓取补全
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 本地数据库未命中标的 {norm}，数据中心启动按需抓取入库流程...")
+            self.fetch_quotes_batch([norm])
+            with self._lock:
+                stock = self.stocks_dict.get(norm)
+
         if not stock:
             return None
 
-        # 检查是否缺失十大股东数据，若缺失则通过爬虫抓取并落库持久化
-        if stock["top10_hold_pct"] == 0.0 and stock["top10_circ_hold_pct"] == 0.0:
+        # 2. 检查十大股东: 优先查内存/本地，缺失时触发按需回补并持久化
+        if stock.get("top10_hold_pct", 0.0) == 0.0 and stock.get("top10_circ_hold_pct", 0.0) == 0.0:
             sh_data = parse_shareholder_data(norm)
             if sh_data and (sh_data["top10_hold_pct"] > 0 or sh_data["top10_circ_hold_pct"] > 0):
                 top10_hold = min(100.0, sh_data["top10_hold_pct"])
@@ -227,10 +242,33 @@ class StockDataManager:
                     stock["top10_hold_pct"] = top10_hold
                     stock["top10_circ_hold_pct"] = top10_circ
                     stock["report_date"] = rep_date
-                # 写入 SQLite
+                # 持久化写入本地 SQLite
                 save_shareholder_item(norm, rep_date, top10_hold, top10_circ)
 
-        # 技术面评分与走势图
+        # 3. 需求1/2/3: 日K线查询 - 本地数据库优先 (Local-DB-First)
+        daily_bars = load_daily_klines(norm, limit=5000)
+        if not daily_bars or len(daily_bars) == 0:
+            # 本地数据库无历史K线，触发数据中心抓取流程并入库
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 本地无 {norm} 历史日K，数据中心启动抓取流程...")
+            crawled_bars = fetch_real_daily_kline(norm, limit=5000)
+            if crawled_bars:
+                save_daily_klines(norm, crawled_bars)
+                daily_bars = crawled_bars
+
+        # 4. 需求1/2/3: 分时数据查询 - 本地数据库优先 (Local-DB-First)
+        timeline_data = load_stock_timeline(norm, max_age_seconds=300)
+        if not timeline_data or not timeline_data.get("items"):
+            # 本地无当日分时，触发数据中心抓取并入库
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 本地无 {norm} 当日分时，数据中心启动抓取流程...")
+            crawled_timeline = fetch_real_timeline(norm)
+            if crawled_timeline and crawled_timeline.get("items"):
+                save_stock_timeline(norm, crawled_timeline)
+                timeline_data = crawled_timeline
+
+        # 5. 上市公司基本资料与深度财务报表
+        company_profile = fetch_company_profile(norm, stock["name"], stock["market"], stock["board"])
+        financial_reports = fetch_financial_statements(norm, stock["price"], stock["market_cap"], stock["pe"])
+
         quote_obj = StockQuote(
             code=stock["code"],
             name=stock["name"],
@@ -246,14 +284,6 @@ class StockDataManager:
             market=stock["market_code"].upper(),
             is_mock=stock.get("is_mock", False)
         )
-
-        # 获取上市以来的全量真实日K线与真实分时走势 (支持全周期上市至今走势)
-        daily_bars = fetch_real_daily_kline(norm, limit=5000)
-        timeline_data = fetch_real_timeline(norm)
-
-        # 获取上市公司基本资料与四大深度财务报表
-        company_profile = fetch_company_profile(norm, stock["name"], stock["market"], stock["board"])
-        financial_reports = fetch_financial_statements(norm, stock["price"], stock["market_cap"], stock["pe"])
 
         bars = generate_mock_kline(norm, days=60, end_price=stock["price"])
         eval_report = evaluate_stock(norm, stock["name"], bars)

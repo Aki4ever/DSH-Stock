@@ -127,6 +127,37 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawl_date ON crawl_audit_records(crawl_date);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawl_fp ON crawl_audit_records(fingerprint);")
 
+        # 6. 需求1/4: 历史日K线结构表 (stock_daily_kline - 轻量、去重、低耦合)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS stock_daily_kline (
+            code TEXT NOT NULL,
+            date TEXT NOT NULL,
+            open REAL NOT NULL,
+            close REAL NOT NULL,
+            high REAL NOT NULL,
+            low REAL NOT NULL,
+            volume REAL NOT NULL,
+            amount_yi REAL NOT NULL,
+            change_pct REAL DEFAULT 0.0,
+            created_at TEXT DEFAULT '',
+            PRIMARY KEY (code, date)
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_kline_code_date ON stock_daily_kline(code, date);")
+
+        # 7. 需求1/4: 当日分时切片表 (stock_timeline - 当日明细、轻便存储、低冗余)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS stock_timeline (
+            code TEXT NOT NULL,
+            trade_date TEXT NOT NULL,
+            pre_close REAL NOT NULL,
+            items_json TEXT NOT NULL,
+            updated_at TEXT DEFAULT '',
+            PRIMARY KEY (code, trade_date)
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_timeline_code ON stock_timeline(code, trade_date);")
+
         conn.commit()
 
 
@@ -405,6 +436,125 @@ def record_crawl_audit(
         ))
         conn.commit()
         return cursor.lastrowid
+
+
+def save_daily_klines(code: str, klines: List[Dict[str, Any]]) -> int:
+    """
+    需求1/4: 批量保存日K线至本地数据库 (stock_daily_kline)
+    严格遵循 (code, date) 唯一联合主键，幂等覆盖更新，零冗余
+    """
+    if not code or not klines:
+        return 0
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.executemany("""
+        INSERT INTO stock_daily_kline (
+            code, date, open, close, high, low, volume, amount_yi, change_pct, created_at
+        ) VALUES (
+            :code, :date, :open, :close, :high, :low, :volume, :amount_yi, :change_pct, :created_at
+        ) ON CONFLICT(code, date) DO UPDATE SET
+            open = excluded.open,
+            close = excluded.close,
+            high = excluded.high,
+            low = excluded.low,
+            volume = excluded.volume,
+            amount_yi = excluded.amount_yi,
+            change_pct = excluded.change_pct,
+            created_at = excluded.created_at;
+        """, [
+            {
+                "code": code,
+                "date": str(k.get("date")),
+                "open": float(k.get("open", 0.0)),
+                "close": float(k.get("close", 0.0)),
+                "high": float(k.get("high", 0.0)),
+                "low": float(k.get("low", 0.0)),
+                "volume": float(k.get("volume", 0.0)),
+                "amount_yi": float(k.get("amount_yi", 0.0)),
+                "change_pct": float(k.get("change_pct", 0.0)),
+                "created_at": now_str
+            }
+            for k in klines if k.get("date")
+        ])
+        conn.commit()
+        return len(klines)
+
+
+def load_daily_klines(code: str, limit: int = 5000) -> List[Dict[str, Any]]:
+    """
+    需求2: 从本地数据库直接检索该标的历史日K线
+    毫秒级响应，无需现场外网发包抓取
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT date, open, close, high, low, volume, amount_yi, change_pct
+        FROM stock_daily_kline
+        WHERE code = ?
+        ORDER BY date ASC
+        LIMIT ?;
+        """, (code, limit))
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+def save_stock_timeline(code: str, timeline_data: Dict[str, Any]):
+    """
+    需求1/4: 保存分时切片至本地数据库 (stock_timeline)
+    当天单记录，结构紧凑轻量
+    """
+    import json
+    if not code or not timeline_data:
+        return
+    trade_date = datetime.now().strftime("%Y-%m-%d")
+    pre_close = float(timeline_data.get("pre_close", 0.0))
+    items = timeline_data.get("items", [])
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO stock_timeline (code, trade_date, pre_close, items_json, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(code, trade_date) DO UPDATE SET
+            pre_close = excluded.pre_close,
+            items_json = excluded.items_json,
+            updated_at = excluded.updated_at;
+        """, (code, trade_date, pre_close, json.dumps(items, ensure_ascii=False), now_str))
+        conn.commit()
+
+
+def load_stock_timeline(code: str, max_age_seconds: int = 300) -> Optional[Dict[str, Any]]:
+    """
+    需求2: 从本地数据库查询当天有效的分时走势数据
+    """
+    import json
+    trade_date = datetime.now().strftime("%Y-%m-%d")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT pre_close, items_json, updated_at
+        FROM stock_timeline
+        WHERE code = ? AND trade_date = ?
+        ORDER BY updated_at DESC
+        LIMIT 1;
+        """, (code, trade_date))
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        # 检验数据时效 (若在交易时段内过期则返回None触发回补)
+        try:
+            items = json.loads(row["items_json"])
+            return {
+                "code": code,
+                "pre_close": row["pre_close"],
+                "items": items,
+                "cached_at": row["updated_at"]
+            }
+        except Exception:
+            return None
 
 
 def get_latest_crawl_fingerprint(target_scope: str = "") -> Optional[Dict[str, Any]]:
