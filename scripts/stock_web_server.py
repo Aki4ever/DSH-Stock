@@ -1070,15 +1070,8 @@ def cleanup_and_exit(signum=None, frame=None):
 
 
 def start_workspace_watchdog():
-    def watchdog_loop():
-        while not SHUTDOWN_REQUESTED:
-            time.sleep(3)
-            if not os.path.exists(BASE_DIR) or not os.path.exists(CURRENT_DIR):
-                print("[Watchdog] 检测到工程应用目录已被移除，触发自动自毁关闭服务...")
-                cleanup_and_exit()
-                break
-    t = threading.Thread(target=watchdog_loop, daemon=True)
-    t.start()
+    # 禁用激进自毁，防止偶发文件系统探测抖动导致服务意外退出
+    pass
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8888):
@@ -1098,6 +1091,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8888):
 
     try:
         server_address = (host, port)
+        ThreadingHTTPServer.allow_reuse_address = True
         SERVER_INSTANCE = ThreadingHTTPServer(server_address, StockRequestHandler)
         print(f"===============================================================")
         print(f" 🚀 DSH A股量化筛选 Web 服务端已成功就绪！版本: {APP_VERSION}")

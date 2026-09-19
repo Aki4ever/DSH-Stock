@@ -45,6 +45,17 @@ if [ "${READY}" -eq 1 ]; then
   echo "🌐 浏览器访问入口: http://127.0.0.1:${PORT}"
   echo "📊 状态常显检查  : http://127.0.0.1:${PORT}/api/status"
   echo "📄 运行日志文件  : ${BASE_DIR}/server.log"
+
+  # 启动高可用自愈守护进程 (Watchdog)
+  WATCHDOG_PID_FILE="${BASE_DIR}/.watchdog.pid"
+  if [ -f "${WATCHDOG_PID_FILE}" ]; then
+    OLD_WD_PID=$(cat "${WATCHDOG_PID_FILE}" 2>/dev/null || true)
+    if [ -n "${OLD_WD_PID}" ] && kill -0 "${OLD_WD_PID}" 2>/dev/null; then
+      kill -9 "${OLD_WD_PID}" 2>/dev/null || true
+    fi
+  fi
+  nohup python3 -u "${SCRIPT_DIR}/watchdog.py" > /dev/null 2>&1 &
+  echo "🛡️ 高可用自愈看门狗已激活守护进程，7x24小时保证 127.0.0.1:${PORT} 在线自愈。"
 else
   echo "⚠️ 服务端正在启动中，请检查日志: cat ${BASE_DIR}/server.log"
 fi

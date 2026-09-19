@@ -15,6 +15,17 @@ echo "======================================================================"
 
 STOPPED=0
 
+# 0. 先停止高可用守护进程 (Watchdog)，防止停止时被自动拉起
+WATCHDOG_PID_FILE="${BASE_DIR}/.watchdog.pid"
+if [ -f "${WATCHDOG_PID_FILE}" ]; then
+  WD_PID=$(cat "${WATCHDOG_PID_FILE}" 2>/dev/null || true)
+  if [ -n "${WD_PID}" ] && kill -0 "${WD_PID}" 2>/dev/null; then
+    echo "正在停止高可用守护进程 (Watchdog PID: ${WD_PID})..."
+    kill -TERM "${WD_PID}" 2>/dev/null || kill -9 "${WD_PID}" 2>/dev/null || true
+  fi
+  rm -f "${WATCHDOG_PID_FILE}"
+fi
+
 # 1. 优先通过 PID 文件停止
 if [ -f "${PID_FILE}" ]; then
   PID=$(cat "${PID_FILE}" 2>/dev/null || true)
