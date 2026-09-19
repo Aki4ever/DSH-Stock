@@ -1,0 +1,31 @@
+{
+  "before": {
+    "status": "running",
+    "service": "DSH Stock Web Server",
+    "version": "v4.3.0",
+    "pid": 6427,
+    "port": 8888,
+    "uptime_seconds": 14418,
+    "stock_count": 4601,
+    "csi50_count": 50,
+    "csi100_count": 100,
+    "db_path": "/Users/linqiyu/Documents/DSH/DSH股票/data/stock_database.db",
+    "snapshot_date": "2026-09-19",
+    "current_time": "2026-09-19 20:49:03"
+  },
+  "after": {
+    "status": "running",
+    "service": "DSH Stock Web Server",
+    "version": "v4.4.0",
+    "pid": 40878,
+    "port": 8888,
+    "uptime_seconds": 0,
+    "stock_count": 4601,
+    "csi50_count": 50,
+    "csi100_count": 100,
+    "db_path": "/Users/linqiyu/Documents/DSH/DSH股票/data/stock_database.db",
+    "snapshot_date": "2026-09-19",
+    "current_time": "2026-09-19 20:49:06"
+  },
+  "rollback": "http://127.0.0.1:8890/"
+}

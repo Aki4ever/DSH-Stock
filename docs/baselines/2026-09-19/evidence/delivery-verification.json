@@ -1,0 +1,22 @@
+{
+  "baseline_id": "DSH-BASELINE-20260919-01",
+  "unchanged": true,
+  "changed": [],
+  "missing": [],
+  "new": [],
+  "volatile_changed_or_missing": [],
+  "note": "数据库与PID仅列为易变观察，不代表已备份；本检查不验证数据真实性或功能正确性",
+  "verified_at": "2026-09-19T11:48:53.891460+00:00",
+  "command_exit_code": 0,
+  "business_code_modified_by_this_task": false,
+  "original_database_written_by_this_task": false,
+  "existing_service_restarted": false,
+  "tests_run_in_temporary_copy": true,
+  "original_test_count": 27,
+  "original_tests_passed": 27,
+  "python_files_parsed": 43,
+  "javascript_syntax_exit_code": 0,
+  "http_readonly_checks_passed": 7,
+  "ui_interaction_verified": false,
+  "product_defects_fixed": false
+}

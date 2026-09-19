@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 780" width="100%" height="100%">
+  <defs>
+    <style>
+      .title { font-family: system-ui, -apple-system, sans-serif; font-weight: bold; font-size: 22px; fill: #1e293b; }
+      .subtitle { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; fill: #64748b; }
+      .label { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; fill: #1e293b; font-weight: bold; }
+      .sublabel { font-family: system-ui, -apple-system, sans-serif; font-size: 12px; fill: #475569; }
+      .tag { font-family: system-ui, -apple-system, sans-serif; font-weight: bold; font-size: 13px; fill: #ffffff; }
+      .pivot-a { fill: rgba(239, 68, 68, 0.08); stroke: #ef4444; stroke-width: 1.5; stroke-dasharray: 4; }
+      .pivot-b { fill: rgba(245, 158, 11, 0.08); stroke: #f59e0b; stroke-width: 1.5; stroke-dasharray: 4; }
+      .pivot-c { fill: rgba(16, 185, 129, 0.08); stroke: #10b981; stroke-width: 1.5; stroke-dasharray: 4; }
+      .trend-down { stroke: #ef4444; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+      .trend-up { stroke: #10b981; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+      .macd-line { stroke: #64748b; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect width="1000" height="780" fill="#ffffff" />
+
+  <!-- 标题 -->
+  <text x="50" y="45" class="title">缠论三大类买点全景演化图 (Three Buy Points)</text>
+  <text x="50" y="70" class="subtitle">从下跌趋势背驰（一买）到转折确认（二买），再到中枢突破确认（三买）的全生命周期</text>
+
+  <!-- 主图坐标/走势区域 -->
+  <g transform="translate(50, 90)">
+    <!-- 中枢A (下跌趋势中第1个中枢) -->
+    <rect x="90" y="90" width="100" height="70" class="pivot-a"/>
+    <text x="115" y="130" class="sublabel" fill="#ef4444">中枢 A</text>
+
+    <!-- 中枢B (下跌趋势中第2个中枢) -->
+    <rect x="250" y="220" width="100" height="70" class="pivot-a"/>
+    <text x="275" y="260" class="sublabel" fill="#ef4444">中枢 B</text>
+
+    <!-- 下跌走势折线：A中枢前进段、震荡、连接段、B中枢震荡、底背驰离开段 -->
+    <!-- (10,40) -> (90,160) -> (140,90) -> (190,160) -> (250,290) -> (300,220) -> (350,290) -> (430,370)一买 -->
+    <polyline points="
+      20,40 
+      90,160 140,90 190,160 
+      250,290 300,220 350,290 
+      430,370" 
+      class="trend-down" fill="none"/>
+
+    <!-- 离开段 c 对比连接段 b: 发生背驰 -->
+    <path d="M 200 180 L 245 280" stroke="#f43f5e" stroke-width="2" stroke-dasharray="3"/>
+    <text x="205" y="235" class="sublabel" fill="#f43f5e">b段(跌急)</text>
+
+    <path d="M 355 300 L 420 365" stroke="#f43f5e" stroke-width="2" stroke-dasharray="3"/>
+    <text x="390" y="325" class="sublabel" fill="#f43f5e">c段(跌缓背驰)</text>
+
+    <!-- 第一类买点 1B -->
+    <circle cx="430" cy="370" r="8" fill="#ef4444" />
+    <rect x="405" y="390" width="50" height="24" rx="4" fill="#ef4444" />
+    <text x="415" y="407" class="tag">1 买</text>
+    <text x="350" y="435" class="sublabel">下跌趋势背驰转折点</text>
+    <text x="350" y="450" class="sublabel" fill="#ef4444">c段跌幅与MACD发生背驰</text>
+
+    <!-- 一买后反弹进新中枢构建，随后二买 -->
+    <!-- (430,370) -> (520,230) -> (580,310)二买 -->
+    <polyline points="430,370 520,230 580,310" class="trend-up" fill="none"/>
+
+    <!-- 第二类买点 2B -->
+    <circle cx="580" cy="310" r="8" fill="#f59e0b" />
+    <rect x="555" y="330" width="50" height="24" rx="4" fill="#f59e0b" />
+    <text x="565" y="347" class="tag">2 买</text>
+    <text x="540" y="375" class="sublabel">次级别回踩不创新低</text>
+    <text x="540" y="390" class="sublabel" fill="#f59e0b">右侧转折确认(不破1B底)</text>
+
+    <!-- 构建上涨中枢并向上突破 -->
+    <!-- (580,310) -> (660,190) -> (720,250) -> (800,120)突破离开段 -> (860,170)三买 -> (930,80) -->
+    <polyline points="580,310 660,190 720,250 800,120 860,165 930,60" class="trend-up" fill="none"/>
+
+    <!-- 新构建的中枢 C -->
+    <!-- 包含波动 (520,230)到(660,190)到(720,250) -->
+    <rect x="520" y="190" width="200" height="60" class="pivot-c"/>
+    <text x="590" y="225" class="sublabel" fill="#10b981">上涨新中枢 C</text>
+
+    <!-- 中枢最高点 ZG 延伸线 -->
+    <line x1="520" y1="190" x2="900" y2="190" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3"/>
+    <text x="680" y="180" class="sublabel" fill="#10b981">中枢上沿 ZG</text>
+
+    <!-- 第三类买点 3B -->
+    <circle cx="860" cy="165" r="8" fill="#10b981" />
+    <rect x="835" y="125" width="50" height="24" rx="4" fill="#10b981" />
+    <text x="845" y="142" class="tag">3 买</text>
+    <text x="820" y="105" class="sublabel">中枢突破回抽不破ZG</text>
+    <text x="820" y="90" class="sublabel" fill="#10b981">主升浪起爆点(高胜率)</text>
+  </g>
+
+  <!-- 底部MACD示意区 -->
+  <g transform="translate(50, 580)">
+    <rect width="900" height="150" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1" rx="6"/>
+    <text x="20" y="25" class="label">MACD 面积背驰直观验证 (一买前夕)</text>
+    <line x1="20" y1="85" x2="880" y2="85" class="macd-line"/>
+    <text x="840" y="80" class="sublabel">0轴</text>
+
+    <!-- b段绿柱面积 (大) -->
+    <path d="M 180 85 Q 210 135 240 85" fill="#ef4444" opacity="0.6"/>
+    <text x="195" y="120" class="tag" fill="#ffffff" font-size="11">绿柱面积大</text>
+
+    <!-- 黄白线在b段深探 -->
+    <path d="M 80 70 Q 150 90 190 120 T 250 88 T 320 86 T 380 100 T 430 83" fill="none" stroke="#2563eb" stroke-width="2"/>
+
+    <!-- c段绿柱面积 (小，虽然价格创新低，但面积缩小) -->
+    <path d="M 360 85 Q 395 105 430 85" fill="#ef4444" opacity="0.6"/>
+    <text x="375" y="100" class="tag" fill="#ffffff" font-size="11">面积萎缩</text>
+
+    <!-- 背驰对比箭头 -->
+    <path d="M 230 140 L 380 120" stroke="#dc2626" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="260" y="145" class="sublabel" fill="#dc2626">价格创新低，指标动能未创新低 → 底背驰确立 (1B)</text>
+
+    <!-- 突破0轴与回抽 -->
+    <path d="M 430 83 Q 500 45 560 70 T 680 40 T 780 30 T 860 65 T 900 35" fill="none" stroke="#10b981" stroke-width="2"/>
+    <text x="570" y="65" class="sublabel" fill="#10b981">一买后双线冲过0轴</text>
+    <text x="810" y="55" class="sublabel" fill="#10b981">三买时回抽0轴不破</text>
+  </g>
+</svg>

@@ -1,0 +1,47 @@
+{
+  "status": {
+    "exit_code": 0,
+    "stdout": "## main...origin/main\n M data/stock_database.db\n M docs/requirements.md\n?? .watchdog.pid\n?? chanlun_concepts.svg\n?? chanlun_execution_pipeline.svg\n?? chanlun_matrix_and_rules.svg\n?? chanlun_three_buys.svg\n?? generate_matrix_svg.py\n?? generate_svg_charts.py\n?? generate_system_svg.py\n?? reports/chanlun_full_scan.json\n?? reports/chanlun_sh510300_real.svg\n?? reports/chanlun_signals_report.json\n?? scripts/chanlun_chart_svg.py\n?? scripts/chanlun_core.py\n?? scripts/chanlun_strategy_engine.py\n",
+    "stderr": ""
+  },
+  "head": {
+    "exit_code": 0,
+    "stdout": "f8b53aa9dd5985c0cdaf4463922a0c2fc336e1b7\n",
+    "stderr": ""
+  },
+  "branch": {
+    "exit_code": 0,
+    "stdout": "main\n",
+    "stderr": ""
+  },
+  "log": {
+    "exit_code": 0,
+    "stdout": "f8b53aa 2026-09-19T16:48:56+08:00 feat(v4.3.0): 彻底剔除所有mock与假数据，构建腾讯/东财/新浪多源冗余真实数据引擎，无数据严格以合规文案提示\n0d91938 2026-09-19T16:24:11+08:00 fix(server): 系统性根治连接拒绝异常，移除激进自毁监测，构建高可用自愈看门狗守护引擎(7x24小时自动拉起)\ndf5dc5a 2026-09-19T16:07:05+08:00 feat(v4.2.0): 本地持久化数据库优先(Local-DB-First)与按需智能回补架构重构，轻量解耦低冗余SQLite三表时序入库\n6ffc148 2026-09-19T15:48:09+08:00 feat(v4.1.0): 股票列表新增日交易额/日均交易额流动性筛选、K线全周期滚轮自由缩放、缠论自动画笔买卖点引擎(B1-B3/S1-S3)与实战指南弹窗\ndbcce38 2026-09-19T13:42:55+08:00 feat(v4.0.0): 自动画线升级为1~4根多阶独立筹码峰引擎，严格保证每根线交汇交易额第x大且交汇交易日集合非完全重复\n3148b70 2026-09-18T21:49:40+08:00 feat(v3.9.0): 自动画线标注交汇交易日天数、K线图新增120天/180天Tab、分时图副图全面呈现四维分布概要、股票列表新增ST风险属性筛选\n15bba69 2026-09-18T21:30:37+08:00 feat(v3.8.0): K线图副图（成交额/成交量）新增平均、最小、最大、中位数四维分布概要数据，随时间周期与缩放自适应毫秒级联动\n3567094 2026-09-18T21:06:37+08:00 feat(v3.7.0): 股东研究新增宏观六维概览指标、顶层新增指数一级Tab收录上证与深圳指数、指数详情支持分时/5/10/20/60/全部K线与仅成交额副图及最大交汇自动画线\n8933a63 2026-09-18T20:46:57+08:00 feat(v3.6.0): 顶层新增股东研究全景穿透主导航、飞书级绝对锁定位冻结分割线、当日抓取智能免抓防重、K线图坚守真实数据底座\n90626a4 2026-09-18T20:35:03+08:00 feat(v3.5.0): K线图新增5天/10天K线超短线Tab、自动画线仅绘制1根全局最大交汇金额最强中枢线、数据中心每次抓取均自动落盘入表\n",
+    "stderr": ""
+  },
+  "diff_stat": {
+    "exit_code": 0,
+    "stdout": " data/stock_database.db | Bin 2076672 -> 3571712 bytes\n docs/requirements.md   |  17 +++++++++++++++++\n 2 files changed, 17 insertions(+)\n",
+    "stderr": ""
+  },
+  "diff_check": {
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "staged": {
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "tracking": {
+    "exit_code": 0,
+    "stdout": "0\t0\n",
+    "stderr": ""
+  },
+  "tags": {
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+}

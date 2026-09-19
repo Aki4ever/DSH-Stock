@@ -1,0 +1,71 @@
+{
+  "historical_filter": {
+    "same_codes_prices": true,
+    "requested_dates": [
+      "2000-01-01",
+      "2026-09-18"
+    ],
+    "fixture_only": true,
+    "explanation": "filter_date changes reported metadata, not historical selection"
+  },
+  "profit_filter": {
+    "accepted_fixture_without_annual_profit_history": true,
+    "fixture_only": true,
+    "pe": 20,
+    "listing_years": 8
+  },
+  "shareholder_generation": {
+    "holders_count": 10,
+    "first_name": "BASELINE_FIXTURE控股集团有限公司",
+    "total_circ_pct": 60.0,
+    "contains_source_field": false,
+    "is_mock_field": null,
+    "network_used": false,
+    "fixture_only": true
+  },
+  "profile_on_network_failure": {
+    "legal_repr": "张伟",
+    "reg_capital": "10.50 亿元",
+    "source": null,
+    "is_mock": null,
+    "fixture_only": true
+  },
+  "fresh_database": {
+    "load_succeeded": false,
+    "error_type": "OperationalError",
+    "error": "no such column: m.dividend_total_amount",
+    "missing_query_columns": [
+      "dividend_total_amount",
+      "pinyin_abbr"
+    ]
+  },
+  "timeline_ttl": {
+    "max_age_seconds": 1,
+    "returned_expired_same_day_record": true,
+    "fixture_only": true
+  },
+  "kline_limit": {
+    "limit": 2,
+    "returned_dates": [
+      "2026-09-01",
+      "2026-09-02"
+    ],
+    "fixture_only": true
+  },
+  "chanlun_empty_smoke": {
+    "signals": [],
+    "scope": "Empty-input smoke only; no geometry or strategy correctness acceptance"
+  },
+  "cli_help": {
+    "exit_code": 0,
+    "log": "cli_help.log"
+  },
+  "cli_status": {
+    "exit_code": 0,
+    "log": "cli_status.log"
+  },
+  "cli_json_support": {
+    "exit_code": 2,
+    "log": "cli_json_support.log"
+  }
+}

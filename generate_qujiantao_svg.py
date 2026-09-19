@@ -1,0 +1,145 @@
+import os
+
+svg_qujiantao = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 860" width="100%" height="100%">
+  <defs>
+    <style>
+      .title { font-family: system-ui, -apple-system, sans-serif; font-weight: bold; font-size: 21px; fill: #0f172a; }
+      .subtitle { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; fill: #64748b; }
+      .level-title { font-family: system-ui, -apple-system, sans-serif; font-weight: bold; font-size: 15px; fill: #1e293b; }
+      .label { font-family: system-ui, -apple-system, sans-serif; font-size: 12px; fill: #334155; }
+      .bold-label { font-family: system-ui, -apple-system, sans-serif; font-weight: bold; font-size: 12px; fill: #0f172a; }
+      .tag { font-family: system-ui, -apple-system, sans-serif; font-weight: bold; font-size: 11px; fill: #ffffff; }
+      .level-box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 8; }
+      .pivot { fill: rgba(59, 130, 246, 0.12); stroke: #3b82f6; stroke-width: 1.5; stroke-dasharray: 4; }
+      .trend-daily { stroke: #2563eb; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+      .trend-30m { stroke: #0284c7; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+      .trend-5m { stroke: #059669; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .zoom-line { stroke: #f59e0b; stroke-width: 1.5; stroke-dasharray: 4; }
+      .target-circle { fill: #ef4444; stroke: #ffffff; stroke-width: 2; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 2 L 8 5 L 0 8 z" fill="#f59e0b" />
+    </marker>
+  </defs>
+
+  <rect width="1000" height="860" fill="#f8fafc" />
+
+  <!-- 标题 -->
+  <text x="50" y="42" class="title">缠论【区间套定理】多级别穿透定位教学图解</text>
+  <text x="50" y="68" class="subtitle">借用数学“闭区间套定理”思想：大级别背驰段必然逐级包含次级别背驰段，实现买卖点的绝对精确锁定</text>
+
+  <!-- 第1层：日线级别 (大级别) -->
+  <g transform="translate(50, 95)">
+    <rect width="900" height="200" class="level-box" />
+    <rect x="0" y="0" width="900" height="32" rx="8" fill="#eff6ff" />
+    <text x="20" y="22" class="level-title" fill="#1d4ed8">级别一：日线级别 (Daily) —— 锁定背驰段宏观区间 [T0, T1]</text>
+    <text x="680" y="22" class="label" fill="#2563eb">时间精度：几天 ~ 数周级别</text>
+
+    <!-- 日线走势：下跌中枢A -> 下跌中枢B -> 离开段 c -->
+    <!-- 中枢A -->
+    <rect x="150" y="55" width="110" height="50" class="pivot" />
+    <text x="185" y="85" class="label" fill="#2563eb">日线中枢 A</text>
+
+    <!-- 中枢B -->
+    <rect x="360" y="105" width="110" height="50" class="pivot" />
+    <text x="395" y="135" class="label" fill="#2563eb">日线中枢 B</text>
+
+    <!-- 折线 -->
+    <polyline points="
+      50,45 
+      150,105 200,55 260,105 
+      360,155 410,105 470,155 
+      590,185" 
+      class="trend-daily" fill="none" />
+
+    <!-- 离开段 c 红色高亮与放大窗口 -->
+    <line x1="470" y1="155" x2="590" y2="185" stroke="#ef4444" stroke-width="4" />
+    <text x="495" y="165" class="bold-label" fill="#ef4444">日线离开段 c (发生底背驰)</text>
+
+    <!-- 放大区域框 -->
+    <rect x="460" y="145" width="145" height="50" rx="4" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="3" />
+    <text x="620" y="170" class="bold-label" fill="#f59e0b">【日线区间套第1层】</text>
+    <text x="620" y="188" class="label">确定在 c 段内必出大买点，但范围过宽</text>
+  </g>
+
+  <!-- 投影放大连接线 1 -->
+  <path d="M 510 295 L 200 345" class="zoom-line" />
+  <path d="M 655 295 L 850 345" class="zoom-line" />
+
+  <!-- 第2层：30分钟级别 (次级别) -->
+  <g transform="translate(50, 345)">
+    <rect width="900" height="210" class="level-box" />
+    <rect x="0" y="0" width="900" height="32" rx="8" fill="#f0f9ff" />
+    <text x="20" y="22" class="level-title" fill="#0284c7">级别二：30分钟级别 (次级别内部微观解构) —— 极度收窄时间范围</text>
+    <text x="680" y="22" class="label" fill="#0284c7">时间精度：几小时 ~ 1天级别</text>
+
+    <!-- 将日线 c 段内部完全展开：同样也是一个 a'+A'+b'+B'+c' 下跌走势 -->
+    <!-- 中枢 A' -->
+    <rect x="180" y="60" width="100" height="40" class="pivot" />
+    <text x="205" y="85" class="label" fill="#0284c7">30M中枢 A'</text>
+
+    <!-- 中枢 B' -->
+    <rect x="380" y="115" width="100" height="40" class="pivot" />
+    <text x="405" y="140" class="label" fill="#0284c7">30M中枢 B'</text>
+
+    <!-- 折线 -->
+    <polyline points="
+      80,50 
+      180,100 230,60 280,100 
+      380,155 430,115 480,155 
+      620,195" 
+      class="trend-30m" fill="none" />
+
+    <!-- 离开段 c' 高亮 -->
+    <line x1="480" y1="155" x2="620" y2="195" stroke="#ef4444" stroke-width="3" />
+    <text x="510" y="170" class="bold-label" fill="#ef4444">30分钟离开段 c' (次级别背驰)</text>
+
+    <!-- 放大区域框 -->
+    <rect x="475" y="150" width="160" height="52" rx="4" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="3" />
+    <text x="650" y="170" class="bold-label" fill="#f59e0b">【区间套第2层下穿】</text>
+    <text x="650" y="188" class="label">大买点必定且仅能落在 c' 段内！</text>
+  </g>
+
+  <!-- 投影放大连接线 2 -->
+  <path d="M 525 555 L 200 605" class="zoom-line" />
+  <path d="M 685 555 L 850 605" class="zoom-line" />
+
+  <!-- 第3层：5分钟/分时级别 (次次级别) -->
+  <g transform="translate(50, 605)">
+    <rect width="900" height="215" class="level-box" />
+    <rect x="0" y="0" width="900" height="32" rx="8" fill="#f0fdf4" />
+    <text x="20" y="22" class="level-title" fill="#15803d">级别三：5分钟 / 1分钟级别 (终极打击层) —— 精确定位到具体K线甚至秒</text>
+    <text x="680" y="22" class="label" fill="#15803d">时间精度：具体某一根 5M K线</text>
+
+    <!-- 展开 30m c' 段内部：最后一段杀跌出现盘整背驰与底分型 -->
+    <polyline points="
+      80,55 140,95 190,75 250,115 310,95 380,140 430,120 500,165 560,185" 
+      class="trend-5m" fill="none" />
+
+    <!-- 终极背驰低点 -->
+    <circle cx="560" cy="185" r="7" class="target-circle" />
+    <text x="560" y="208" class="bold-label" fill="#ef4444" text-anchor="middle">终极买点 1B</text>
+
+    <!-- 随后走出第1根反弹K线和底分型 -->
+    <line x1="560" y1="185" x2="620" y2="135" stroke="#10b981" stroke-width="3" />
+    <circle cx="620" cy="135" r="5" fill="#10b981" />
+    <text x="630" y="140" class="bold-label" fill="#10b981">5分钟底分型成立确认 (市价买入点)</text>
+
+    <!-- 解释与总结 -->
+    <g transform="translate(680, 50)">
+      <rect width="200" height="140" rx="6" fill="#f8fafc" stroke="#cbd5e1" />
+      <text x="12" y="25" class="bold-label" fill="#0f172a">🎯 区间套终极战果：</text>
+      <text x="12" y="50" class="label">1. 日线判断：大底将成</text>
+      <text x="12" y="72" class="label">2. 30M判断：锁定特定日</text>
+      <text x="12" y="94" class="label">3. 5M判断：锁定具体价格</text>
+      <line x1="12" y1="105" x2="188" y2="105" stroke="#e2e8f0" />
+      <text x="12" y="125" class="bold-label" fill="#ef4444">止损成本仅 0.5% ~ 1%！</text>
+    </g>
+  </g>
+</svg>
+'''
+
+with open('chanlun_qujiantao_concept.svg', 'w', encoding='utf-8') as f:
+    f.write(svg_qujiantao)
+
+print("QuJianTao SVG generated!")

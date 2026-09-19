@@ -1,0 +1,218 @@
+[
+  {
+    "path": "/api/status",
+    "status": 200,
+    "bytes": 362,
+    "sha256": "b4493e34ba08660598987a35cf4e44af86acc951258c718b466d7ee95f432d10",
+    "content_type": "application/json; charset=utf-8",
+    "body": {
+      "status": "running",
+      "service": "DSH Stock Web Server",
+      "version": "v4.3.0",
+      "pid": 6427,
+      "port": 8888,
+      "uptime_seconds": 10230,
+      "stock_count": 4601,
+      "csi50_count": 50,
+      "csi100_count": 100,
+      "db_path": "/Users/linqiyu/Documents/DSH/DSH股票/data/stock_database.db",
+      "snapshot_date": "2026-09-19",
+      "current_time": "2026-09-19 19:39:15"
+    },
+    "elapsed_seconds": 0.01
+  },
+  {
+    "path": "/api/version",
+    "status": 200,
+    "bytes": 591,
+    "sha256": "2c2b0b6fe2a6b3c8300ad1fc52bed55c0ebc8859e4b2472f5aa652dfd5e4ad73",
+    "content_type": "application/json; charset=utf-8",
+    "body": {
+      "version": "v4.3.0",
+      "info": {
+        "version": "v4.3.0",
+        "app_name": "A股多维量化筛选器",
+        "subtitle": "DSH Stock Web",
+        "release_date": "2026-09-19",
+        "description": "彻底剔除伪造假数据、全量多源真实数据保障与无数据严格文案提示重构：彻底删除系统所有兜底伪造与mock数据逻辑；构建腾讯证券、东方财富、新浪财经多源真实数据冗余故障转移引擎；所有K线、分时与财务数据100%源自真实官方接口并落盘本地数据库；真实无数据时严格以明确文案提示用户"
+      }
+    },
+    "elapsed_seconds": 0.002
+  },
+  {
+    "path": "/api/filter_schema",
+    "status": 200,
+    "bytes": 2250,
+    "sha256": "6e42076ad0a6f145fa9e0c4c87e29bd6175b83d289445d1627f9bf5c1f7ea584",
+    "content_type": "application/json; charset=utf-8",
+    "body": {
+      "version": "v4.3.0",
+      "dimensions": [
+        {
+          "id": "market",
+          "name": "股市分类",
+          "type": "select",
+          "options": [
+            {
+              "value": "all",
+              "label": "全部 A 股"
+            },
+            {
+              "value": "sh",
+              "label": "上证"
+            },
+            {
+              "value": "sz",
+              "label": "深圳"
+            }
+          ]
+        },
+        {
+          "id": "board",
+          "name": "板块分类",
+          "type": "select",
+          "options": [
+            {
+              "value": "all",
+              "label": "全部板块"
+            },
+            {
+              "value": "main",
+              "label": "主板"
+            },
+            {
+              "value": "chinext",
+              "label": "创业板"
+            }
+          ]
+        },
+        {
+          "id": "constituent",
+          "name": "成分股",
+          "type": "select",
+          "options": [
+            {
+              "value": "all",
+              "label": "全部(不限)"
+            },
+            {
+              "value": "csi50",
+              "label": "中证50"
+            },
+            {
+              "value": "csi100",
+              "label": "中证100"
+            }
+          ]
+        },
+        {
+          "id": "price",
+          "name": "股价区间",
+          "type": "range",
+          "unit": "元"
+        },
+        {
+          "id": "market_cap",
+          "name": "总市值区间",
+          "type": "range",
+          "unit": "亿元"
+        },
+        {
+          "id": "circ_cap",
+          "name": "流通市值区间",
+          "type": "range",
+          "unit": "亿元"
+        },
+        {
+          "id": "pe",
+          "name": "市盈率 PE",
+          "type": "range",
+          "unit": "倍"
+        },
+        {
+          "id": "dividend_count",
+          "name": "分红次数",
+          "type": "range",
+          "unit": "次"
+        },
+        {
+          "id": "dividend_total_amount",
+          "name": "累计分红总额",
+          "type": "range",
+          "unit": "亿元"
+        },
+        {
+          "id": "listing_years",
+          "name": "上市时长",
+          "type": "range",
+          "unit": "年"
+        },
+        {
+          "id": "top10_circ",
+          "name": "十大流通股东持股",
+          "type": "range",
+          "unit": "%"
+        },
+        {
+          "id": "top10_hold",
+          "name": "十大股东持股",
+          "type": "range",
+          "unit": "%"
+        },
+        {
+          "id": "filter_date",
+          "name": "筛选基准日期",
+          "type": "date"
+        }
+      ]
+    },
+    "elapsed_seconds": 0.003
+  },
+  {
+    "path": "/api/crawler/status",
+    "status": 200,
+    "bytes": 434,
+    "sha256": "60534ba56c49c55f1ca5e5795189fd3f6615c1e33d2a8c0c669444cec0c2e576",
+    "content_type": "application/json; charset=utf-8",
+    "body": {
+      "job_id": "crawl_1789808785",
+      "mode": "full",
+      "status": "completed",
+      "total_count": 4601,
+      "current_count": 4601,
+      "progress_pct": 100.0,
+      "phase_text": "⚡ 今日 (2026-09-19) 数据已全部成功抓取沉淀，指纹一致，智能跳过无需重复采集！",
+      "elapsed_sec": 0.0,
+      "updated_count": 0,
+      "skipped_count": 4601,
+      "idempotent_engine": "SHA-256 Active",
+      "error_message": "",
+      "is_running": false
+    },
+    "elapsed_seconds": 0.003
+  },
+  {
+    "path": "/",
+    "status": 200,
+    "bytes": 114079,
+    "sha256": "8c11ff41d4a9ba25c067c1f048a5f64077bf50f683a5c360eeb5f2a4f1069203",
+    "content_type": "text/html; charset=utf-8",
+    "elapsed_seconds": 0.003
+  },
+  {
+    "path": "/web/app.js",
+    "status": 200,
+    "bytes": 225633,
+    "sha256": "4f1c6be2d6d7b6ab3cc6a0685cb133215e985500d62b4363cd001c8d340fc642",
+    "content_type": "application/javascript; charset=utf-8",
+    "elapsed_seconds": 0.001
+  },
+  {
+    "path": "/web/style.css",
+    "status": 200,
+    "bytes": 65295,
+    "sha256": "f9a8134ad80fa8a6b6c12598d164d096cbe34ec39b416d208c98e71420d74cb4",
+    "content_type": "text/css; charset=utf-8",
+    "elapsed_seconds": 0.001
+  }
+]

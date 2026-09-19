@@ -9,6 +9,7 @@ DSH 股票交互终端与命令行界面 (DSH Stock CLI)
 import os
 import sys
 import argparse
+import json
 from typing import List
 
 # 保证本地模块平滑导入
@@ -320,6 +321,16 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter
     )
     subparsers = parser.add_subparsers(dest="command", help="支持的子命令列表")
+    p_history = subparsers.add_parser("history", help="获取真实全历史日K线与来源覆盖状态（不复权）")
+    p_history.add_argument("code")
+    p_history.add_argument("--refresh", action="store_true")
+    p_history.add_argument("--include-bars", action="store_true")
+    p_history.add_argument("--json", action="store_true", help="结构化输出（默认）")
+    p_actions = subparsers.add_parser("holder-actions", help="获取已披露的实际股东增减持（按公告日期）")
+    p_actions.add_argument("code", nargs="?")
+    p_actions.add_argument("--days", type=int, choices=(90, 365), default=365)
+    p_actions.add_argument("--refresh", action="store_true")
+    p_actions.add_argument("--json", action="store_true", help="结构化输出（默认）")
 
     # quote 子命令
     p_quote = subparsers.add_parser("quote", help="查询单只或多只股票实时行情")
@@ -370,7 +381,22 @@ def main():
         parser.print_help()
         return 0
 
-    if args.command == "quote":
+    if args.command in ("history", "holder-actions"):
+        try:
+            if args.command == "history":
+                from scripts.history_service import get_daily_history
+                result = get_daily_history(args.code, refresh=args.refresh)
+                output = {k:v for k,v in result.items() if args.include_bars or k != "bars"}
+            else:
+                from scripts.shareholder_actions import get_actions, enrich_actions
+                result = get_actions(args.days, refresh=args.refresh)
+                output = enrich_actions({"code":args.code}, result) if args.code else {k:v for k,v in result.items() if k != "records"}
+            print(json.dumps(output, ensure_ascii=False, indent=2, allow_nan=False))
+            return 0 if result["status"] == "available" else 1
+        except (ValueError, TypeError, OSError) as exc:
+            print(json.dumps({"status":"error", "message":str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
+    elif args.command == "quote":
         return cmd_quote(args.codes)
     elif args.command == "list":
         return cmd_list()

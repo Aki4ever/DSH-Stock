@@ -1,0 +1,26 @@
+{
+  "task": "R01",
+  "summary": "v4.4.0已在本地8888生效，完成K线可信全历史与真实股东行为列筛选",
+  "status": "functionally_verified",
+  "verified_at": "2026-09-19T21:02:31.720089+08:00",
+  "elapsed_seconds": 3077,
+  "elapsed_source": "Codex read_thread startedAt 1789819874 至当前系统时间（墙钟）",
+  "token_total": null,
+  "token_source": "unknown：未创建原生Goal，无本执行精确Token计量",
+  "tests": "43 Python tests passed; JS request race/mismatch/unverified history passed",
+  "entries": {
+    "current": "http://127.0.0.1:8888/",
+    "rollback": "http://127.0.0.1:8890/"
+  },
+  "limitations": [
+    "仅对代表性股票做在线抽验，其他股票采用同一按需全历史机制",
+    "来源完整表示已读取到来源空页，不代表交易所逐日完整性审计",
+    "旧财报与其他股东派生字段不在本轮真实数据验收范围",
+    "辅助离线总览file://自动打开被浏览器策略拦截",
+    "旧基线预览unknown，未伪造归档完成"
+  ],
+  "requirements": "REQ-008/REQ-009 v1",
+  "previous_product_version": "v4.3.0",
+  "current_product_version": "v4.4.0",
+  "workflow_status": "本轮业务完成；旧基线预览unknown，流程归档未完成"
+}

@@ -1,0 +1,18 @@
+{
+  "code": "sh600519",
+  "schema_version": 1,
+  "source": "腾讯证券",
+  "source_url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+  "adjustment": "none",
+  "adjustment_label": "不复权",
+  "status": "available",
+  "provider_history_complete": true,
+  "coverage_start": "2001-08-27",
+  "coverage_end": "2026-09-18",
+  "count": 6007,
+  "pages": 11,
+  "fetched_at": "2026-09-19T20:40:58",
+  "fetched_epoch": 1789821658.617374,
+  "error": null,
+  "cache": "refreshed"
+}

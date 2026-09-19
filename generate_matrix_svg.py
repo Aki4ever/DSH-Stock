@@ -1,0 +1,129 @@
+import os
+
+svg_matrix = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 780" width="100%" height="100%">
+  <defs>
+    <style>
+      .title { font-family: system-ui, -apple-system, sans-serif; font-weight: bold; font-size: 20px; fill: #0f172a; }
+      .subtitle { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; fill: #64748b; }
+      .card-title { font-family: system-ui, -apple-system, sans-serif; font-weight: bold; font-size: 15px; }
+      .text { font-family: system-ui, -apple-system, sans-serif; font-size: 12px; fill: #334155; line-height: 1.5; }
+      .bold-text { font-family: system-ui, -apple-system, sans-serif; font-size: 12px; font-weight: bold; fill: #0f172a; }
+      .tag { font-family: system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: bold; fill: #ffffff; }
+      .box-good { fill: #f0fdf4; stroke: #22c55e; stroke-width: 1.5; rx: 8; }
+      .box-bad { fill: #fef2f2; stroke: #ef4444; stroke-width: 1.5; rx: 8; }
+      .box-rule { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 8; }
+      .box-header-good { fill: #dcfce7; rx: 8; }
+      .box-header-bad { fill: #fee2e2; rx: 8; }
+    </style>
+  </defs>
+
+  <rect width="1000" height="780" fill="#f8fafc" />
+
+  <!-- 头部标题 -->
+  <text x="50" y="40" class="title">缠论适用场景矩阵与核心规则实操指南</text>
+  <text x="50" y="65" class="subtitle">厘清“何处极其有效”与“何处绝对失效”，构建工业化落地的操作边界</text>
+
+  <!-- 上半部：适用场景与禁忌场景对照 -->
+  <g transform="translate(50, 90)">
+    <!-- 极佳适用场景 -->
+    <g transform="translate(0, 0)">
+      <rect width="435" height="270" class="box-good" />
+      <rect width="435" height="40" class="box-header-good" />
+      <text x="15" y="26" class="card-title" fill="#15803d">✔ 极佳适用场景 (High Applicability)</text>
+
+      <text x="15" y="65" class="bold-text" fill="#166534">1. 高流动性、充分博弈的主流标的：</text>
+      <text x="15" y="85" class="text">▸ 宽基ETF (沪深300/中证500/纳斯达克/创业板ETF)</text>
+      <text x="15" y="105" class="text">▸ 行业核心龙头、千亿市值蓝筹股、成交额前100活跃标的</text>
+      <text x="15" y="125" class="text">▸ 理由：筹码分散、博弈充分，几何自相似性与中枢引力最强。</text>
+
+      <text x="15" y="155" class="bold-text" fill="#166534">2. 明确的“大级别波段”定位 (日线 + 30分钟联动)：</text>
+      <text x="15" y="175" class="text">▸ 宏观主升浪启动期（30分钟第三类买点）</text>
+      <text x="15" y="195" class="text">▸ 熊市末期大级别底背驰转折确认期（日线/30分钟第二类买点）</text>
+      <text x="15" y="215" class="text">▸ 结构化震荡市中，高抛低吸做T（中枢上沿卖、下沿买）</text>
+
+      <rect x="15" y="230" width="405" height="28" rx="4" fill="#166534" />
+      <text x="30" y="249" class="tag">核心价值：提供确定性的盈亏比空间与不可更改的止损红线</text>
+    </g>
+
+    <!-- 严重失效禁忌场景 -->
+    <g transform="translate(465, 0)">
+      <rect width="435" height="270" class="box-bad" />
+      <rect width="435" height="40" class="box-header-bad" />
+      <text x="15" y="26" class="card-title" fill="#b91c1c">✖ 严重失效与禁忌场景 (High Failure Rate)</text>
+
+      <text x="15" y="65" class="bold-text" fill="#991b1b">1. 缺乏流动性、小微盘、庄股妖股：</text>
+      <text x="15" y="85" class="text">▸ 每日成交额小于 3000万 的冷门票、微盘股</text>
+      <text x="15" y="105" class="text">▸ 理由：单一大资金瞬间扭曲分型与笔，形态极易被人工“画线”。</text>
+
+      <text x="15" y="135" class="bold-text" fill="#991b1b">2. 突发政策/基本面黑天鹅与开盘一字断魂：</text>
+      <text x="15" y="155" class="text">▸ 重大财务造假暴雷、突发外生事件冲击导致一字跌停</text>
+      <text x="15" y="175" class="text">▸ 理由：价格跳空造成几何连续性断裂，所有技术止损彻底失效。</text>
+
+      <text x="15" y="205" class="bold-text" fill="#991b1b">3. 极低级别过度交易 (如1分钟超短线)：</text>
+      <text x="15" y="225" class="text">▸ 理由：噪音巨大、交易摩擦佣金损耗过高，小背驰极易被大趋势碾压。</text>
+    </g>
+  </g>
+
+  <!-- 下半部：两大核心实操策略对比 -->
+  <g transform="translate(50, 390)">
+    <text x="0" y="0" class="title" font-size="17">缠论两大工业级量化规则卡（即插即用）</text>
+
+    <!-- 策略 1: 30分钟三买突破模型 -->
+    <g transform="translate(0, 15)">
+      <rect width="435" height="340" class="box-rule" />
+      <rect width="435" height="35" rx="8" fill="#eff6ff" />
+      <text x="15" y="24" class="card-title" fill="#1d4ed8">策略 A：30分钟级别“中枢突破三买”战法 (主升浪模型)</text>
+
+      <text x="15" y="60" class="bold-text">适用风格：</text>
+      <text x="75" y="60" class="text">趋势交易、追随领涨龙头、右侧高爆发交易</text>
+
+      <text x="15" y="85" class="bold-text">前置条件：</text>
+      <text x="15" y="105" class="text">1. 日线均线多头排列，且日线处于向上笔。</text>
+      <text x="15" y="125" class="text">2. 30分钟走出至少3笔重叠的标准中枢，记录中枢上沿 ZG。</text>
+
+      <text x="15" y="155" class="bold-text">触发逻辑 (3B)：</text>
+      <text x="15" y="175" class="text">3. 强有力向上笔突破 ZG 后，出现向下的次级别回抽笔。</text>
+      <text x="15" y="195" class="text">4. 回抽笔最低点严格大于 ZG (回抽不进中枢)。</text>
+      <text x="15" y="215" class="text">5. 在5分钟图上出现底分型形成右侧确认入场信号。</text>
+
+      <text x="15" y="245" class="bold-text" fill="#b91c1c">止损与仓位：</text>
+      <text x="15" y="265" class="text">▸ 止损位 = 回抽笔的最低点 (跌回中枢立即无条件离场)</text>
+      <text x="15" y="285" class="text">▸ 仓位 = (总资产 × 2%) / (买入价 - 止损价)</text>
+
+      <rect x="15" y="300" width="405" height="26" rx="4" fill="#dbeafe" />
+      <text x="25" y="318" class="bold-text" fill="#1e40af">优势：不参与漫长筑底与中枢盘整，资金使用效率极高。</text>
+    </g>
+
+    <!-- 策略 2: 日线底背驰后30分钟二买模型 -->
+    <g transform="translate(465, 15)">
+      <rect width="435" height="340" class="box-rule" />
+      <rect width="435" height="35" rx="8" fill="#fefce8" />
+      <text x="15" y="24" class="card-title" fill="#a16207">策略 B：日线波段底部的“30分钟二买”战法 (稳健波段模型)</text>
+
+      <text x="15" y="60" class="bold-text">适用风格：</text>
+      <text x="75" y="60" class="text">稳健波段抄底、中线左转右确认、高盈亏比防守型</text>
+
+      <text x="15" y="85" class="bold-text">前置条件：</text>
+      <text x="15" y="105" class="text">1. 日线下跌趋势出现标准底背驰 (1B出现)。</text>
+      <text x="15" y="125" class="text">2. 随后展开第一轮强劲反弹（走出第一笔强力上涨）。</text>
+
+      <text x="15" y="155" class="bold-text">触发逻辑 (2B)：</text>
+      <text x="15" y="175" class="text">3. 切换至 30分钟 观察其随后的回踩笔。</text>
+      <text x="15" y="195" class="text">4. 回踩笔低点不破前期一买最低点（止跌且形成抬高底）。</text>
+      <text x="15" y="215" class="text">5. 回踩笔末端 MACD 绿柱缩量，5分钟底分型成立入场。</text>
+
+      <text x="15" y="245" class="bold-text" fill="#b91c1c">止损与仓位：</text>
+      <text x="15" y="265" class="text">▸ 止损位 = 1B最低点（若破新低则说明趋势继续延伸）</text>
+      <text x="15" y="285" class="text">▸ 目标位 = 向上看至原下跌中枢的下沿/中轴区间</text>
+
+      <rect x="15" y="300" width="405" height="26" rx="4" fill="#fef3c7" />
+      <text x="25" y="318" class="bold-text" fill="#854d0e">优势：避开了1B的抄底风险，胜率更高且盈亏比极佳。</text>
+    </g>
+  </g>
+</svg>
+'''
+
+with open('chanlun_matrix_and_rules.svg', 'w', encoding='utf-8') as f:
+    f.write(svg_matrix)
+
+print("Matrix SVG created!")

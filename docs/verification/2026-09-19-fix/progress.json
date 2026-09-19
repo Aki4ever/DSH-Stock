@@ -1,0 +1,46 @@
+{
+  "task": "R01 行情股东修复",
+  "checkpoint": "01a0b96e-221f-7c40-abab-bd806a0b5302",
+  "focus": "F3",
+  "difficulty": 57,
+  "overall": 100,
+  "current": "R01:FIX04",
+  "native_stage_api": "unavailable",
+  "updated_at": "2026-09-19T20:56:20.401362+08:00",
+  "stages": [
+    {
+      "id": "R01:FIX01",
+      "name": "需求与复现",
+      "status": "完成",
+      "percent": 100,
+      "evidence": "两次旧缓存查询、分页接口与证券代码核验",
+      "next": "已完成"
+    },
+    {
+      "id": "R01:FIX02",
+      "name": "数据链路修复",
+      "status": "完成",
+      "percent": 100,
+      "evidence": "三证券真实历史分别6007、3928、8537根；污染和并发回归通过",
+      "next": "已完成"
+    },
+    {
+      "id": "R01:FIX03",
+      "name": "列表与筛选",
+      "status": "完成",
+      "percent": 100,
+      "evidence": "双向行为UI命中；列名和代码对应；来源及公告窗可见",
+      "next": "已完成"
+    },
+    {
+      "id": "R01:FIX04",
+      "name": "回归交付",
+      "status": "完成",
+      "percent": 100,
+      "evidence": "43项Python测试、JS竞态测试、真实页面与8888入口读回；源码指纹与截图已保存",
+      "next": "用户可继续使用和改动"
+    }
+  ],
+  "value": "实现5/10、清晰8/10、价值10/10、用户1/10、潜在7/10、变现unknown/10；已知31/60",
+  "note": "原生阶段接口不可用；这是读取同一任务实施记录的只读实时面板，不是顶部Goal胶囊。原基线预览unknown保留，不重复打开。 本轮功能交付完成。辅助离线总览打开被浏览器策略拦截，交互验收unknown。"
+}

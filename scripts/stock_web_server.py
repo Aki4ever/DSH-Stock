@@ -22,6 +22,7 @@ import atexit
 import argparse
 import threading
 import urllib.request
+from urllib.parse import parse_qs, urlsplit
 from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -70,6 +71,8 @@ from scripts.stock_indicators import evaluate_stock
 from scripts.stock_chart_svg import generate_stock_svg
 from scripts.manual_crawler import CRAWLER_JOB
 from scripts.real_chart_engine import fetch_real_daily_kline, fetch_real_timeline
+from scripts.history_service import get_daily_history
+from scripts.shareholder_actions import get_actions, enrich_actions
 from scripts.company_finance_engine import fetch_company_profile, fetch_financial_statements
 from scripts.dashboard_engine import compute_market_overview
 
@@ -207,7 +210,7 @@ class StockDataManager:
             except Exception as e:
                 sys.stderr.write(f"SQLite 批量写入行情异常: {e}\n")
 
-    def get_stock_detail(self, code: str) -> Optional[Dict[str, Any]]:
+    def get_stock_detail(self, code: str, refresh: bool = False, shareholder_days: int = 365) -> Optional[Dict[str, Any]]:
         """
         需求2/3/4: 获取个股完整详情
         原则:
@@ -246,24 +249,12 @@ class StockDataManager:
                 save_shareholder_item(norm, rep_date, top10_hold, top10_circ)
 
         # 3. 需求1/2/3: 日K线查询 - 本地数据库优先 (Local-DB-First)
-        daily_bars = load_daily_klines(norm, limit=5000)
-        if not daily_bars or len(daily_bars) == 0:
-            # 本地数据库无历史K线，触发数据中心抓取流程并入库
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] 本地无 {norm} 历史日K，数据中心启动抓取流程...")
-            crawled_bars = fetch_real_daily_kline(norm, limit=5000)
-            if crawled_bars:
-                save_daily_klines(norm, crawled_bars)
-                daily_bars = crawled_bars
+        history = get_daily_history(norm, refresh=refresh)
+        daily_bars = history["bars"]
 
         # 4. 需求1/2/3: 分时数据查询 - 本地数据库优先 (Local-DB-First)
-        timeline_data = load_stock_timeline(norm, max_age_seconds=300)
-        if not timeline_data or not timeline_data.get("items"):
-            # 本地无当日分时，触发数据中心抓取并入库
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] 本地无 {norm} 当日分时，数据中心启动抓取流程...")
-            crawled_timeline = fetch_real_timeline(norm)
-            if crawled_timeline and crawled_timeline.get("items"):
-                save_stock_timeline(norm, crawled_timeline)
-                timeline_data = crawled_timeline
+        # 旧分时缓存同样没有来源证明，不再参与详情；仅使用本次真实来源响应。
+        timeline_data = fetch_real_timeline(norm)
 
         # 5. 上市公司基本资料与深度财务报表
         company_profile = fetch_company_profile(norm, stock["name"], stock["market"], stock["board"])
@@ -296,7 +287,7 @@ class StockDataManager:
                     high_p=b["high"],
                     low_p=b["low"],
                     volume=b["volume"],
-                    turnover=b.get("amount_yi", 0.0) * 100000000.0
+                    turnover=(b.get("amount_yi") or 0.0) * 100000000.0
                 ))
         eval_report = evaluate_stock(norm, stock["name"], real_bars_objs) if real_bars_objs else None
         svg_chart = generate_stock_svg(quote_obj, real_bars_objs, width=860, height=450) if real_bars_objs else ""
@@ -305,9 +296,11 @@ class StockDataManager:
         detail["evaluation"] = eval_report.to_dict() if eval_report else None
         detail["svg_chart"] = svg_chart
         detail["daily_bars"] = daily_bars
+        detail["history_meta"] = {k: v for k, v in history.items() if k != "bars"}
         detail["timeline_data"] = timeline_data
         detail["company_profile"] = company_profile
         detail["financial_reports"] = financial_reports
+        enrich_actions(detail, get_actions(shareholder_days))
         return detail
 
     def filter_stocks(self, params: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
@@ -317,6 +310,10 @@ class StockDataManager:
         constituent = params.get("constituent", "all")
         st_filter = params.get("st", "all") # 需求4: "all" | "st" | "non_st"
         filter_date = params.get("filter_date", "")
+        shareholder_action = params.get("shareholder_action", "all")
+        if shareholder_action not in ("all", "increase", "decrease"):
+            raise ValueError("股东行为仅支持全部、增持、减持")
+        action_snapshot = get_actions(int(params.get("shareholder_days", 365)))
 
         def to_float(v):
             if v is None or v == "" or v == "null":
@@ -486,6 +483,12 @@ class StockDataManager:
 
             matched.append(dict(s))
 
+        # 股东行为在全量候选中筛选，再统计和分页。
+        if shareholder_action != "all":
+            matched = [s for s in matched if any(
+                row["direction"] == shareholder_action
+                for row in action_snapshot["records"].get(s["code"], []))]
+
         # 默认按总市值降序
         matched.sort(key=lambda x: x["market_cap"], reverse=True)
 
@@ -512,6 +515,7 @@ class StockDataManager:
             "server_state": current_state
         }
 
+        stats["shareholder_actions"] = {k: v for k, v in action_snapshot.items() if k != "records"}
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         paged_data = matched[start_idx:end_idx]
@@ -520,6 +524,7 @@ class StockDataManager:
         from scripts.shareholder_engine import Top10ShareholdersEngine
         for s in paged_data:
             Top10ShareholdersEngine.enrich_stock_holder_metrics(s)
+            enrich_actions(s, action_snapshot)
 
         return paged_data, stats
 
@@ -914,6 +919,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             schema = {
                 "version": APP_VERSION,
                 "dimensions": [
+                    {"id": "shareholder_action", "name": "股东行为", "type": "select", "options": [{"value": "all", "label": "全部"}, {"value": "increase", "label": "增持"}, {"value": "decrease", "label": "减持"}]},
                     {"id": "market", "name": "股市分类", "type": "select", "options": [{"value": "all", "label": "全部 A 股"}, {"value": "sh", "label": "上证"}, {"value": "sz", "label": "深圳"}]},
                     {"id": "board", "name": "板块分类", "type": "select", "options": [{"value": "all", "label": "全部板块"}, {"value": "main", "label": "主板"}, {"value": "chinext", "label": "创业板"}]},
                     {"id": "constituent", "name": "成分股", "type": "select", "options": [{"value": "all", "label": "全部(不限)"}, {"value": "csi50", "label": "中证50"}, {"value": "csi100", "label": "中证100"}]},
@@ -935,7 +941,13 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
         # 6. 单只股票详情
         if url_path.startswith("/api/stock/"):
             symbol = url_path.replace("/api/stock/", "").strip()
-            detail = DATA_MANAGER.get_stock_detail(symbol)
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                detail = DATA_MANAGER.get_stock_detail(symbol, refresh=query.get("refresh") == ["1"],
+                                                       shareholder_days=int(query.get("shareholder_days", [365])[0]))
+            except (ValueError, TypeError) as exc:
+                self._send_json(400, {"code": 400, "message": str(exc)})
+                return
             if detail:
                 self._send_json(200, {"code": 200, "data": detail})
             else:
@@ -956,7 +968,11 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
 
         # 1. 股票联合筛选 API (支持离线数据库读写)
         if url_path == "/api/filter":
-            filtered_stocks, stats = DATA_MANAGER.filter_stocks(params)
+            try:
+                filtered_stocks, stats = DATA_MANAGER.filter_stocks(params)
+            except (ValueError, TypeError) as exc:
+                self._send_json(400, {"code": 400, "message": str(exc)})
+                return
             self._send_json(200, {
                 "code": 200,
                 "message": "success",

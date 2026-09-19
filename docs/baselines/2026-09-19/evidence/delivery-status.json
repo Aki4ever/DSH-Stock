@@ -1,0 +1,22 @@
+{
+  "captured_at": "2026-09-19T11:51:14.069264+00:00",
+  "business_deliverables": "verified",
+  "native_preview": "queued-unverified",
+  "preview_readback_error": "open_in_codex返回queued；CUA禁止访问Codex应用，无法核验显示；未重发预览",
+  "workflow_archive": "not-complete: native preview observation remains unknown",
+  "wall_clock_seconds": 1211.9,
+  "wall_clock_source": "native rollout task_started to current UTC clock",
+  "native_goal_token_total": null,
+  "token_reason": "No native Goal was requested; native Goal usage is unavailable",
+  "owner": "manage-requirements",
+  "skills_used": [
+    "task-preflight",
+    "manage-requirements",
+    "confirm-before-coding",
+    "github",
+    "track-task-progress",
+    "reconcile-project-standards",
+    "cli-creator",
+    "computer-use-coordinator"
+  ]
+}

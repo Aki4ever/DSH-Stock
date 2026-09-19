@@ -218,6 +218,20 @@
             </div>
           </div>
 
+          <div class="filter-item">
+            <div class="filter-label"><span>股东行为</span></div>
+            <div class="segmented-control" id="shareholderActionControl">
+              <button type="button" class="seg-btn active" data-val="all" onclick="setShareholderAction('all')">全部</button>
+              <button type="button" class="seg-btn" data-val="increase" onclick="setShareholderAction('increase')">增持</button>
+              <button type="button" class="seg-btn" data-val="decrease" onclick="setShareholderAction('decrease')">减持</button>
+            </div>
+            <label style="font-size:.8rem">已披露的实际变动 · 公告日期
+              <select id="shareholderDays" onchange="appState.shareholderDays=Number(this.value);appState.page=1;executeFilter()">
+                <option value="365">近一年</option><option value="90">近三个月</option>
+              </select>
+            </label>
+            <p id="shareholderActionStatus" role="status" style="font-size:.75rem;color:var(--text-secondary)">正在获取记录…</p>
+          </div>
           <!-- 控件 5: 股价区间 -->
           <div class="filter-item">
             <div class="filter-label">
@@ -611,6 +625,8 @@
                 </div>
               </th>
               <!-- 需求4: 股东异动三兄弟列 (新进、变动、退出，纯数字展示并支持精准升降序排序) -->
+              <th data-col="increase_holders" draggable="true">增持股东</th>
+              <th data-col="decrease_holders" draggable="true">减持股东</th>
               <th data-col="holder_new_count" draggable="true" onclick="handleHeaderSort('holder_new_count', event)">
                 <div class="col-header-box">
                   <span class="col-drag-handle" title="按住拖拽调整列顺序">⋮⋮</span>
@@ -1444,14 +1460,14 @@
           <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
             <!-- 需求2: 主图时段扩充为 8 个 Tab (分时图 / 5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部) -->
             <div class="segmented-control" id="chartPeriodControl">
-              <button type="button" class="seg-btn active" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 分时图</button>
+              <button type="button" class="seg-btn" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 分时图</button>
               <button type="button" class="seg-btn" data-period="kline5" onclick="switchChartPeriod('kline5')">⚡ 5天K线</button>
               <button type="button" class="seg-btn" data-period="kline10" onclick="switchChartPeriod('kline10')">🔥 10天K线</button>
               <button type="button" class="seg-btn" data-period="kline20" onclick="switchChartPeriod('kline20')">📊 20天K线</button>
               <button type="button" class="seg-btn" data-period="kline60" onclick="switchChartPeriod('kline60')">📈 60天K线</button>
               <button type="button" class="seg-btn" data-period="kline120" onclick="switchChartPeriod('kline120')">📅 120天K线</button>
               <button type="button" class="seg-btn" data-period="kline180" onclick="switchChartPeriod('kline180')">🗓️ 180天K线</button>
-              <button type="button" class="seg-btn" data-period="all" onclick="switchChartPeriod('all')">🌟 全部</button>
+              <button type="button" class="seg-btn active" data-period="all" onclick="switchChartPeriod('all')">🌟 全部</button>
             </div>
             <!-- K线缩放区间控制 (按需隐蔽) -->
             <div class="segmented-control" id="chartZoomControl" style="display: none;">
@@ -1464,6 +1480,7 @@
             <!-- K线自定义时间区间控制器 -->
             <div class="kline-date-control-bar" id="klineDateRangeBar" style="display: none;">
               <span>区间:</span>
+              <button type="button" class="seg-btn" onclick="if(appState.activeDetailStock) openStockDetail(appState.activeDetailStock.code, true)">刷新历史</button>
               <input type="date" id="klineStartDate" class="kline-date-input" onchange="applyKlineCustomDateRange()">
               <span>~</span>
               <input type="date" id="klineEndDate" class="kline-date-input" onchange="applyKlineCustomDateRange()">
@@ -1505,6 +1522,9 @@
             </div>
           </div>
         </div>
+
+          <section id="stockActionSummary" style="font-size:.8rem;margin-bottom:1rem"></section>
+          <p id="historyCoverage" role="status" style="color:var(--text-secondary);font-size:.8rem;line-height:1.6"></p>
 
         <!-- 动态矢量图表容器 -->
         <div id="modalChartWrapper" class="chart-wrapper">
@@ -1926,6 +1946,6 @@
     </div>
   </div>
 
-  <script src="/web/app.js"></script>
+  <script src="/web/app.js?v=4.4.0"></script>
 </body>
 </html>

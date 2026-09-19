@@ -1,0 +1,13 @@
+{
+  "config/version.json": "7d7eb481c854826830226808de8f935f39831f0cdbf6d502cb76131222e68485",
+  "scripts/dsh_stock_cli.py": "2f719dc12c9c536e5bc1add53294d3f61a6c775dd94ca831085d54bd06cbba64",
+  "scripts/real_chart_engine.py": "d4c129d38fa4c32d4f56084b9c4d781d931c618f39c515eb6b6a9c4e4fd57981",
+  "scripts/stock_db.py": "db84df87110aaeaeb0af5e21ca9f1353980cfc8533bc6387a4019c57a7c96c2c",
+  "scripts/stock_web_server.py": "849a38449d94ad339b0e106a25741bf18968437614d67d61d17be623e63c6ebd",
+  "scripts/market_history.py": "18a143bb84472bb3b23eb7ea7a0217a21a332d788f8b8457366dcf9db39083a5",
+  "scripts/history_service.py": "60cfc28bdc5da4843508245a6440652733ee75ab9b55b5ce0a8da91d48d38d1c",
+  "scripts/shareholder_actions.py": "62704ca60a06ba8ac00c796adf3e0f6de5da4fa703f0eaa1ea7bc33d2346e63a",
+  "web/app.js": "c813357150b640852f41d0fbae7d6808971fff8052eba36c9b208b93fb36a47b",
+  "web/index.html": "251047ec017496aa30b8e453b2c601a992e167f5be6b8ed8c2e7dfe5136ee27e",
+  "web/style.css": "f9a8134ad80fa8a6b6c12598d164d096cbe34ec39b416d208c98e71420d74cb4"
+}

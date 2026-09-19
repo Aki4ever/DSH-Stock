@@ -1,0 +1,30 @@
+{
+  "version": "v4.4.0",
+  "verified_at": "2026-09-19T20:52:02.031910+08:00",
+  "url": "http://127.0.0.1:8888/",
+  "cases": {
+    "multi_security_history": "passed",
+    "both_shareholder_actions": "passed",
+    "ninety_day_window": "passed",
+    "sixty_bar_window": "passed (122 SVG rectangles including framing)",
+    "empty_date_range": "passed",
+    "missing_amount_label": "passed",
+    "source_code_and_coverage": "passed",
+    "layout": "passed after moving metadata outside chart flex wrapper"
+  },
+  "browser_errors": [],
+  "screenshots": [
+    "screenshots/holder-columns.jpg",
+    "screenshots/maotai-history.jpg"
+  ],
+  "limitations": [
+    "仅对代表性股票做在线抽验，其他股票采用同一按需全历史机制",
+    "来源完整表示已读取到来源空页，不代表交易所逐日完整性审计",
+    "旧财报与其他股东派生字段不在本轮真实数据验收范围"
+  ],
+  "offline_overview": {
+    "status": "browser-blocked",
+    "reason": "Browser URL policy rejects file:// navigation; not bypassed",
+    "static_checks": "local screenshot files and document links exist"
+  }
+}

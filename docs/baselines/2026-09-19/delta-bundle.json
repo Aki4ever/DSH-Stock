@@ -1,0 +1,21 @@
+{
+  "purpose": "Pre-existing uncommitted source/document/SVG/report snapshot; no database or PID; never auto-extract over workspace",
+  "sha256": "a45344d950f0db8c5461e4d8a90f2cf65a5d4bd424bbbc90680ef87cac895244",
+  "files": [
+    "chanlun_concepts.svg",
+    "chanlun_execution_pipeline.svg",
+    "chanlun_matrix_and_rules.svg",
+    "chanlun_three_buys.svg",
+    "docs/requirements.md",
+    "generate_matrix_svg.py",
+    "generate_svg_charts.py",
+    "generate_system_svg.py",
+    "reports/chanlun_full_scan.json",
+    "reports/chanlun_sh510300_real.svg",
+    "reports/chanlun_signals_report.json",
+    "scripts/chanlun_chart_svg.py",
+    "scripts/chanlun_core.py",
+    "scripts/chanlun_strategy_engine.py"
+  ],
+  "count": 14
+}

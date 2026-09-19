@@ -1,0 +1,45 @@
+{
+  "code": "sh600519",
+  "increase_holders": [
+    "中国贵州茅台酒厂(集团)有限责任公司"
+  ],
+  "decrease_holders": [],
+  "shareholder_actions": [
+    {
+      "code": "sh600519",
+      "name": "中国贵州茅台酒厂(集团)有限责任公司",
+      "direction": "increase",
+      "notice_date": "2025-12-30",
+      "start_date": "2025-10-21",
+      "end_date": "2025-12-26",
+      "quantity_wan": 127.4234,
+      "source_url": "https://data.eastmoney.com/executive/gdzjc.html"
+    },
+    {
+      "code": "sh600519",
+      "name": "中国贵州茅台酒厂(集团)有限责任公司",
+      "direction": "increase",
+      "notice_date": "2025-11-06",
+      "start_date": "2025-09-02",
+      "end_date": "2025-10-20",
+      "quantity_wan": 72.9304,
+      "source_url": "https://data.eastmoney.com/executive/gdzjc.html"
+    }
+  ],
+  "shareholder_action_status": "available",
+  "shareholder_action_meta": {
+    "schema_version": 1,
+    "days": 365,
+    "window_start": "2025-09-20",
+    "window_end": "2026-09-19",
+    "basis": "公告日期内披露且已有实际数量的股东增减持",
+    "source": "东方财富Choice",
+    "source_url": "https://data.eastmoney.com/executive/gdzjc.html",
+    "complete": true,
+    "status": "available",
+    "fetched_epoch": 1789821188.668771,
+    "fetched_at": "2026-09-19T20:33:08",
+    "count": 8445,
+    "error": null
+  }
+}

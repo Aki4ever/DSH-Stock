@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "product": {
+    "name": "DSH股票",
+    "form": "web"
+  },
+  "requirements": {
+    "id": "REQ-008/REQ-009",
+    "version": "v1",
+    "previous": "v4.3.0运行基线；两项为新增需求"
+  },
+  "version": "v4.4.0",
+  "built_at": "2026-09-19T20:52:02.031910+08:00",
+  "source": {
+    "vcs": "git",
+    "revision": "f8b53aa9dd5985c0cdaf4463922a0c2fc336e1b7",
+    "dirty": true,
+    "fingerprints": "docs/verification/2026-09-19-fix/source-fingerprints.json"
+  },
+  "entries": [
+    {
+      "id": "primary",
+      "kind": "url",
+      "platform": "local web",
+      "target": "http://127.0.0.1:8888/",
+      "verification_status": "passed",
+      "verified_at": "2026-09-19T20:52:02.031910+08:00",
+      "evidence": "docs/verification/2026-09-19-fix/live-entry.json"
+    }
+  ],
+  "stable_fallback": {
+    "version": "v4.3.0",
+    "target": "http://127.0.0.1:8890/",
+    "note": "保留旧行为与已知问题，仅作回退；在/tmp中的原文件和DB副本"
+  },
+  "status_receipt": {
+    "status": "running",
+    "service": "DSH Stock Web Server",
+    "version": "v4.4.0",
+    "pid": 40878,
+    "port": 8888,
+    "uptime_seconds": 176,
+    "stock_count": 4601,
+    "csi50_count": 50,
+    "csi100_count": 100,
+    "db_path": "/Users/linqiyu/Documents/DSH/DSH股票/data/stock_database.db",
+    "snapshot_date": "2026-09-19",
+    "current_time": "2026-09-19 20:52:02"
+  }
+}

@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Any, Tuple
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
 DATA_DIR = os.path.join(BASE_DIR, "data")
-DB_PATH = os.path.join(DATA_DIR, "stock_database.db")
+DB_PATH = os.environ.get("DSH_STOCK_DB", os.path.join(DATA_DIR, "stock_database.db"))
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -481,20 +481,18 @@ def save_daily_klines(code: str, klines: List[Dict[str, Any]]) -> int:
         return len(klines)
 
 
-def load_daily_klines(code: str, limit: int = 5000) -> List[Dict[str, Any]]:
+def load_daily_klines(code: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     需求2: 从本地数据库直接检索该标的历史日K线
     毫秒级响应，无需现场外网发包抓取
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-        SELECT date, open, close, high, low, volume, amount_yi, change_pct
-        FROM stock_daily_kline
-        WHERE code = ?
-        ORDER BY date ASC
-        LIMIT ?;
-        """, (code, limit))
+        query = "SELECT date, open, close, high, low, volume, amount_yi, change_pct FROM stock_daily_kline WHERE code=?"
+        if limit is None:
+            cursor.execute(query + " ORDER BY date ASC", (code,))
+        else:
+            cursor.execute("SELECT * FROM (" + query + " ORDER BY date DESC LIMIT ?) ORDER BY date ASC", (code, max(0, limit)))
         rows = cursor.fetchall()
         return [dict(r) for r in rows]
 

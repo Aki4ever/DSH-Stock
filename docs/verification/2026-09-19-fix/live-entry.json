@@ -1,0 +1,131 @@
+[
+  {
+    "code": "sh600519",
+    "history_meta": {
+      "code": "sh600519",
+      "schema_version": 1,
+      "source": "腾讯证券",
+      "source_url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+      "adjustment": "none",
+      "adjustment_label": "不复权",
+      "status": "available",
+      "provider_history_complete": true,
+      "coverage_start": "2001-08-27",
+      "coverage_end": "2026-09-18",
+      "count": 6007,
+      "pages": 11,
+      "fetched_at": "2026-09-19T20:49:29",
+      "fetched_epoch": 1789822169.326294,
+      "error": null,
+      "cache": "refreshed"
+    },
+    "price": 1257.12,
+    "first": {
+      "date": "2001-08-27",
+      "open": 34.51,
+      "close": 35.55,
+      "high": 37.78,
+      "low": 32.85,
+      "volume": 406318.0,
+      "amount_yi": null,
+      "change_pct": null
+    },
+    "last": {
+      "date": "2026-09-18",
+      "open": 1262.99,
+      "close": 1257.12,
+      "high": 1265.88,
+      "low": 1256.1,
+      "volume": 24891.0,
+      "amount_yi": null,
+      "change_pct": -0.78
+    },
+    "sha256": "13403c4415b878aef173933b1985e6ad27d6e94e0a951740b6bc541285923b25"
+  },
+  {
+    "code": "sh601288",
+    "history_meta": {
+      "code": "sh601288",
+      "schema_version": 1,
+      "source": "腾讯证券",
+      "source_url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+      "adjustment": "none",
+      "adjustment_label": "不复权",
+      "status": "available",
+      "provider_history_complete": true,
+      "coverage_start": "2010-07-15",
+      "coverage_end": "2026-09-18",
+      "count": 3928,
+      "pages": 8,
+      "fetched_at": "2026-09-19T20:49:28",
+      "fetched_epoch": 1789822168.7647202,
+      "error": null,
+      "cache": "refreshed"
+    },
+    "price": 6.81,
+    "first": {
+      "date": "2010-07-15",
+      "open": 2.74,
+      "close": 2.7,
+      "high": 2.74,
+      "low": 2.69,
+      "volume": 40397251.8,
+      "amount_yi": null,
+      "change_pct": null
+    },
+    "last": {
+      "date": "2026-09-18",
+      "open": 6.83,
+      "close": 6.81,
+      "high": 6.89,
+      "low": 6.78,
+      "volume": 2864295.0,
+      "amount_yi": null,
+      "change_pct": -1.16
+    },
+    "sha256": "24b3e04e7b3b35d37f79c4ed9538c2f41b59bf81114075d673db080deb86178c"
+  },
+  {
+    "code": "sz000001",
+    "history_meta": {
+      "code": "sz000001",
+      "schema_version": 1,
+      "source": "腾讯证券",
+      "source_url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+      "adjustment": "none",
+      "adjustment_label": "不复权",
+      "status": "available",
+      "provider_history_complete": true,
+      "coverage_start": "1991-01-02",
+      "coverage_end": "2026-09-18",
+      "count": 8537,
+      "pages": 15,
+      "fetched_at": "2026-09-19T20:49:29",
+      "fetched_epoch": 1789822169.9735959,
+      "error": null,
+      "cache": "refreshed"
+    },
+    "price": 11.7,
+    "first": {
+      "date": "1991-01-02",
+      "open": 28.8,
+      "close": 29.35,
+      "high": 29.35,
+      "low": 28.8,
+      "volume": 759.0,
+      "amount_yi": null,
+      "change_pct": null
+    },
+    "last": {
+      "date": "2026-09-18",
+      "open": 11.59,
+      "close": 11.7,
+      "high": 11.82,
+      "low": 11.56,
+      "volume": 853038.0,
+      "amount_yi": null,
+      "change_pct": 0.78
+    },
+    "sha256": "7f4f6dcc9686edba54f4c2903f0f4c604bccabe544b7eddd711165933e862f47"
+  }
+]

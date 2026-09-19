@@ -15,6 +15,8 @@ const appState = {
   board: 'all',
   constituent: 'all',
   st: 'all', // 需求4: 'all' (全部，默认) | 'st' (ST股) | 'non_st' (非ST正常股)
+  shareholderAction: 'all',
+  shareholderDays: 365,
   page: 1,
   pageSize: 50,
   totalMatched: 0,
@@ -27,8 +29,11 @@ const appState = {
 
   // 详情页走势图当前状态
   activeDetailStock: null,
+  detailRequestId: 0,
+  filterRequestId: 0,
+  detailAbortController: null,
   activeDetailDimension: 'all', // 需求5: 当前激活的详情大维度 ('all'|'basic'|'dynamic'|'shareholders'|'finance'|'block'|'profile'|'dividend')
-  chartPeriod: 'timeline', // 'timeline' (分时) | 'daily' (日K)
+  chartPeriod: 'all', // 'timeline' (分时) | 'daily' (日K)
   chartSubplot: 'vol',     // 'vol' (成交量) | 'amt' (成交额)
   chartZoomWindow: 'max',  // '60' | '250' | '750' | 'max'
   chartCustomZoomCount: 0, // 鼠标滚轮动态缩放的蜡烛根数 (0表示使用默认预设)
@@ -50,7 +55,7 @@ const appState = {
     'raw_code', 'name', 'market', 'board', 'constituent', 'price', 'change_pct',
     'market_cap', 'circulating_cap', 'pe', 'dividend_count', 'dividend_total_amount',
     'div_to_cap_pct', 'listing_years', 'div_freq', 'ipo_date', 'goodwill', 'goodwill_to_cap_pct', 'top10_circ_hold_pct',
-    'holder_individual_pct', 'holder_institution_pct', 'holder_new_count',
+    'holder_individual_pct', 'holder_institution_pct', 'increase_holders', 'decrease_holders', 'holder_new_count',
     'holder_change_count', 'holder_exit_count', 'peer_holders', 'peer_companies', 'top10_hold_pct', 'report_date', 'action'
   ],
   freezeColCount: 2, // 默认冻结前 2 列 (代码、股票名称)
@@ -811,6 +816,10 @@ function resetSingleDimension(dimType) {
  * 全局一键重置所有条件为默认出厂设置
  */
 function resetAllFilters() {
+  appState.shareholderAction = 'all';
+  appState.shareholderDays = 365;
+  document.getElementById('shareholderDays').value = '365';
+  document.querySelectorAll('#shareholderActionControl .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.val === 'all'));
   appState.market = 'all';
   appState.board = 'all';
   appState.constituent = 'all';
@@ -891,6 +900,8 @@ function collectFilterParams() {
     board: appState.board,
     constituent: appState.constituent,
     st: appState.st || 'all', // 需求4: 'all' | 'st' | 'non_st'
+    shareholder_action: appState.shareholderAction,
+    shareholder_days: appState.shareholderDays,
     filter_date: dom.filterDateInput.value,
     min_price: dom.minPriceInput.value ? parseFloat(dom.minPriceInput.value) : null,
     max_price: dom.maxPriceInput.value ? parseFloat(dom.maxPriceInput.value) : null,
@@ -929,6 +940,7 @@ function collectFilterParams() {
  * 执行多条件联合筛选 API 请求
  */
 async function executeFilter() {
+  const requestId = ++appState.filterRequestId;
   const params = collectFilterParams();
   dom.loadingIndicator.style.display = 'block';
   dom.emptyIndicator.style.display = 'none';
@@ -945,12 +957,16 @@ async function executeFilter() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const result = await res.json();
+    if (requestId !== appState.filterRequestId) return;
     if (result.version) {
       syncVersionAndTitle(result.version);
     }
 
     appState.filteredStocks = result.data || [];
     const stats = result.stats || {};
+    const actionMeta = stats.shareholder_actions || {};
+    const actionStatus = document.getElementById('shareholderActionStatus');
+    if (actionStatus) actionStatus.textContent = `${actionMeta.window_start || '—'} 至 ${actionMeta.window_end || '—'}（公告日期）· ${actionMeta.source || '来源未核验'} · ${{available:'已获取', partial:'仅部分记录，筛选结果可能不全', stale:'刷新失败，沿用旧数据', unavailable:'获取失败，无法判断股东行为'}[actionMeta.status] || '未获取'}`;
     appState.totalMatched = stats.matched_count || 0;
 
     // 需求1: 真实且同步的数据快照截取日期更新
@@ -971,6 +987,7 @@ async function executeFilter() {
     renderStockTable();
     updatePaginationUI();
   } catch (err) {
+    if (requestId !== appState.filterRequestId) return;
     dom.loadingIndicator.style.display = 'none';
     console.error('筛选异常:', err);
     dom.stockTableBody.innerHTML = '';
@@ -1030,6 +1047,25 @@ function sortTable(key) {
 /**
  * 渲染股票数据表格 (股东持股真实累加求和，无 100% 异常)
  */
+function escapeActionText(value) {
+  return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderActionHolderCell(stock, direction) {
+  const names = stock[direction === 'increase' ? 'increase_holders' : 'decrease_holders'] || [];
+  const status = stock.shareholder_action_status;
+  if (!names.length) return `<td>${status === 'available' ? '本期无记录' : '未获取完整数据'}</td>`;
+  const records = (stock.shareholder_actions || []).filter(r => r.direction === direction);
+  return `<td style="min-width:190px;max-width:300px;white-space:normal"><details><summary>${names.map(escapeActionText).join('、')}</summary>${records.map(r => `<div>${escapeActionText(r.name)} · 公告 ${escapeActionText(r.notice_date)} · ${r.quantity_wan} 万股</div>`).join('')}<a href="https://data.eastmoney.com/executive/gdzjc.html" target="_blank" rel="noopener">查看数据来源</a>${status === 'stale' ? '<div>旧缓存，刷新失败</div>' : ''}</details></td>`;
+}
+
+function setShareholderAction(value) {
+  appState.shareholderAction = value;
+  document.querySelectorAll('#shareholderActionControl .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.val === value));
+  appState.page = 1;
+  executeFilter();
+}
+
 function renderStockTable() {
   const tbody = dom.stockTableBody;
   tbody.innerHTML = '';
@@ -1171,6 +1207,8 @@ function renderStockTable() {
       holder_new_count: () => `<td>${btnNew}</td>`,
       holder_change_count: () => `<td>${btnChange}</td>`,
       holder_exit_count: () => `<td>${btnExit}</td>`,
+      increase_holders: () => renderActionHolderCell(stock, 'increase'),
+      decrease_holders: () => renderActionHolderCell(stock, 'decrease'),
       peer_holders: () => `<td>${peerHoldersHtml}</td>`,
       peer_companies: () => `<td>${peerHtml}</td>`,
       top10_hold_pct: () => `<td style="color: #c084fc; font-weight: 600;">${top10Hold}</td>`,
@@ -1211,6 +1249,9 @@ function initFeishuTableDragAndFreeze() {
     if (savedOrderStr) {
       const savedOrder = JSON.parse(savedOrderStr);
       if (Array.isArray(savedOrder) && savedOrder.length > 5) {
+        for (const key of ['increase_holders', 'decrease_holders']) {
+          if (!savedOrder.includes(key)) savedOrder.splice(Math.max(0, savedOrder.indexOf('action')), 0, key);
+        }
         // 保证新增列存在于持久化数组中
         if (!savedOrder.includes('peer_companies')) {
           const insertAt = savedOrder.indexOf('holder_exit_count');
@@ -2839,6 +2880,8 @@ async function toggleServerState() {
  */
 function switchChartPeriod(period) {
   appState.chartPeriod = period;
+  if (dom.klineStartDate) dom.klineStartDate.value = '';
+  if (dom.klineEndDate) dom.klineEndDate.value = '';
   if (dom.chartPeriodControl) {
     dom.chartPeriodControl.querySelectorAll('.seg-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-period') === period);
@@ -3416,7 +3459,22 @@ function renderStockEventsUI(data) {
 /**
  * 需求1: 打开股票详情独立全屏页面 (Page View)
  */
-async function openStockDetail(code) {
+async function openStockDetail(code, refresh = false) {
+  const requestId = ++appState.detailRequestId;
+  if (appState.detailAbortController) appState.detailAbortController.abort();
+  const controller = new AbortController();
+  appState.detailAbortController = controller;
+  appState.activeDetailStock = null;
+  appState.rawKlineData = [];
+  appState.drawnHorizontalLines = [];
+  if (!refresh) {
+    if (dom.klineStartDate) dom.klineStartDate.value = '';
+    if (dom.klineEndDate) dom.klineEndDate.value = '';
+  }
+  const historyStatus = document.getElementById('historyCoverage');
+  if (historyStatus) historyStatus.textContent = '正在核验并加载该股票历史数据…';
+  const pendingActionSummary = document.getElementById('stockActionSummary');
+  if (pendingActionSummary) pendingActionSummary.textContent = '股东行为加载中…';
   // 1. 隐藏其他视图，展示全屏详情视图
   if (dom.viewFilterTab) dom.viewFilterTab.classList.add('hidden');
   if (dom.viewDashboardTab) dom.viewDashboardTab.classList.add('hidden');
@@ -3438,11 +3496,26 @@ async function openStockDetail(code) {
   hideTooltip();
 
   try {
-    const res = await fetch(`/api/stock/${code}`);
+    const res = await fetch(`/api/stock/${encodeURIComponent(code)}?shareholder_days=${appState.shareholderDays || 365}${refresh ? '&refresh=1' : ''}`, { signal: controller.signal, cache: 'no-store' });
     if (!res.ok) throw new Error('获取个股详情失败');
     const json = await res.json();
+    if (requestId !== appState.detailRequestId) return;
     const stock = json.data;
+    if (!stock || stock.code !== code) throw new Error('返回的证券代码与请求不一致');
+    if (!stock.history_meta || stock.history_meta.code !== code) {
+      stock.daily_bars = [];
+    }
     appState.activeDetailStock = stock;
+    const meta = stock.history_meta || {};
+    if (historyStatus) {
+      const status = {available: '来源历史已获取完毕', partial: '历史尚未获取完整', stale: '刷新失败，当前为旧缓存', unavailable: '暂无可信数据'}[meta.status] || '请重启服务以加载新数据协议';
+      historyStatus.textContent = `${stock.code} · ${meta.source || '来源未核验'} · ${meta.adjustment_label || ''} · ${meta.coverage_start || '—'} 至 ${meta.coverage_end || '—'} · ${meta.count || 0} 根 · ${status}`;
+    }
+    const actionSummary = document.getElementById('stockActionSummary');
+    if (actionSummary) {
+      const am = stock.shareholder_action_meta || {};
+      actionSummary.innerHTML = `<div>已披露股东行为 · 公告日期 ${escapeActionText(am.window_start || '—')} 至 ${escapeActionText(am.window_end || '—')}</div><table><tbody><tr><th>增持股东</th>${renderActionHolderCell(stock, 'increase')}</tr><tr><th>减持股东</th>${renderActionHolderCell(stock, 'decrease')}</tr></tbody></table>`;
+    }
 
     dom.modalStockName.textContent = stock.name;
     dom.modalStockCode.textContent = stock.code;
@@ -3522,14 +3595,17 @@ async function openStockDetail(code) {
 
     // 填充多颗粒度财务报表
     try {
-      const finRes = await fetch(`/api/stock/${stock.code}/finance?period=${appState.activeFinGranularity || 'annual'}`);
+      const finRes = await fetch(`/api/stock/${stock.code}/finance?period=${appState.activeFinGranularity || 'annual'}`, { signal: controller.signal });
+      if (requestId !== appState.detailRequestId) return;
       if (finRes.ok) {
         const finJson = await finRes.json();
+        if (requestId !== appState.detailRequestId) return;
         renderFinancialTables(finJson.data);
       } else {
         renderFinancialTables(stock.financial_reports || {});
       }
     } catch (_) {
+      if (requestId !== appState.detailRequestId) return;
       renderFinancialTables(stock.financial_reports || {});
     }
 
@@ -3537,6 +3613,11 @@ async function openStockDetail(code) {
     renderActiveStockChart();
 
   } catch (err) {
+    if (requestId !== appState.detailRequestId || err.name === 'AbortError') return;
+    appState.activeDetailStock = null;
+    if (historyStatus) historyStatus.textContent = `${code} · 获取失败，暂无可显示的可信历史`;
+    if (pendingActionSummary) pendingActionSummary.textContent = '股东行为未获取';
+    dom.modalStockName.textContent = '详情加载失败';
     console.error('加载详情失败:', err);
     dom.chartSvgContainer.innerHTML = `<div style="padding: 2rem; color: var(--color-up);">获取详情失败: ${err.message}</div>`;
   }
@@ -3657,6 +3738,8 @@ function renderFinancialTables(fin) {
 function renderActiveStockChart() {
   const stock = appState.activeDetailStock;
   if (!stock) return;
+  const dateBar = document.getElementById('klineDateRangeBar');
+  if (dateBar) dateBar.style.display = appState.chartPeriod === 'timeline' ? 'none' : 'flex';
 
   const width = 860;
   const height = 440;
@@ -3717,12 +3800,16 @@ function renderActiveStockChart() {
         return true;
       });
       if (klines.length === 0) {
-        klines = stock.daily_bars || [];
+        dom.chartSvgContainer.innerHTML = '<div style="padding:2rem">所选日期范围内没有 K 线，请调整日期。</div>';
+        hideTooltip();
+        return;
       }
     } else {
       // 滚轮或预设缩放 (需求2: 5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部 走势图Tab自适应)
       let winCount = klines.length;
-      if (appState.chartPeriod === 'kline5') {
+      if (appState.chartCustomZoomCount > 0) {
+        winCount = Math.min(klines.length, Math.max(5, appState.chartCustomZoomCount));
+      } else if (appState.chartPeriod === 'kline5') {
         winCount = Math.min(klines.length, 5);
       } else if (appState.chartPeriod === 'kline10') {
         winCount = Math.min(klines.length, 10);
@@ -3949,23 +4036,23 @@ function renderTooltip(mode, d, prevD, preClose) {
     closeP = d.price;
     highP = d.price;
     lowP = d.price;
-    chgPct = d.change_pct !== undefined ? d.change_pct : (((closeP - refClose) / refClose) * 100);
+    chgPct = d.change_pct != null ? d.change_pct : (((closeP - refClose) / refClose) * 100);
     ampPct = Math.abs(chgPct);
     volStr = formatVolume(d.volume);
     amtStr = formatAmountYi(d.amount_yi);
     turnStr = `${roundTo((d.volume * 100) / 10000000, 2)}%`;
   } else {
     // 日K线 (如 20260728)
-    dateStr = (d.date || '2026-09-17').replace(/-/g, '');
+    dateStr = (d.date || '—').replace(/-/g, '');
     openP = d.open;
     closeP = d.close;
     highP = d.high;
     lowP = d.low;
-    chgPct = d.change_pct !== undefined ? d.change_pct : (((closeP - refClose) / refClose) * 100);
-    ampPct = refClose > 0 ? (((highP - lowP) / refClose) * 100) : 0;
+    chgPct = d.change_pct != null ? d.change_pct : (prevD && refClose > 0 ? (((closeP - refClose) / refClose) * 100) : null);
+    ampPct = prevD && refClose > 0 ? (((highP - lowP) / refClose) * 100) : null;
     volStr = formatVolume(d.volume);
     amtStr = formatAmountYi(d.amount_yi);
-    turnStr = `${roundTo(Math.max(0.3, Math.min(8.5, (d.volume * 100) / 5000000)), 2)}%`;
+    turnStr = '未提供';
   }
 
   // 严格图1红涨绿跌配色
@@ -3986,10 +4073,10 @@ function renderTooltip(mode, d, prevD, preClose) {
   dom.ttLow.style.color = getColor(lowP, refClose);
 
   const sign = chgPct > 0 ? '+' : '';
-  dom.ttChangePct.textContent = `${sign}${chgPct.toFixed(2)}%`;
+  dom.ttChangePct.textContent = chgPct === null ? '未提供' : `${sign}${chgPct.toFixed(2)}%`;
   dom.ttChangePct.style.color = chgPct > 0 ? '#ef4444' : chgPct < 0 ? '#10b981' : '#ffffff';
 
-  dom.ttAmplitude.textContent = `${ampPct.toFixed(2)}`;
+  dom.ttAmplitude.textContent = ampPct === null ? '未提供' : `${ampPct.toFixed(2)}`;
   dom.ttVolume.textContent = volStr;
   dom.ttAmount.textContent = amtStr;
   dom.ttTurnover.textContent = turnStr;
@@ -4004,6 +4091,7 @@ function formatVolume(vol) {
 }
 
 function formatAmountYi(amtYi) {
+  if (amtYi === null || amtYi === undefined) return '未提供';
   if (!amtYi || amtYi <= 0) return '0.00亿';
   if (amtYi < 0.01) {
     return `${(amtYi * 10000).toFixed(2)}万`;
@@ -4412,7 +4500,7 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
   const lows = klines.map(d => d.low);
   const maxPrice = Math.max(...highs);
   const minPrice = Math.min(...lows);
-  const pad = (maxPrice - minPrice) * 0.08;
+  const pad = Math.max((maxPrice - minPrice) * 0.08, maxPrice * 0.001, 0.01);
   const pTop = maxPrice + pad;
   const pBottom = Math.max(0.1, minPrice - pad);
 
@@ -4421,6 +4509,7 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
   const subTopY = m.top + mh + 25;
   const isVol = (subplotType === 'vol');
   const subVals = klines.map(d => isVol ? d.volume : d.amount_yi);
+  const missingAmount = !isVol && subVals.some(v => v === null || v === undefined);
   const maxSubVal = Math.max(...subVals, 0.1) * 1.1;
   const subValToH = (v) => (v / maxSubVal) * (sh - 10);
 
@@ -4458,6 +4547,8 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
     `;
   }
 
+  if (missingAmount) summaryBadgesSvg = `<text x="${m.left + 100}" y="${subTopY + 14}" fill="#94a3b8" font-size="12">当前来源未提供完整成交额</text>`;
+
   let candles = '';
   let subBars = '';
   let ma5Path = '';
@@ -4486,7 +4577,7 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
     const val = isVol ? d.volume : d.amount_yi;
     const sH = Math.max(1.0, subValToH(val));
     const sY = subTopY + sh - sH;
-    subBars += `<rect x="${xMid - barW * 0.5}" y="${sY}" width="${barW}" height="${sH}" fill="${color}" opacity="0.85"/>`;
+    if (!missingAmount) subBars += `<rect x="${xMid - barW * 0.5}" y="${sY}" width="${barW}" height="${sH}" fill="${color}" opacity="0.85"/>`;
 
     // 均线计算
     if (idx >= 4) {
@@ -4572,60 +4663,6 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
       ${subBars}
     </svg>
   `;
-}
-
-function generateClientFallbackTimeline(price, prevClose) {
-  const p = Number(price) || 10.0;
-  const pre = Number(prevClose) || p;
-  const times = ["09:30", "09:40", "09:50", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30",
-                 "13:00", "13:15", "13:30", "13:45", "14:00", "14:15", "14:30", "14:45", "15:00"];
-  let curr = pre;
-  let cumVol = 0;
-  let cumAmt = 0;
-
-  return times.map((t, idx) => {
-    const factor = ((idx * 7) % 11 - 5) * 0.002;
-    curr = roundTo(Math.max(0.1, curr * (1 + factor)), 2);
-    const vol = 1200 + idx * 110;
-    const amt = roundTo(vol * curr * 100 / 100000000.0, 3);
-    cumVol += vol * 100;
-    cumAmt += amt * 100000000.0;
-    const avgP = roundTo(cumAmt / cumVol, 2);
-
-    return {
-      time: t,
-      price: curr,
-      avg_price: avgP,
-      volume: vol,
-      amount_yi: amt,
-      change_pct: roundTo(((curr - pre) / pre) * 100.0, 2)
-    };
-  });
-}
-
-function generateClientFallbackDaily(price) {
-  const base = price || 10.0;
-  const res = [];
-  let curr = base;
-  for (let i = 30; i >= 1; i--) {
-    const o = curr;
-    const chg = (i % 2 === 0 ? 0.02 : -0.015) * o;
-    const c = roundTo(o + chg, 2);
-    const h = roundTo(Math.max(o, c) + Math.abs(chg) * 0.4, 2);
-    const l = roundTo(Math.min(o, c) - Math.abs(chg) * 0.4, 2);
-    const vol = 25000 + i * 500;
-    res.push({
-      date: `2026-08-${i < 10 ? '0' + i : i}`,
-      open: o,
-      close: c,
-      high: h,
-      low: l,
-      volume: vol,
-      amount_yi: roundTo(vol * c * 100 / 100000000.0, 2)
-    });
-    curr = c;
-  }
-  return res;
 }
 
 /**
@@ -5297,6 +5334,8 @@ function renderActiveIndexChart() {
 }
 
 function closeStockDetailPage() {
+  ++appState.detailRequestId;
+  if (appState.detailAbortController) appState.detailAbortController.abort();
   if (dom.viewStockDetailTab) {
     dom.viewStockDetailTab.classList.add('hidden');
   }

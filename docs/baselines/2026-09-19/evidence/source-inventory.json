@@ -1,0 +1,990 @@
+{
+  "python": "3.9.6 (default, Aug 25 2026, 21:26:21) \n[Clang 21.0.0 (clang-2100.3.34.2)]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "files": [
+    {
+      "path": "generate_matrix_svg.py",
+      "lines": 129,
+      "definitions": [],
+      "tests": []
+    },
+    {
+      "path": "generate_svg_charts.py",
+      "lines": 333,
+      "definitions": [],
+      "tests": []
+    },
+    {
+      "path": "generate_system_svg.py",
+      "lines": 125,
+      "definitions": [],
+      "tests": []
+    },
+    {
+      "path": "scripts/anti_crawler.py",
+      "lines": 199,
+      "definitions": [
+        {
+          "name": "get_random_user_agent",
+          "line": 47,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "build_headers",
+          "line": 52,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "robust_fetch",
+          "line": 72,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "parse_shareholder_data",
+          "line": 112,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/calibrate_shareholders.py",
+      "lines": 88,
+      "definitions": [
+        {
+          "name": "calibrate_shareholder_percentages",
+          "line": 26,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/chanlun_chart_svg.py",
+      "lines": 173,
+      "definitions": [
+        {
+          "name": "render_chanlun_chart",
+          "line": 24,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/chanlun_core.py",
+      "lines": 554,
+      "definitions": [
+        {
+          "name": "RawBar",
+          "line": 20,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "ProcessedBar",
+          "line": 43,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "FenXing",
+          "line": 64,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "Bi",
+          "line": 85,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "Pivot",
+          "line": 113,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "calculate_macd",
+          "line": 142,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "handle_inclusion",
+          "line": 181,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "identify_fenxing",
+          "line": 242,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "construct_bi",
+          "line": 271,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "detect_pivots",
+          "line": 362,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "SignalResult",
+          "line": 428,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "analyze_chanlun_signals",
+          "line": 455,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/chanlun_strategy_engine.py",
+      "lines": 193,
+      "definitions": [
+        {
+          "name": "normalize_code",
+          "line": 26,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "fetch_sina_min_klines",
+          "line": 37,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "fetch_tencent_daily_klines",
+          "line": 65,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "scan_target",
+          "line": 96,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "run_comprehensive_scan",
+          "line": 136,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "_apply_risk_budget",
+          "line": 178,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/company_finance_engine.py",
+      "lines": 190,
+      "definitions": [
+        {
+          "name": "fetch_company_profile",
+          "line": 27,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "fetch_financial_statements",
+          "line": 64,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/complete_shareholders.py",
+      "lines": 106,
+      "definitions": [
+        {
+          "name": "complete_all_shareholders",
+          "line": 29,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/dashboard_engine.py",
+      "lines": 403,
+      "definitions": [
+        {
+          "name": "compute_dim_stats",
+          "line": 26,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "compute_market_overview",
+          "line": 46,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/data_sources/__init__.py",
+      "lines": 47,
+      "definitions": [
+        {
+          "name": "StockDataHub",
+          "line": 21,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/data_sources/announcement_adapter.py",
+      "lines": 111,
+      "definitions": [
+        {
+          "name": "AnnouncementAdapter",
+          "line": 24,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/data_sources/block_trade_adapter.py",
+      "lines": 148,
+      "definitions": [
+        {
+          "name": "BlockTradeAdapter",
+          "line": 23,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/data_sources/dividend_adapter.py",
+      "lines": 75,
+      "definitions": [
+        {
+          "name": "DividendAdapter",
+          "line": 20,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/data_sources/kline_adapter.py",
+      "lines": 94,
+      "definitions": [
+        {
+          "name": "KlineAdapter",
+          "line": 21,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/data_sources/safe_session.py",
+      "lines": 147,
+      "definitions": [
+        {
+          "name": "AntiScrapingSession",
+          "line": 30,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/data_sources/shareholder_adapter.py",
+      "lines": 130,
+      "definitions": [
+        {
+          "name": "ShareholderAdapter",
+          "line": 21,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/dsh_stock_cli.py",
+      "lines": 401,
+      "definitions": [
+        {
+          "name": "print_banner",
+          "line": 40,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_quote",
+          "line": 48,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_list",
+          "line": 73,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_analyze",
+          "line": 108,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_portfolio",
+          "line": 144,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_chart",
+          "line": 184,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_holder",
+          "line": 202,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_dividend",
+          "line": 230,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_notice",
+          "line": 252,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_blocktrade",
+          "line": 272,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_report",
+          "line": 294,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cmd_status",
+          "line": 303,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "main",
+          "line": 317,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/index_engine.py",
+      "lines": 231,
+      "definitions": [
+        {
+          "name": "IndexEngine",
+          "line": 25,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/manual_crawler.py",
+      "lines": 293,
+      "definitions": [
+        {
+          "name": "ManualCrawlerJob",
+          "line": 33,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/official_block_trade_engine.py",
+      "lines": 206,
+      "definitions": [
+        {
+          "name": "OfficialBlockTradeEngine",
+          "line": 24,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/populate_db.py",
+      "lines": 236,
+      "definitions": [
+        {
+          "name": "fetch_ipo_and_dividend",
+          "line": 35,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "get_fallback_ipo_and_dividend",
+          "line": 108,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "populate",
+          "line": 152,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/populate_dividend_total.py",
+      "lines": 93,
+      "definitions": [
+        {
+          "name": "batch_update_dividend_and_pinyin",
+          "line": 49,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/real_chart_engine.py",
+      "lines": 274,
+      "definitions": [
+        {
+          "name": "fetch_real_daily_kline",
+          "line": 28,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "fetch_real_timeline",
+          "line": 161,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/shareholder_engine.py",
+      "lines": 472,
+      "definitions": [
+        {
+          "name": "Top10ShareholdersEngine",
+          "line": 26,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/stock_chart_svg.py",
+      "lines": 206,
+      "definitions": [
+        {
+          "name": "generate_stock_svg",
+          "line": 15,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/stock_data_engine.py",
+      "lines": 376,
+      "definitions": [
+        {
+          "name": "StockQuote",
+          "line": 19,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "KLineBar",
+          "line": 79,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "normalize_code",
+          "line": 111,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "generate_mock_quote",
+          "line": 137,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "fetch_quote_online",
+          "line": 188,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "get_quote",
+          "line": 244,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "get_batch_quotes",
+          "line": 255,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "generate_mock_kline",
+          "line": 327,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/stock_db.py",
+      "lines": 593,
+      "definitions": [
+        {
+          "name": "get_db_connection",
+          "line": 26,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "init_db",
+          "line": 36,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "save_master_stocks",
+          "line": 164,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "save_quotes_batch",
+          "line": 211,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "save_shareholder_item",
+          "line": 269,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "update_ipo_and_dividend",
+          "line": 286,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "check_and_update_fingerprint",
+          "line": 299,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "get_fingerprint_stats",
+          "line": 344,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "load_all_stocks_from_db",
+          "line": 366,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "record_crawl_audit",
+          "line": 413,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "save_daily_klines",
+          "line": 441,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "load_daily_klines",
+          "line": 484,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "save_stock_timeline",
+          "line": 502,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "load_stock_timeline",
+          "line": 528,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "get_latest_crawl_fingerprint",
+          "line": 560,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "list_crawl_audit_records",
+          "line": 580,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/stock_events_engine.py",
+      "lines": 169,
+      "definitions": [
+        {
+          "name": "StockEventsEngine",
+          "line": 24,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/stock_indicators.py",
+      "lines": 372,
+      "definitions": [
+        {
+          "name": "calculate_ma",
+          "line": 14,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "calculate_ema",
+          "line": 26,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "calculate_macd",
+          "line": 38,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "calculate_rsi",
+          "line": 61,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "calculate_boll",
+          "line": 98,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "calculate_kdj",
+          "line": 126,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "QuantitativeReport",
+          "line": 166,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "evaluate_stock",
+          "line": 204,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/stock_pinyin_engine.py",
+      "lines": 169,
+      "definitions": [
+        {
+          "name": "get_chinese_pinyin_abbr",
+          "line": 89,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "match_stock_keyword",
+          "line": 137,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/stock_portfolio.py",
+      "lines": 218,
+      "definitions": [
+        {
+          "name": "PositionItem",
+          "line": 15,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "PortfolioSummary",
+          "line": 72,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "AlertMessage",
+          "line": 101,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "load_config",
+          "line": 122,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "build_portfolio_summary",
+          "line": 131,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/stock_reporter.py",
+      "lines": 222,
+      "definitions": [
+        {
+          "name": "generate_daily_report",
+          "line": 19,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/stock_web_server.py",
+      "lines": 1181,
+      "definitions": [
+        {
+          "name": "load_version_info",
+          "line": 78,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "StockDataManager",
+          "line": 100,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "ThreadingHTTPServer",
+          "line": 534,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "StockRequestHandler",
+          "line": 539,
+          "kind": "ClassDef"
+        },
+        {
+          "name": "write_pid_file",
+          "line": 1052,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cleanup_pid_file",
+          "line": 1060,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "cleanup_and_exit",
+          "line": 1068,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "start_workspace_watchdog",
+          "line": 1084,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "run_server",
+          "line": 1089,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "get_server_status",
+          "line": 1126,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "stop_server_by_pid",
+          "line": 1139,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/trading_calendar.py",
+      "lines": 124,
+      "definitions": [
+        {
+          "name": "TradingCalendar",
+          "line": 18,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/watchdog.py",
+      "lines": 116,
+      "definitions": [
+        {
+          "name": "log",
+          "line": 30,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "handle_exit",
+          "line": 41,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "is_server_healthy",
+          "line": 52,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "restart_server",
+          "line": 64,
+          "kind": "FunctionDef"
+        },
+        {
+          "name": "main",
+          "line": 93,
+          "kind": "FunctionDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "scripts/world_macro_engine.py",
+      "lines": 628,
+      "definitions": [
+        {
+          "name": "WorldMacroEngine",
+          "line": 23,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "path": "tests/test_multi_source_data.py",
+      "lines": 119,
+      "definitions": [
+        {
+          "name": "TestMultiSourceDataAdapters",
+          "line": 34,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": [
+        "test_safe_session_headers_and_limit",
+        "test_kline_adapter",
+        "test_shareholder_adapter",
+        "test_dividend_adapter",
+        "test_announcement_adapter",
+        "test_block_trade_adapter",
+        "test_stock_data_hub_facade",
+        "test_adapter_resilience_on_network_failure"
+      ]
+    },
+    {
+      "path": "tests/test_stock_cli.py",
+      "lines": 89,
+      "definitions": [
+        {
+          "name": "TestStockCliAndReports",
+          "line": 23,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": [
+        "test_generate_stock_svg",
+        "test_generate_daily_report",
+        "test_cli_subcommands"
+      ]
+    },
+    {
+      "path": "tests/test_stock_data.py",
+      "lines": 112,
+      "definitions": [
+        {
+          "name": "TestStockDataEngine",
+          "line": 29,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": [
+        "test_normalize_code",
+        "test_stock_quote_model",
+        "test_mock_quote_generation",
+        "test_get_quote_and_batch",
+        "test_generate_mock_kline"
+      ]
+    },
+    {
+      "path": "tests/test_stock_indicators.py",
+      "lines": 107,
+      "definitions": [
+        {
+          "name": "TestStockIndicators",
+          "line": 29,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": [
+        "test_calculate_ma",
+        "test_calculate_ema",
+        "test_calculate_macd",
+        "test_calculate_rsi",
+        "test_calculate_boll",
+        "test_calculate_kdj",
+        "test_evaluate_stock_scoring"
+      ]
+    },
+    {
+      "path": "tests/test_stock_portfolio.py",
+      "lines": 85,
+      "definitions": [
+        {
+          "name": "TestStockPortfolio",
+          "line": 26,
+          "kind": "ClassDef"
+        }
+      ],
+      "tests": [
+        "test_position_item_pnl",
+        "test_portfolio_summary_weights",
+        "test_load_config",
+        "test_build_portfolio_summary_and_alerts"
+      ]
+    }
+  ],
+  "syntax_errors": [],
+  "imports": [
+    "argparse",
+    "atexit",
+    "concurrent",
+    "csv",
+    "datetime",
+    "hashlib",
+    "http",
+    "io",
+    "json",
+    "math",
+    "os",
+    "random",
+    "re",
+    "scripts",
+    "signal",
+    "socketserver",
+    "sqlite3",
+    "ssl",
+    "statistics",
+    "subprocess",
+    "sys",
+    "threading",
+    "time",
+    "typing",
+    "unittest",
+    "urllib"
+  ],
+  "web_lines": {
+    "web/index.html": 1931,
+    "web/style.css": 3139,
+    "web/app.js": 5323
+  }
+}
