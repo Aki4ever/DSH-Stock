@@ -627,7 +627,8 @@ function setDashboardDateRange(rangeType, evt = null) {
 /**
  * 同步网页 Title 与 Header 版本号
  */
-function syncVersionAndTitle(version = 'v2.3.0') {
+// 首屏回退版本与 config/version.json 同步；服务端心跳返回后会被真实版本覆盖
+function syncVersionAndTitle(version = 'v5.0.0') {
   appState.version = version;
   document.title = `【${version}】A股多维量化筛选器 - DSH Stock Web`;
   if (dom.appVersionBadge) {
@@ -3090,25 +3091,25 @@ function switchChartPeriod(period) {
     });
   }
 
-  // 针对不同 Tab 自动配置窗口
+  // 需求REQ-022: 各 Tab 复位为自身的标准根数；「全部」＝标准视窗 200 根（滚轮缩放上限同为 200）
   if (period === 'kline5') {
     appState.chartZoomWindow = '5';
-    appState.chartCustomZoomCount = 5;
+    appState.chartCustomZoomCount = 0;
   } else if (period === 'kline10') {
     appState.chartZoomWindow = '10';
-    appState.chartCustomZoomCount = 10;
+    appState.chartCustomZoomCount = 0;
   } else if (period === 'kline20') {
     appState.chartZoomWindow = '20';
-    appState.chartCustomZoomCount = 20;
+    appState.chartCustomZoomCount = 0;
   } else if (period === 'kline60') {
     appState.chartZoomWindow = '60';
-    appState.chartCustomZoomCount = 60;
+    appState.chartCustomZoomCount = 0;
   } else if (period === 'kline120') {
     appState.chartZoomWindow = '120';
-    appState.chartCustomZoomCount = 120;
+    appState.chartCustomZoomCount = 0;
   } else if (period === 'kline180') {
     appState.chartZoomWindow = '180';
-    appState.chartCustomZoomCount = 180;
+    appState.chartCustomZoomCount = 0;
   } else if (period === 'all') {
     appState.chartZoomWindow = 'max';
     appState.chartCustomZoomCount = 0;
@@ -3193,7 +3194,7 @@ async function loadStockDividendHistory(code) {
 }
 
 /**
- * 设置日K缩放视窗控制 (60 / 250 / 750 / max)
+ * 设置日K缩放视窗 (需求REQ-022: 缩放上限严格 200 根，下限 5 根)
  */
 function setChartZoomWindow(windowSize) {
   appState.chartZoomWindow = windowSize;
@@ -3435,6 +3436,17 @@ function buildHorizontalLinesSVG(opts) {
       amtText = `${line.type}: ¥${Number(line.price).toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
       tagW = line.crossedDays !== undefined ? 285 : 210;
     }
+    // 需求REQ-026: 辅助线标签追加「交易面积」（首个交汇日 → 今天，剔除自身交汇日）
+    if (line.tradeAreaYi !== undefined) {
+      const areaText = formatTradeArea({
+        tradeAreaYi: line.tradeAreaYi,
+        countedDays: line.tradeAreaDays,
+        excludedDays: line.tradeAreaExcludedDays,
+        incomplete: line.tradeAreaIncomplete
+      });
+      amtText += ` [${areaText}]`;
+      tagW += areaText.length * 6.2 + 8;
+    }
     amtText = `${topNote}${amtText}${overlapNote}`;
     tagW += (isTop ? 16 : 0) + (line._overlapCount > 1 ? 52 : 0);
 
@@ -3476,6 +3488,20 @@ function renderLineLayerPanel(analysis) {
     const blocked = (key === 'auto' && appState.autoLinesBlockedReason && appState.autoLinesCount > 0)
       ? appState.autoLinesBlockedReason : null;
     const countText = blocked ? '⚠️ 无法测算' : (n === 0 ? meta.empty : `已绘制 ${n} 根`);
+    // 需求REQ-026: 图层面板同步呈现每条线的「交汇成交额」与「交易面积」（与图内标签同源）
+    const metricText = layer.lines.map(l => {
+      const parts = [`¥${Number(l.price).toFixed(2)}`];
+      if (l.crossedAmountYi != null) parts.push(`交汇 ${l.crossedAmountYi}亿 / ${l.crossedDays ?? '未获取'}天`);
+      if (l.tradeAreaYi !== undefined) {
+        parts.push(formatTradeArea({
+          tradeAreaYi: l.tradeAreaYi,
+          countedDays: l.tradeAreaDays,
+          excludedDays: l.tradeAreaExcludedDays,
+          incomplete: l.tradeAreaIncomplete
+        }));
+      }
+      return parts.join(' · ');
+    }).join(' ｜ ');
     return `
       <div class="chart-layer-row ${blocked ? 'is-blocked' : ''} ${appState.topLineId && layer.lines.some(l => l.id === appState.topLineId) ? 'is-active' : ''}" data-layer="${key}">
         <span class="chart-layer-name">${meta.icon} ${meta.name}</span>
@@ -3485,7 +3511,8 @@ function renderLineLayerPanel(analysis) {
         <button type="button" class="chart-layer-btn danger" onclick="clearChartLayer('${key}')" ${n === 0 ? 'disabled' : ''}
                 title="仅清除「${meta.name}」，其他画线模型保持不变">🧹 清除</button>
       </div>
-      ${blocked ? `<p class="chart-layer-note">${blocked}（如需自动线，请切换到已提供成交额的分时周期）</p>` : ''}
+      ${metricText ? `<p class="chart-layer-metric">📐 ${metricText}</p>` : ''}
+      ${blocked ? `<p class="chart-layer-note">${blocked}（如需自动线，请先补齐该周期的成交额来源）</p>` : ''}
     `;
   }).join('');
 
@@ -3509,7 +3536,11 @@ function renderLineLayerPanel(analysis) {
 
   panel.innerHTML = `
     <div class="chart-layer-group">
-      <div class="chart-layer-group-title">📏 水平辅助线模型（各模型可同时存在，清除互不影响）</div>
+      <div class="chart-layer-group-title">
+        📏 水平辅助线模型（各模型可同时存在，清除互不影响）
+        <button type="button" id="btnLineMetricHelp" class="chart-layer-btn help" onclick="openLineMetricHelp()"
+                title="查看辅助线指标口径说明（交汇成交额 / 交汇交易日 / 交易面积 / 成交额兜底口径）">! 指标说明</button>
+      </div>
       ${rows}
     </div>
     <div class="chart-layer-group">
@@ -3691,54 +3722,86 @@ function setAutoLinesCount(count) {
 /**
  * 重新计算当前个股在当前周期下的自动多阶筹码线
  */
+/**
+ * 需求REQ-026: 为辅助线附加「交易面积」指标
+ * 铁律：首个交汇日锚定在**全量已获取K线**上，统计区间延伸至今天（最后一根可用K线），
+ *       因此该指标不随缩放窗口变化，且必须剔除该线自身交汇的交易日。
+ * @param {Array} lines 辅助线数组
+ * @param {Array} anchorKlines 全量K线（用于锚定首个交汇日与统计交易面积）
+ */
+function attachTradeAreaToLines(lines, anchorKlines) {
+  const list = anchorKlines || [];
+  (lines || []).forEach(line => {
+    const anchorIdx = findFirstCrossIndex(list, line.price);
+    const area = computeTradeArea(list, line.price, anchorIdx);
+    line.tradeAreaYi = area.tradeAreaYi;
+    line.tradeAreaDays = area.countedDays;
+    line.tradeAreaExcludedDays = area.excludedDays;
+    line.tradeAreaIncomplete = area.incomplete;
+    line.tradeAreaAnchor = anchorIdx >= 0 ? ((list[anchorIdx] && (list[anchorIdx].date || list[anchorIdx].time)) || null) : null;
+    line.tradeAreaNote = area.reason;
+  });
+  return lines || [];
+}
+
 function recomputeAutoLines() {
   appState.autoLinesBlockedReason = null;
   if (!appState.activeDetailStock || !appState.autoLinesCount) return;
   const stock = appState.activeDetailStock;
 
+  // 需求REQ-026: 交易面积锚定用全量K线；自动线测算用当前视窗K线
+  let anchorKlines = [];
   let klines = [];
   if (appState.chartPeriod === 'timeline') {
     const tlData = stock.timeline_data || { pre_close: stock.prev_close || stock.price, items: [] };
     const items = (tlData.items && tlData.items.length > 0) ? tlData.items : [];
     if (items.length === 0) { appState.autoLinesBlockedReason = '当前无分时明细，无法测算自动线'; return; }
-    klines = items.map(it => ({
+    // 需求REQ-024/025: 分时点视为 1 根K线（开＝收＝高＝低＝该分钟价），成交额缺失时按均价×成交量兜底
+    anchorKlines = items.map(it => withResolvedAmount({
       date: it.time,
       open: it.price,
       close: it.price,
       high: it.price,
       low: it.price,
       price: it.price,
+      volume: it.volume ?? null,
+      avg_price: it.avg_price ?? null,
       amount_yi: it.amount_yi ?? null
     }));
+    klines = anchorKlines;
   } else {
-    klines = (stock.daily_bars && stock.daily_bars.length > 0) ? stock.daily_bars : [];
-    if (klines.length === 0) { appState.autoLinesBlockedReason = '当前周期无K线数据，无法测算自动线'; return; }
+    const daily = (stock.daily_bars && stock.daily_bars.length > 0) ? stock.daily_bars : [];
+    if (daily.length === 0) { appState.autoLinesBlockedReason = '当前周期无K线数据，无法测算自动线'; return; }
+    anchorKlines = daily.map(withResolvedAmount);
+    klines = anchorKlines;
 
-    let winCount = klines.length;
-    if (appState.chartPeriod === 'kline5') winCount = Math.min(klines.length, 5);
-    else if (appState.chartPeriod === 'kline10') winCount = Math.min(klines.length, 10);
-    else if (appState.chartPeriod === 'kline20') winCount = Math.min(klines.length, 20);
-    else if (appState.chartPeriod === 'kline60') winCount = Math.min(klines.length, 60);
-    else if (appState.chartPeriod === 'kline120') winCount = Math.min(klines.length, 120);
-    else if (appState.chartPeriod === 'kline180') winCount = Math.min(klines.length, 180);
-    else if (appState.chartPeriod === 'all' || appState.chartZoomWindow === 'max') winCount = klines.length;
-    else if (appState.chartCustomZoomCount > 0) winCount = Math.min(klines.length, Math.max(5, appState.chartCustomZoomCount));
-    else winCount = parseInt(appState.chartZoomWindow, 10) || 60;
+    // 需求REQ-022: 自动线在当前视窗内测算，视窗口徑与图表渲染保持一致
+    let winCount = STANDARD_KLINE_VIEW_COUNT;
+    if (appState.chartCustomZoomCount > 0) winCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, appState.chartCustomZoomCount));
+    else if (appState.chartPeriod === 'kline5') winCount = 5;
+    else if (appState.chartPeriod === 'kline10') winCount = 10;
+    else if (appState.chartPeriod === 'kline20') winCount = 20;
+    else if (appState.chartPeriod === 'kline60') winCount = 60;
+    else if (appState.chartPeriod === 'kline120') winCount = 120;
+    else if (appState.chartPeriod === 'kline180') winCount = 180;
 
     if (klines.length > winCount) {
       klines = klines.slice(klines.length - winCount);
     }
   }
 
-  // 需求REQ-012: 排序取第 x 大交汇成交额必须依赖完整真实成交额；来源未提供即不测算、不推造
-  if (klines.some(k => k.amount_yi == null && k.amount == null)) {
-    appState.autoLinesBlockedReason = '当前周期的真实来源未提供成交额，按真实数据原则不生成自动多阶线';
+  // 需求REQ-025: 真实成交额优先；仅在均价与成交量也缺失时才无法测算（不再一律拒绝兜底口径）
+  const blocked = klines.filter(k => resolveKlineAmount(k).amountYi === null);
+  if (blocked.length > 0) {
+    appState.autoLinesBlockedReason = `当前周期有 ${blocked.length} 根K线的成交额与成交量均缺失，且无均价可用于「均价×成交量」兜底，不生成自动多阶线`;
     ensureLineLayers().auto.lines = [];
     return;
   }
 
   const autoLevels = calculateAutoSupportResistanceLevels(klines, stock.price, appState.autoLinesCount);
   autoLevels.forEach(l => { l.isAuto = true; });
+  // 需求REQ-026: 交易面积按全量K线锚定，缩放窗口不影响该指标
+  attachTradeAreaToLines(autoLevels, anchorKlines);
   if (autoLevels.length === 0) {
     appState.autoLinesBlockedReason = '当前周期内没有满足「交汇交易日集合互不重复」条件的价位，本周期不生成自动线';
   }
@@ -3789,6 +3852,20 @@ function openChanlunScopeModal() {
   if (dom.chanlunScopeModal) {
     dom.chanlunScopeModal.style.display = 'flex';
   }
+}
+
+/**
+ * 需求REQ-026: 打开「!」辅助线指标说明弹窗
+ * 说明内容必须与算法同源：交汇成交额、交汇交易日、交易面积公式与三条口径铁律、成交额兜底口径。
+ */
+function openLineMetricHelp() {
+  const modal = document.getElementById('lineMetricHelpModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeLineMetricHelp() {
+  const modal = document.getElementById('lineMetricHelpModal');
+  if (modal) modal.style.display = 'none';
 }
 
 /**
@@ -4243,6 +4320,38 @@ function resetAllChartLayers() {
 /**
  * 核心渲染器：根据当前选中的 period 与 subplot 动态生成高保真矢量 SVG 与鼠标十字光标交互
  */
+/**
+ * 需求REQ-024: 拉取分时级别缠论分析（复用后端同一套缠论算法，不在前端另建一套）
+ * 口径铁律：分时级别的笔＝分钟级笔，不等于日线级别；失败或未获取一律如实标注，不伪造图线。
+ */
+async function loadIntradayChanlun(code) {
+  if (!code) return;
+  if (appState.intradayChanlunCode === code) return;
+  if (appState.intradayChanlunPending === code) return;
+  appState.intradayChanlunPending = code;
+  try {
+    const res = await fetch(`/api/stock/${encodeURIComponent(code)}/intraday-chanlun`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('分时缠论请求失败');
+    const json = await res.json();
+    const stock = appState.activeDetailStock;
+    if (!stock || stock.code !== code) return;
+    stock.intraday_chanlun = json.data || null;
+    appState.intradayChanlunCode = code;
+    // 仅当仍停留在分时 Tab 时重绘，避免打断用户在其他周期的视图
+    if (appState.chartPeriod === 'timeline' && appState.activeDetailStock === stock) {
+      renderActiveStockChart();
+    }
+  } catch (err) {
+    const stock = appState.activeDetailStock;
+    if (stock && stock.code === code) {
+      stock.intraday_chanlun = { status: 'unavailable', error: err.message, counts: {} };
+      if (appState.chartPeriod === 'timeline') renderActiveStockChart();
+    }
+  } finally {
+    if (appState.intradayChanlunPending === code) appState.intradayChanlunPending = null;
+  }
+}
+
 function renderActiveStockChart() {
   renderChanlunLegend(appState.activeDetailStock?.chanlun);
   const stock = appState.activeDetailStock;
@@ -4277,8 +4386,11 @@ function renderActiveStockChart() {
 
     const preClose = Number(tlData.pre_close || stock.prev_close || stock.price || items[0].price);
 
+    // 需求REQ-024: 分时级缠论画线（后端同一套缠论算法，前端口径为「分时级别」）
+    loadIntradayChanlun(stock.code);
+
     // 需求1: 分时图不需要放大缩小时间区间，固定看全分时图 (09:30-15:00 完整全景)
-    dom.chartSvgContainer.innerHTML = generateTimelineSVG(items, preClose, appState.chartSubplot, width, height, mainHeight, subHeight, margin);
+    dom.chartSvgContainer.innerHTML = generateTimelineSVG(items, preClose, appState.chartSubplot, width, height, mainHeight, subHeight, margin, stock.intraday_chanlun);
     bindChartCrosshair('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
     bindChartZoomAndDrawing('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
   } else {
@@ -4314,29 +4426,17 @@ function renderActiveStockChart() {
         return;
       }
     } else {
-      // 滚轮或预设缩放 (需求2: 5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部 走势图Tab自适应)
-      let winCount = klines.length;
+      // 需求REQ-022: 标准视窗 200 根；缩放只改根数，且缩放上限严格为 200 根
+      let winCount = STANDARD_KLINE_VIEW_COUNT;
       if (appState.chartCustomZoomCount > 0) {
-        winCount = Math.min(klines.length, Math.max(5, appState.chartCustomZoomCount));
-      } else if (appState.chartPeriod === 'kline5') {
-        winCount = Math.min(klines.length, 5);
-      } else if (appState.chartPeriod === 'kline10') {
-        winCount = Math.min(klines.length, 10);
-      } else if (appState.chartPeriod === 'kline20') {
-        winCount = Math.min(klines.length, 20);
-      } else if (appState.chartPeriod === 'kline60') {
-        winCount = Math.min(klines.length, 60);
-      } else if (appState.chartPeriod === 'kline120') {
-        winCount = Math.min(klines.length, 120);
-      } else if (appState.chartPeriod === 'kline180') {
-        winCount = Math.min(klines.length, 180);
-      } else if (appState.chartPeriod === 'all' || appState.chartZoomWindow === 'max') {
-        winCount = klines.length;
-      } else if (appState.chartCustomZoomCount > 0) {
-        winCount = Math.min(klines.length, Math.max(5, appState.chartCustomZoomCount));
-      } else {
-        winCount = parseInt(appState.chartZoomWindow, 10) || 60;
-      }
+        winCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, appState.chartCustomZoomCount));
+      } else if (appState.chartPeriod === 'kline5') winCount = 5;
+      else if (appState.chartPeriod === 'kline10') winCount = 10;
+      else if (appState.chartPeriod === 'kline20') winCount = 20;
+      else if (appState.chartPeriod === 'kline60') winCount = 60;
+      else if (appState.chartPeriod === 'kline120') winCount = 120;
+      else if (appState.chartPeriod === 'kline180') winCount = 180;
+      else winCount = STANDARD_KLINE_VIEW_COUNT;
 
       if (klines.length > winCount) {
         klines = klines.slice(klines.length - winCount);
@@ -4424,26 +4524,26 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
     const stock = appState.activeDetailStock;
     if (!stock) return;
 
-    const fullLen = stock.daily_bars?.length || 100;
-
-    let curCount = appState.chartCustomZoomCount > 0 
-      ? appState.chartCustomZoomCount 
-      : (appState.chartZoomWindow === '5' ? 5 
+    // 需求REQ-022: 缩放只改同一页面的 K 线根数；下限 5 根、上限严格 200 根
+    let curCount = appState.chartCustomZoomCount > 0
+      ? appState.chartCustomZoomCount
+      : (appState.chartZoomWindow === '5' ? 5
         : appState.chartZoomWindow === '10' ? 10
         : appState.chartZoomWindow === '20' ? 20
-        : appState.chartZoomWindow === '60' ? 60 
+        : appState.chartZoomWindow === '60' ? 60
         : appState.chartZoomWindow === '120' ? 120
         : appState.chartZoomWindow === '180' ? 180
-        : appState.chartZoomWindow === '250' ? 250 : fullLen);
+        : STANDARD_KLINE_VIEW_COUNT);
+    curCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, curCount));
 
     // 降低灵敏度：从原先的 12% 降到 4%，保证平滑细腻缩放
     const step = Math.max(1, Math.round(curCount * 0.04));
     if (e.deltaY < 0) {
       // 滚轮向上 -> 放大 -> 数量变少 -> 区间拉近 (最小 5 根)
-      curCount = Math.max(5, curCount - step);
+      curCount = Math.max(MIN_KLINE_VIEW_COUNT, curCount - step);
     } else {
-      // 滚轮向下 -> 缩小 -> 数量变多 -> 区间推远
-      curCount = Math.min(fullLen, curCount + step);
+      // 滚轮向下 -> 缩小 -> 数量变多 (上限 200 根)
+      curCount = Math.min(STANDARD_KLINE_VIEW_COUNT, curCount + step);
     }
 
     appState.chartCustomZoomCount = curCount;
@@ -4509,9 +4609,11 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
         price: Number(priceVal.toFixed(2)),
         type: isPressure ? '压力位' : '支撑位',
         crossedDays: crossedDays,
-        crossedAmountYi: dataList.some(k => k.amount_yi == null && k.amount == null) ? null : Number(crossedAmountYi.toFixed(2))
+        crossedAmountYi: Number(crossedAmountYi.toFixed(2))
       });
+      // 需求REQ-026: 交易面积锚定首个交汇日 → 今天（在 dataList 不可得成交额时为不完整口径）
       appState.topLineId = newLine ? newLine.id : null;
+      if (newLine) attachTradeAreaToLines([newLine], dataList);
 
       renderActiveStockChart();
       showChartToast(`已加入「${LINE_LAYER_META[layerKey].name}」模型`);
@@ -4658,7 +4760,7 @@ function formatAmountYi(amtYi) {
 /**
  * 分时走势矢量 SVG 发生器
  */
-function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
+function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, analysis=null) {
   if (!items || items.length === 0) {
     return '<div style="padding: 2rem; color: var(--text-muted);">暂无分时明细</div>';
   }
@@ -4777,6 +4879,16 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
       <path d="${pathAvg}" fill="none" stroke="#facc15" stroke-width="1.2" opacity="0.9"/>
       <path d="${pathPrice}" fill="none" stroke="#38bdf8" stroke-width="1.8"/>
 
+      <!-- 需求REQ-024: 分时级缠论画线（复用同一套缠论算法，级别明确标注为分时级别） -->
+      <defs><clipPath id="timelineChanlunClip"><rect x="${m.left}" y="${m.top}" width="${innerW}" height="${mh}"/></clipPath></defs>
+      <g clip-path="url(#timelineChanlunClip)">${appState.showChanlunDraw && analysis ? generateChanlunOverlaySVG(
+        items.map(it => ({ date: it.time, time: it.time, open: it.price, close: it.price, high: it.price, low: it.price, price: it.price })),
+        (i) => m.left + i * stepX,
+        (p) => priceToY(p),
+        analysis
+      ) : ''}</g>
+      ${appState.showChanlunDraw ? `<text x="${m.left + 8}" y="${m.top + 28}" fill="#c084fc" font-size="10" font-weight="600">☯️ 缠论（分时级别${analysis && analysis.status === 'available' ? '' : '：' + (analysis && analysis.error ? '未获取（' + analysis.error + '）' : '未获取')}）</text>` : ''}
+
       <!-- 十字光标虚线 -->
       <line id="crosshairX" x1="0" y1="${m.top}" x2="0" y2="${subTopY + sh}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
       <line id="crosshairY" x1="${m.left}" y1="0" x2="${m.left + innerW}" y2="0" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
@@ -4826,12 +4938,29 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
  */
 function generateChanlunOverlaySVG(klines, getX, getY, analysis) {
   if (!analysis || !klines.length) return '';
-  const idx = new Map(klines.map((b,i) => [b.date,i]));
-  const first=klines[0].date, last=klines[klines.length-1].date;
-  const globalIdx = new Map((analysis.dates||klines.map(b=>b.date)).map((d,i)=>[d,i]));
-  const offset = globalIdx.get(first)||0;
-  const x = t => getX(globalIdx.get(t)-offset);
-  const visible = r => r.end_time>=first && r.start_time<=last;
+  // 需求REQ-024: 分时K线的唯一键是 time，日K是 date，两者都必须能定位端点
+  const keyOf = b => (b && b.date !== undefined ? b.date : (b ? b.time : undefined));
+  // 需求REQ-024: 分时级别分析结果的日期为「交易日 + 分钟」（保证唯一且递增），
+  // 而分时K线自身以「HH:MM」为键；两者按分钟刻归一化到同一键。
+  const sameKey = (a, b) => {
+    if (a === b) return true;
+    const tail = v => String(v === null || v === undefined ? '' : v).trim().split(/\s+/).pop();
+    return tail(a) !== '' && tail(a) === tail(b);
+  };
+  const idx = new Map();
+  klines.forEach((b, i) => { const k = keyOf(b); if (!idx.has(k)) idx.set(k, i); });
+  const first = keyOf(klines[0]), last = keyOf(klines[klines.length - 1]);
+  const globalIdx = new Map((analysis.dates || klines.map(b => keyOf(b))).map((d, i) => [d, i]));
+  const idxOf = v => {
+    if (globalIdx.has(v)) return globalIdx.get(v);
+    for (const [k, i] of globalIdx) if (sameKey(k, v)) return i;
+    return undefined;
+  };
+  const offset = idxOf(first) || 0;
+  const x = t => getX(idxOf(t) - offset);
+  // 需求REQ-024: 分时窗口判定同样必须按分钟刻归一化（分析结果带交易日前缀）
+  const cmpKey = v => String(v === null || v === undefined ? '' : v).trim().split(/\s+/).pop();
+  const visible = r => cmpKey(r.end_time) >= cmpKey(first) && cmpKey(r.start_time) <= cmpKey(last);
   const colors={pens:'#c084fc',segments:'#38bdf8',pivots:'#f59e0b',divergences:'#fb7185',ma_entanglements:'#34d399'};
   let svg='';
   for(const key of ['pivots','ma_entanglements']) {
@@ -4855,7 +4984,13 @@ function generateChanlunOverlaySVG(klines, getX, getY, analysis) {
   const maColors=['#fbbf24','#fb7185','#60a5fa'];
   if(appState.chanlunLayers.ma_entanglements!==false) (analysis.parameters?.ma_periods||[]).forEach((period,j)=>{
     const byDate=globalIdx;
-    const points=klines.map((b,i)=>{const v=analysis.ma?.[String(period)]?.[byDate.get(b.date)];return v==null?null:`${getX(i)},${getY(v)}`;}).filter(Boolean);
+    const points=klines.map((b,i)=>{
+      const dayKey = b.date !== undefined ? b.date : b.time;
+      // 需求REQ-024: 分时分析结果的均线字典以「HH:MM」为键，日线以日期为键，两套键都要能取到值
+      const minuteKey = String(dayKey||'').split(/\s+/).pop();
+      let v = analysis.ma?.[String(period)]?.[byDate.get(dayKey)];
+      if (v == null) v = analysis.ma?.[String(period)]?.[minuteKey];
+      return v==null?null:`${getX(i)},${getY(v)}`;}).filter(Boolean);
     if(points.length)svg+=`<polyline class="chanlun-ma" points="${points.join(' ')}" fill="none" stroke="${maColors[j%3]}" stroke-width="1"><title>MA${period}</title></polyline>`;
   });
   return `<g class="chanlun-overlay-layer">${svg}</g>`;
@@ -4871,6 +5006,181 @@ function renderChanlunLegend(analysis) {
 /**
  * 60日 K线矢量 SVG 发生器
  */
+// ====================================================
+// 需求REQ-022/023/025/026: K线视图口径与辅助线指标的共享工具
+//   1. 标准视窗 200 根：缩放只改根数，不改绘图区宽度
+//   2. 标准槽宽：根数不足 200 时右侧留白，绝不拉伸填补
+//   3. 成交额兜底：真实值优先，缺失时才用「均价 × 成交量」并标记为估算
+//   4. 交易面积：首个交汇日 → 今天，剔除该线自身交汇日后的成交额之和
+// ====================================================
+
+/** 需求REQ-022: 标准视窗固定 200 根；个股缩放下限 5 根 */
+const STANDARD_KLINE_VIEW_COUNT = 200;
+const MIN_KLINE_VIEW_COUNT = 5;
+
+/** 需求REQ-023: 绘图区内宽（个股 860 - 65 - 65 = 730） */
+function klinePlotInnerWidth(width, margin) {
+  const inner = Number(width) - Number(margin.left) - Number(margin.right);
+  return inner > 0 ? inner : 0;
+}
+
+/** 需求REQ-023: 标准槽宽 = 绘图区内宽 / 200；n>200 时才按需等比压缩 */
+function klineSlotWidth(width, margin, visibleCount) {
+  const inner = klinePlotInnerWidth(width, margin);
+  if (inner <= 0) return 0;
+  const standard = inner / STANDARD_KLINE_VIEW_COUNT;
+  const n = Number(visibleCount) || 0;
+  if (n > STANDARD_KLINE_VIEW_COUNT) return inner / n;
+  // 根数不足 200 时仍使用标准槽宽：剩余宽度一律留白
+  return standard;
+}
+
+/** 需求REQ-023: 槽位几何（含主图蜡烛与副图柱的同一基准） */
+function klineSlotGeometry(width, margin, visibleCount) {
+  const innerW = klinePlotInnerWidth(width, margin);
+  const slot = klineSlotWidth(width, margin, visibleCount);
+  const barW = Math.max(1, Math.min(14, slot * 0.72));
+  return {
+    innerW: innerW,
+    slot: slot,
+    barW: barW,
+    candleW: barW,
+    // 根数不足 200 时，K线从绘图区左缘起向右逐根排列，右侧留白
+    xOf: (idx) => margin.left + (idx + 0.5) * slot,
+    rightPadding: Math.max(0, innerW - slot * (Number(visibleCount) || 0)),
+    partial: (Number(visibleCount) || 0) < STANDARD_KLINE_VIEW_COUNT
+  };
+}
+
+/**
+ * 需求REQ-025: 成交额单一入口（真实值优先，缺失时才兜底推算）
+ * 优先级：amount_yi → amount/1e8 → 均价 × 成交量 / 1e8
+ * @returns {{amountYi: number|null, derived: boolean, reason: string|null}}
+ */
+function resolveKlineAmount(k) {
+  if (!k) return { amountYi: null, derived: false, reason: '无K线记录' };
+  const direct = Number(k.amount_yi);
+  if (k.amount_yi !== null && k.amount_yi !== undefined && k.amount_yi !== '' && Number.isFinite(direct)) {
+    return { amountYi: direct, derived: false, reason: null };
+  }
+  const raw = Number(k.amount);
+  if (k.amount !== null && k.amount !== undefined && k.amount !== '' && Number.isFinite(raw)) {
+    return { amountYi: raw / 1e8, derived: false, reason: null };
+  }
+  // 兜底：均价 × 成交量。日K均价 = (开+收+高+低)/4；分时均价优先取该分钟 avg_price
+  const volume = Number(k.volume);
+  if (k.volume === null || k.volume === undefined || !Number.isFinite(volume) || volume <= 0) {
+    return { amountYi: null, derived: false, reason: '成交额与成交量均缺失，无法兜底推算' };
+  }
+  let avg = Number(k.avg_price);
+  if (k.avg_price === null || k.avg_price === undefined || !Number.isFinite(avg) || avg <= 0) {
+    const opens = Number(k.open !== undefined ? k.open : k.price);
+    const closes = Number(k.close !== undefined ? k.close : k.price);
+    const highs = Number(k.high !== undefined ? k.high : k.price);
+    const lows = Number(k.low !== undefined ? k.low : k.price);
+    if (![opens, closes, highs, lows].every(v => Number.isFinite(v) && v > 0)) {
+      return { amountYi: null, derived: false, reason: '均价与成交量均缺失，无法兜底推算' };
+    }
+    avg = (opens + closes + highs + lows) / 4;
+  }
+  return {
+    amountYi: (avg * volume * 100) / 1e8,
+    derived: true,
+    reason: '来源未提供成交额，按「均价 × 成交量」估算'
+  };
+}
+
+/** 需求REQ-025: 为单根K线补齐成交额与来源标记（不改动原始来源字段） */
+function withResolvedAmount(k) {
+  const resolved = resolveKlineAmount(k);
+  return Object.assign({}, k, {
+    amount_yi: resolved.amountYi,
+    amount_derived: resolved.derived,
+    __amount_reason: resolved.reason
+  });
+}
+
+/** 需求REQ-025: 仅供展示的估算后缀 */
+function amountDerivedSuffix(bar) {
+  return bar && bar.amount_derived === true ? '（估算：均价×成交量）' : '';
+}
+
+/**
+ * 需求REQ-026: 首个交汇交易日索引（无交汇返回 -1）
+ * 交汇判定：该根K线的 low <= P <= high
+ */
+function findFirstCrossIndex(klines, price) {
+  if (!klines || !klines.length) return -1;
+  const p = Number(price);
+  if (!Number.isFinite(p)) return -1;
+  for (let i = 0; i < klines.length; i++) {
+    const item = klines[i];
+    const h = Number(item.high !== undefined ? item.high : item.price);
+    const l = Number(item.low !== undefined ? item.low : item.price);
+    if (Number.isFinite(h) && Number.isFinite(l) && l <= p && p <= h) return i;
+  }
+  return -1;
+}
+
+/**
+ * 需求REQ-026: 计算辅助线的交易面积
+ * 定义：从首个与K线交汇的交易日到今天，剔除该线自身交汇的交易日之后，剩余K线成交额之和
+ * 铁律：① 累计口径不受缩放窗口影响（由调用方传入全量K线与锚定索引保证）
+ *      ② 必须剔除该线自身交汇的交易日
+ *      ③ 覆盖不完整时显式标注，不以 0 补齐
+ */
+function computeTradeArea(klines, price, firstCrossIndex) {
+  const list = klines || [];
+  const anchor = Number.isInteger(firstCrossIndex) ? firstCrossIndex : findFirstCrossIndex(list, price);
+  if (anchor < 0 || anchor >= list.length) {
+    return { tradeAreaYi: null, excludedDays: 0, countedDays: 0, incomplete: false, reason: '该辅助线尚未与任何K线交汇' };
+  }
+  const p = Number(price);
+  let sum = 0;
+  let excludedDays = 0;
+  let countedDays = 0;
+  let incomplete = false;
+  for (let i = anchor; i < list.length; i++) {
+    const item = list[i];
+    const h = Number(item.high !== undefined ? item.high : item.price);
+    const l = Number(item.low !== undefined ? item.low : item.price);
+    if (Number.isFinite(h) && Number.isFinite(l) && l <= p && p <= h) { excludedDays++; continue; }
+    const resolved = resolveKlineAmount(item);
+    if (resolved.amountYi === null) { incomplete = true; continue; }
+    sum += resolved.amountYi;
+    countedDays++;
+  }
+  return {
+    tradeAreaYi: Number(sum.toFixed(2)),
+    excludedDays: excludedDays,
+    countedDays: countedDays,
+    incomplete: incomplete,
+    reason: incomplete ? '区间内存在成交额不可得的交易日，交易面积为不完全覆盖口径' : null
+  };
+}
+
+/** 需求REQ-026: 统一的交易面积展示文案（未交汇 / 覆盖不完整 都必须显式区分） */
+function formatTradeArea(area) {
+  if (!area || area.tradeAreaYi === null || area.tradeAreaYi === undefined) {
+    return '交易面积: 未交汇';
+  }
+  const base = `交易面积: ${Number(area.tradeAreaYi).toFixed(2)}亿 (未交汇: ${area.countedDays}天)`;
+  return area.incomplete ? `${base}·覆盖不完整` : base;
+}
+
+/** 需求REQ-025: 依据样本判定整段成交额是否为估算口径（用于标题/图例统一标注） */
+function amountCoverageFlags(klines) {
+  const list = klines || [];
+  let derived = 0;
+  let missing = 0;
+  list.forEach(k => {
+    const r = resolveKlineAmount(k);
+    if (r.amountYi === null) missing++;
+    else if (r.derived) derived++;
+  });
+  return { derived: derived, missing: missing, anyDerived: derived > 0, anyMissing: missing > 0 };
+}
+
 function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=null) {
   if (!klines || klines.length === 0) {
     return '<div style="padding: 2rem; color: var(--text-muted);">暂无K线数据</div>';
@@ -4878,9 +5188,13 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
 
   const innerW = w - m.left - m.right;
   const n = klines.length;
-  const stepX = innerW / n;
-  // 需求6: 上市至今长周期多达数千根K线，自适应缩小柱宽与最小宽度
-  const barW = Math.max(0.5, Math.min(14, stepX * 0.7));
+  // 需求REQ-022/023: 视窗标准 200 根槽位；缩放只改根数、不改槽宽；不足 200 根时右侧留白
+  const slotGeo = klineSlotGeometry(w, m, n);
+  const stepX = slotGeo.slot;
+  const barW = slotGeo.barW;
+  const candleWidth = slotGeo.candleW;
+  // 需求REQ-025: 成交额优先取真实值，缺失时才以「(开+收+高+低)/4 × 成交量」兜底
+  const amountFlags = amountCoverageFlags(klines);
 
   const highs = klines.map(d => d.high);
   const lows = klines.map(d => d.low);
@@ -4894,7 +5208,8 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
 
   const subTopY = m.top + mh + 25;
   const isVol = (subplotType === 'vol');
-  const subVals = klines.map(d => isVol ? d.volume : d.amount_yi);
+  // 需求REQ-025: 副图成交额同样走兜底口径，仅在均价与成交量均缺失时才留下空柱
+  const subVals = klines.map(d => isVol ? d.volume : resolveKlineAmount(d).amountYi);
   const missingAmount = !isVol && subVals.some(v => v === null || v === undefined);
   const maxSubVal = Math.max(...subVals, 0.1) * 1.1;
   const subValToH = (v) => (v / maxSubVal) * (sh - 10);
@@ -4933,7 +5248,23 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
     `;
   }
 
-  if (missingAmount) summaryBadgesSvg = `<text x="${m.left + 100}" y="${subTopY + 14}" fill="#94a3b8" font-size="12">当前来源未提供完整成交额</text>`;
+  if (missingAmount) {
+    summaryBadgesSvg = `<text x="${m.left + 100}" y="${subTopY + 14}" fill="#94a3b8" font-size="12">当前来源未提供完整成交额，且均价或成交量缺失无法兜底推算</text>`;
+  } else if (!isVol && amountFlags.anyDerived) {
+    // 需求REQ-025: 兜底估算值必须可区分，不允许与真实成交额混为一谈
+    summaryBadgesSvg += `
+      <text x="${m.left + 8}" y="${subTopY + sh + 11}" fill="#fbbf24" font-size="10">
+        ⚠️ 其中 ${amountFlags.derived} 根成交额为估算（均价 × 成交量），非来源原始披露
+      </text>
+    `;
+  } else if (isVol && amountFlags.anyDerived) {
+    // 需求REQ-025: 副图显示成交量时，成交额兜底口径同样必须主图可见（不得因切换副图而失去标注）
+    summaryBadgesSvg += `
+      <text x="${m.left + 8}" y="${subTopY + sh + 11}" fill="#fbbf24" font-size="10">
+        ⚠️ 成交额由来源缺失后兜底：其中 ${amountFlags.derived} 根按（均价 × 成交量）估算，非来源原始披露
+      </text>
+    `;
+  }
 
   let candles = '';
   let subBars = '';
@@ -4941,7 +5272,7 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
   let ma10Path = '';
 
   klines.forEach((d, idx) => {
-    const xMid = m.left + idx * stepX + stepX * 0.5;
+    const xMid = slotGeo.xOf(idx);
     const yO = priceToY(d.open);
     const yC = priceToY(d.close);
     const yH = priceToY(d.high);
@@ -4954,16 +5285,18 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
     const wickWidth = barW < 1.5 ? 0.6 : 1.2;
     candles += `<line x1="${xMid}" y1="${yH}" x2="${xMid}" y2="${yL}" stroke="${color}" stroke-width="${wickWidth}"/>`;
 
-    // 实体蜡烛
+    // 实体蜡烛 (需求REQ-023: 宽度一律取标准槽宽基准，不因根数少而拉宽)
     const bTop = Math.min(yO, yC);
     const bH = Math.max(1.0, Math.abs(yO - yC));
-    candles += `<rect x="${xMid - barW * 0.5}" y="${bTop}" width="${barW}" height="${bH}" fill="${color}"/>`;
+    candles += `<rect x="${xMid - candleWidth * 0.5}" y="${bTop}" width="${candleWidth}" height="${bH}" fill="${color}"/>`;
 
-    // 副图柱子
-    const val = isVol ? d.volume : d.amount_yi;
-    const sH = Math.max(1.0, subValToH(val));
-    const sY = subTopY + sh - sH;
-    if (!missingAmount) subBars += `<rect x="${xMid - barW * 0.5}" y="${sY}" width="${barW}" height="${sH}" fill="${color}" opacity="0.85"/>`;
+    // 副图柱子 (与主图蜡烛共用同一槽位与宽度基准)
+    const val = isVol ? d.volume : resolveKlineAmount(d).amountYi;
+    if (val !== null && val !== undefined) {
+      const sH = Math.max(1.0, subValToH(val));
+      const sY = subTopY + sh - sH;
+      subBars += `<rect x="${xMid - candleWidth * 0.5}" y="${sY}" width="${candleWidth}" height="${sH}" fill="${color}" opacity="0.85"/>`;
+    }
 
     // 均线计算
     if (idx >= 4) {
@@ -4981,7 +5314,8 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
   });
 
   const subUnit = isVol ? '手' : '亿元';
-  const subTitle = isVol ? '副图：成交量 (手)' : '副图：成交额 (亿元)';
+  const amountDerivedNote = (!isVol && amountFlags.anyDerived) ? '（含估算：均价×成交量）' : '';
+  const subTitle = isVol ? '副图：成交量 (手)' : `副图：成交额 (亿元)${amountDerivedNote}`;
 
   return `
     <svg id="stockInteractiveSvg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background-color: #0b1329; border-radius: 8px; cursor: crosshair;">
@@ -4993,6 +5327,7 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
         <tspan fill="#f59e0b">● MA5</tspan>
         <tspan dx="10" fill="#38bdf8">● MA10</tspan>
       </text>
+      ${slotGeo.partial ? `<text x="${m.left + innerW - 4}" y="${m.top + 14}" fill="#64748b" font-size="10" text-anchor="end">标准视窗 ${STANDARD_KLINE_VIEW_COUNT} 根 · 当前显示 ${n} 根（右侧留白）</text>` : ''}
 
       <!-- 蜡烛线与均线 -->
       ${candles}
@@ -5010,17 +5345,17 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
       <text x="${m.left - 8}" y="${m.top + 12}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">¥${maxPrice.toFixed(2)}</text>
       <text x="${m.left - 8}" y="${m.top + mh}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">¥${minPrice.toFixed(2)}</text>
 
-      <!-- 横轴时间刻度 -->
+      <!-- 横轴时间刻度 (需求REQ-023: 右侧留白区段不再摊薄刻度位置) -->
       <text x="${m.left}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="start">${klines[0].date}</text>
-      <text x="${m.left + innerW * 0.5}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[Math.floor(n / 2)].date}</text>
-      <text x="${m.left + innerW}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="end">${klines[n - 1].date}</text>
+      <text x="${slotGeo.xOf(Math.floor((n - 1) / 2))}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[Math.floor(n / 2)].date}</text>
+      <text x="${slotGeo.xOf(n - 1)}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[n - 1].date}</text>
 
       <!-- 需求REQ-014/015: 统一渲染多模型辅助线（自动多阶线/手动压力线/手动支撑线共存，按 zIndex 分层） -->
       ${buildHorizontalLinesSVG({
         m: m,
         innerW: innerW,
         priceToY: (p) => priceToY(p),
-        refPrice: Number(klines[klines.length - 1].close || klines[klines.length - 1].price)
+        refPrice: Number(klines[klines.length - 1].close !== undefined ? klines[klines.length - 1].close : klines[klines.length - 1].price)
       })}
 
       <!-- 副图区域 -->
@@ -5296,11 +5631,24 @@ function renderIndexLineLayerPanel() {
   const panel = document.getElementById('indexLayerPanel');
   if (!panel) return;
   ensureIndexLineLayers();
-  panel.innerHTML = Object.keys(INDEX_LINE_LAYER_META).map(key => {
+  const rows = Object.keys(INDEX_LINE_LAYER_META).map(key => {
     const meta = INDEX_LINE_LAYER_META[key];
     const layer = indexState.lineLayers[key];
     const n = layer.lines.length;
     const visible = layer.visible !== false;
+    const metricText = layer.lines.map(l => {
+      const parts = [`¥${Number(l.price).toFixed(2)}`];
+      if (l.crossedAmountYi != null) parts.push(`交汇 ${l.crossedAmountYi}亿 / ${l.crossedDays ?? '未获取'}天`);
+      if (l.tradeAreaYi !== undefined) {
+        parts.push(formatTradeArea({
+          tradeAreaYi: l.tradeAreaYi,
+          countedDays: l.tradeAreaDays,
+          excludedDays: l.tradeAreaExcludedDays,
+          incomplete: l.tradeAreaIncomplete
+        }));
+      }
+      return parts.join(' · ');
+    }).join(' ｜ ');
     return `
       <div class="chart-layer-row" data-layer="${key}">
         <span class="chart-layer-name">${meta.icon} ${meta.name}</span>
@@ -5310,8 +5658,20 @@ function renderIndexLineLayerPanel() {
         <button type="button" class="chart-layer-btn danger" onclick="clearIndexLayer('${key}')" ${n === 0 ? 'disabled' : ''}
                 title="仅清除「${meta.name}」，另一模型保持不变">🧹 清除</button>
       </div>
+      ${metricText ? `<p class="chart-layer-metric">📐 ${metricText}</p>` : ''}
     `;
   }).join('');
+  // 需求REQ-026: 指数图层面板同样提供「!」指标说明入口
+  panel.innerHTML = `
+    <div class="chart-layer-group">
+      <div class="chart-layer-group-title">
+        📏 指数水平辅助线模型（自动线与手动线可共存，清除互不影响）
+        <button type="button" id="btnIndexLineMetricHelp" class="chart-layer-btn help" onclick="openLineMetricHelp()"
+                title="查看辅助线指标口径说明（交汇成交额 / 交汇交易日 / 交易面积 / 成交额兜底口径）">! 指标说明</button>
+      </div>
+      ${rows}
+    </div>
+  `;
 }
 
 /** 需求REQ-015: 指数图表 —— 重合辅助线点击置顶 (含标签精准命中与轮换巡览) */
@@ -5675,17 +6035,17 @@ function renderActiveIndexChart() {
       return;
     }
 
-    // 需求2/3: 指数切片 (5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部，以及滚轮自由缩放)
-    let winCount = klines.length;
+    // 需求REQ-022: 指数切片 (需求REQ-022: 标准视窗 200 根，缩放上限严格 200 根)
+    let winCount = STANDARD_KLINE_VIEW_COUNT;
     if (indexState.customZoomCount > 0) {
-      winCount = Math.min(klines.length, Math.max(5, indexState.customZoomCount));
-    } else if (indexState.period === 'kline5') winCount = Math.min(klines.length, 5);
-    else if (indexState.period === 'kline10') winCount = Math.min(klines.length, 10);
-    else if (indexState.period === 'kline20') winCount = Math.min(klines.length, 20);
-    else if (indexState.period === 'kline60') winCount = Math.min(klines.length, 60);
-    else if (indexState.period === 'kline120') winCount = Math.min(klines.length, 120);
-    else if (indexState.period === 'kline180') winCount = Math.min(klines.length, 180);
-    else if (indexState.period === 'all') winCount = klines.length;
+      winCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, indexState.customZoomCount));
+    } else if (indexState.period === 'kline5') winCount = 5;
+    else if (indexState.period === 'kline10') winCount = 10;
+    else if (indexState.period === 'kline20') winCount = 20;
+    else if (indexState.period === 'kline60') winCount = 60;
+    else if (indexState.period === 'kline120') winCount = 120;
+    else if (indexState.period === 'kline180') winCount = 180;
+    else winCount = STANDARD_KLINE_VIEW_COUNT;
 
     if (klines.length > winCount) {
       klines = klines.slice(klines.length - winCount);
@@ -5706,8 +6066,10 @@ function renderActiveIndexChart() {
 
     const plotWidth = width - margin.left - margin.right;
     const n = klines.length;
-    const candleWidth = Math.max(3, Math.min(38, Math.floor(plotWidth / n) - 2));
-    const getX = idx => margin.left + (idx + 0.5) * (plotWidth / n);
+    // 需求REQ-022/023: 指数K线同样采用「标准 200 根槽位」，不足 200 根时右侧留白
+    const indexSlotGeo = klineSlotGeometry(width, margin, n);
+    const candleWidth = indexSlotGeo.candleW;
+    const getX = idx => indexSlotGeo.xOf(idx);
     const getY = p => margin.top + (1 - (p - minPrice) / (maxPrice - minPrice)) * (mainHeight - margin.top);
     const getSubY = a => subTop + (1 - (a / maxAmount)) * subHeight;
 
@@ -5753,8 +6115,12 @@ function renderActiveIndexChart() {
     });
 
     // 需求REQ-014/015: 指数多阶自动画线 (1~4 根筹码中枢线) —— 写入独立图层模型，按 zIndex 参与层级排序
+    // 需求REQ-025: 成交额缺失时按「均价 × 成交量」兜底；需求REQ-026: 交易面积按全量K线锚定
+    const indexKlinesWithAmount = klines.map(withResolvedAmount);
+    const indexAnchorKlines = indexData.daily_bars.map(withResolvedAmount);
     if (indexState.showAutoLines && indexState.autoLinesCount > 0) {
-      const autoLevels = calculateAutoSupportResistanceLevels(klines, indexData.price, indexState.autoLinesCount);
+      const autoLevels = calculateAutoSupportResistanceLevels(indexKlinesWithAmount, indexData.price, indexState.autoLinesCount);
+      attachTradeAreaToLines(autoLevels, indexAnchorKlines);
       indexState.lineLayers.auto.lines = autoLevels.map((line, idx) => ({
         ...line,
         id: `index_auto_${line.rank || idx + 1}_${Math.round(line.price * 100)}`,
@@ -5786,6 +6152,14 @@ function renderActiveIndexChart() {
       const lineY = line._svgY;
       const isAuto = line.layerKey === 'auto';
       const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
+      const areaPart = line.tradeAreaYi !== undefined && line.tradeAreaYi !== null
+        ? ` (${formatTradeArea({
+            tradeAreaYi: line.tradeAreaYi,
+            countedDays: line.tradeAreaDays,
+            excludedDays: line.tradeAreaExcludedDays,
+            incomplete: line.tradeAreaIncomplete
+          })})`
+        : '';
       const color = line.color || (isAuto ? '#f59e0b' : (line.price >= indexRefPrice ? '#f43f5e' : '#10b981'));
       const isTop = (line.zIndex || 0) >= indexTopZ;
       const overlapNote = line._overlapCount > 1 ? ` ·重合${line._overlapCount}` : '';
@@ -5793,8 +6167,8 @@ function renderActiveIndexChart() {
       let labelText = `${line.type}: ¥${Number(line.price).toFixed(2)}`;
       let tagW = 150;
       if (line.crossedAmountYi != null) {
-        labelText = `${line.type}: ¥${Number(line.price).toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
-        tagW = 320;
+        labelText = `${line.type}: ¥${Number(line.price).toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})${areaPart}`;
+        tagW = 320 + areaPart.length * 6.2;
       }
       labelText = `${topNote}${labelText}${overlapNote}`;
       tagW += (isTop ? 16 : 0) + (line._overlapCount > 1 ? 52 : 0);
@@ -5822,7 +6196,8 @@ function renderActiveIndexChart() {
 
         <!-- 副图网格 (仅成交金额) -->
         <rect x="${margin.left}" y="${subTop}" width="${plotWidth}" height="${subHeight}" fill="none" stroke="rgba(51, 65, 85, 0.4)"/>
-        <text x="${margin.left + 8}" y="${subTop + 16}" fill="#f59e0b" font-size="11" font-weight="700">💰 副图: 成交金额 (亿元)</text>
+        <text x="${margin.left + 8}" y="${subTop + 16}" fill="#f59e0b" font-size="11" font-weight="700">💰 副图: 成交金额 (亿元)${amountCoverageFlags(indexKlinesWithAmount).anyDerived ? '（含估算：均价×成交量）' : ''}</text>
+        ${indexSlotGeo.partial ? `<text x="${margin.left + plotWidth - 6}" y="${subTop + 16}" fill="#64748b" font-size="10" text-anchor="end">标准视窗 ${STANDARD_KLINE_VIEW_COUNT} 根 · 当前显示 ${klines.length} 根（右侧留白）</text>` : ''}
         ${indexSummarySvg}
 
         <!-- 蜡烛与副图 -->
@@ -5845,21 +6220,21 @@ function renderActiveIndexChart() {
     // 绑定手动画线交互与滚轮缩放
     const svgElem = document.getElementById('indexKLineSvg');
     if (svgElem) {
-      // 需求3: 除了分时图以外，所有K线图都可以通过放大缩小来对图形的日期区间进行缩放
+      // 需求REQ-022: 指数K线同口径 —— 缩放只改根数，下限 5 根、上限严格 200 根
       svgElem.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const fullLen = (indexData.daily_bars && indexData.daily_bars.length) || 100;
-        let curCount = indexState.customZoomCount > 0 
-          ? indexState.customZoomCount 
-          : (winCount || 60);
+        let curCount = indexState.customZoomCount > 0
+          ? indexState.customZoomCount
+          : (winCount || STANDARD_KLINE_VIEW_COUNT);
+        curCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, curCount));
 
         const step = Math.max(1, Math.round(curCount * 0.05));
         if (e.deltaY < 0) {
           // 向上滚 -> 放大 -> 数量减少
-          curCount = Math.max(5, curCount - step);
+          curCount = Math.max(MIN_KLINE_VIEW_COUNT, curCount - step);
         } else {
-          // 向下滚 -> 缩小 -> 数量增加
-          curCount = Math.min(fullLen, curCount + step);
+          // 向下滚 -> 缩小 -> 数量增加 (上限 200 根)
+          curCount = Math.min(STANDARD_KLINE_VIEW_COUNT, curCount + step);
         }
         indexState.customZoomCount = curCount;
         renderActiveIndexChart();
@@ -5875,13 +6250,28 @@ function renderActiveIndexChart() {
             const ratio = 1 - (clickY - margin.top) / (mainHeight - margin.top);
             const clickPrice = roundTo(minPrice + ratio * (maxPrice - minPrice), 2);
             const isPressure = clickPrice >= Number(indexData.price || clickPrice);
+            // 需求REQ-025/026: 基准成交额口径与自动线一致；交易面积按全量K线锚定
+            let crossedAmountYi = 0;
+            let crossedDays = 0;
+            indexAnchorKlines.forEach(item => {
+              const h = Number(item.high);
+              const l = Number(item.low);
+              if (!(Number.isFinite(h) && Number.isFinite(l)) || !(l <= clickPrice && clickPrice <= h)) return;
+              const resolved = resolveKlineAmount(item);
+              if (resolved.amountYi === null) return;
+              crossedDays++;
+              crossedAmountYi += resolved.amountYi;
+            });
             const newLine = {
               id: `index_manual_${Date.now()}_${Math.round(clickPrice * 100)}`,
               price: clickPrice,
               type: isPressure ? '压力位' : '支撑位',
               layerKey: 'manual',
+              crossedDays: crossedDays,
+              crossedAmountYi: Number(crossedAmountYi.toFixed(2)),
               zIndex: nextIndexLineZ()
             };
+            attachTradeAreaToLines([newLine], indexAnchorKlines);
             indexState.lineLayers.manual.lines.push(newLine);
             indexState.topLineId = newLine.id;
             setIndexDrawingMode('none');

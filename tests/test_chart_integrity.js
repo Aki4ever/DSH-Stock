@@ -13,6 +13,11 @@ let svg=c.generateChanlunOverlaySVG(window,i=>i*10,p=>100-p,analysis);
 for(const key of ['pens','segments','pivots','divergences','ma_entanglements'])assert(svg.includes('chanlun-'+key));
 assert(svg.includes('x1="-20"'));assert(svg.includes('width="10"'));assert(!/NaN|undefined/.test(svg));
 c.appState.chanlunLayers.pens=false;svg=c.generateChanlunOverlaySVG(window,i=>i*10,p=>100-p,analysis);assert(!svg.includes('chanlun-pens'));assert(svg.includes('chanlun-segments'));
-assert.equal(c.calculateAutoSupportResistanceLevels([{high:12,low:9,close:10,volume:100,amount_yi:null}],10,1).length,0);
+// 需求REQ-025 (v5.0.0 修订): 成交额缺失时按「均价×成交量」兜底，不再一律拒绝；
+// 但「成交额与成交量同时缺失」仍必须严格拒绝生成自动多阶线（禁止以 0 参与排序）。
+assert.equal(c.calculateAutoSupportResistanceLevels([{high:12,low:9,close:10,volume:100,amount_yi:null}],10,1).length,0,
+ 'amount=null 且 volume 未解析（未经兜底入口）时仍不得以 0 参与排序');
+assert.equal(c.calculateAutoSupportResistanceLevels([{high:12,low:9,close:10,volume:null,amount_yi:null}],10,1).length,0,
+ '成交额与成交量同时缺失时必须拒绝生成自动线');
 assert(c.calculateAutoSupportResistanceLevels([{high:12,low:9,close:10,amount_yi:1}],10,1).length>0);
-console.log('PASS: five SVG layers, independent toggle, off-window endpoints, clipped spans, no inferred turnover');
+console.log('PASS: five SVG layers, independent toggle, off-window endpoints, clipped spans, no turnover without any source');

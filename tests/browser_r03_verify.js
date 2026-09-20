@@ -222,16 +222,20 @@ function check(name, ok, detail = '') {
       layerState.auto === 3 && layerState.up === 1 && layerState.down === 1 && !layerState.blocked,
       `自动 ${layerState.auto} / 压力 ${layerState.up} / 支撑 ${layerState.down} / 可见 ${layerState.visible}${layerState.blocked ? ' / ' + layerState.blocked : ''}`);
 
-    // 日线周期缺少成交额时，必须显式说明原因而不是静默显示 0 根
-    const klineBlocked = await cdp.eval(`(() => {
+    // REQ-025 (v5.0.0 修订)：日线来源未提供成交额时按「均价×成交量」兜底并标注估算口径。
+    // 旧断言的「不生成自动线」口径已被新需求替代，此处验证兜底生效与估算标记。
+    const klineFallback = await cdp.eval(`(() => {
       switchChartPeriod('kline60');
       setAutoLinesCount(3);
+      const bars = appState.activeDetailStock.daily_bars.slice(-60);
       return { auto: countLayerLines('auto'), reason: appState.autoLinesBlockedReason,
-               note: (document.querySelector('#chartLayerPanel .chart-layer-note') || {}).textContent || '' };
+               missingAmount: bars.filter(b => b.amount_yi == null).length,
+               derived: bars.filter(b => resolveKlineAmount(b).derived).length };
     })()`);
-    check('日线缺成交额时自动线不生成并显式说明原因',
-      klineBlocked.auto === 0 && !!klineBlocked.reason && klineBlocked.note.includes('成交额'),
-      klineBlocked.note.trim().slice(0, 80));
+    check('REQ-025 日线缺成交额时按均价×成交量兜底并生成自动线',
+      klineFallback.auto > 0 && !klineFallback.reason &&
+      klineFallback.derived === klineFallback.missingAmount,
+      `自动 ${klineFallback.auto} 根 / 估算 ${klineFallback.derived}/${klineFallback.missingAmount} 根`);
 
     // 回到分时周期恢复自动线，用于图层截图
     await cdp.eval(`switchChartPeriod('timeline'); setAutoLinesCount(3); renderActiveStockChart();`);

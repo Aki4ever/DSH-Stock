@@ -435,6 +435,53 @@ SERVER_START_TIME = time.time()
 SERVER_INSTANCE = None
 SHUTDOWN_REQUESTED = False
 
+
+def build_intraday_chanlun(code: str) -> Dict[str, Any]:
+    """需求REQ-024: 分时级别缠论分析（唯一计算入口，端点与测试共用）。
+
+    口径铁律:
+    1. 分时点视为 1 根 K 线（开=收=高=低=该分钟成交价），级别明确为「分时级别」；
+    2. 复用 scripts.chanlun_analysis.analyze_bars 同一套形态学/动力学算法，不另起一套；
+    3. 来源未提供分时明细或缺少有效成交价时，返回 status=unavailable 并附原因，
+       绝不以日线或任何推测数据冒充分时结构。
+    """
+    from scripts.chanlun_analysis import analyze_bars
+    timeline = fetch_real_timeline(code)
+    items = timeline.get("items") or []
+    trade_date = str(timeline.get("date") or "").replace("-", "")
+    if not items or not trade_date:
+        return {
+            "status": "unavailable",
+            "level": "intraday",
+            "error": timeline.get("error") or "来源未提供当日分时明细，无法生成分时级别缠论",
+            "counts": {},
+            "bars": [],
+        }
+    bars = []
+    for item in items:
+        price = item.get("price")
+        if price is None or price <= 0:
+            continue
+        # analyze_bars 要求日期唯一且递增：分时用「交易日 + 分钟」保证字典序与时间序一致
+        stamp = f"{trade_date[0:4]}-{trade_date[4:6]}-{trade_date[6:8]} {item.get('time')}"
+        bars.append({"date": stamp, "open": price, "close": price,
+                     "high": price, "low": price, "volume": item.get("volume") or 0})
+    if not bars:
+        return {
+            "status": "unavailable",
+            "level": "intraday",
+            "error": "分时明细缺少有效成交价，无法生成分时级别缠论",
+            "counts": {},
+            "bars": [],
+        }
+    analysis = analyze_bars(bars, code=code)
+    analysis["level"] = "intraday"
+    analysis["level_note"] = "分时级别：笔＝分钟级笔，不等于日线级别，不可与日线信号混读"
+    analysis["source"] = timeline.get("source")
+    analysis["trade_date"] = trade_date
+    return analysis
+
+
 # ============================================================
 # 需求REQ-019: 缠论雷达池全池扫描的后台任务状态
 # 状态只记录真实进度与真实结果计数；失败项逐个保留原因，不做吞并。
@@ -1216,6 +1263,18 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             return
 
         # 6. 单只股票详情
+        # 3.9 需求REQ-024: 分时级别缠论分析端点 /api/stock/<code>/intraday-chanlun
+        # 口径: 分时点视为 1 根K线（开=收=高=低=该分钟价），复用 scripts.chanlun_analysis 同一套算法，
+        #       不在前端另起一套；级别明确为「分时级别」，与日线级别严格区分。
+        if url_path.startswith("/api/stock/") and url_path.endswith("/intraday-chanlun"):
+            parts = url_path.split("/")
+            symbol = parts[3] if len(parts) >= 4 else ""
+            try:
+                self._send_json(200, {"code": 200, "symbol": symbol, "data": build_intraday_chanlun(symbol)})
+            except (ValueError, TypeError) as exc:
+                self._send_json(400, {"code": 400, "message": str(exc)})
+            return
+
         if url_path.startswith("/api/stock/"):
             symbol = url_path.replace("/api/stock/", "").strip()
             query = parse_qs(urlsplit(self.path).query)

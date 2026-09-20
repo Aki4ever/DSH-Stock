@@ -13,7 +13,7 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v2.9.0</span>
+      <span id="appVersionBadge" class="version-badge">v5.0.0</span>
       <!-- 需求1: 顶部常显数据快照截取有效期 -->
       <span id="dataValidityBadge" class="data-validity-badge" title="行情来源的实际日期">📅 行情日期未获取</span>
       <span class="brand-tag">已收录主板+创业板</span>
@@ -1867,12 +1867,10 @@
               <button type="button" class="seg-btn" data-period="kline180" onclick="switchChartPeriod('kline180')">🗓️ 180天K线</button>
               <button type="button" class="seg-btn active" data-period="all" onclick="switchChartPeriod('all')">🌟 全部</button>
             </div>
-            <!-- K线缩放区间控制 (按需隐蔽) -->
+            <!-- 需求REQ-022: K线缩放视窗固定为「标准 200 根」口径；滚轮只改根数（5~200），不再提供超窗预设 -->
             <div class="segmented-control" id="chartZoomControl" style="display: none;">
-              <button type="button" class="seg-btn" data-zoom="60" onclick="setChartZoomWindow(60)">近60日</button>
-              <button type="button" class="seg-btn" data-zoom="250" onclick="setChartZoomWindow(250)">近1年</button>
-              <button type="button" class="seg-btn" data-zoom="750" onclick="setChartZoomWindow(750)">近3年</button>
-              <button type="button" class="seg-btn active" data-zoom="max" onclick="setChartZoomWindow('max')">🌟 上市至今(Max)</button>
+              <button type="button" class="seg-btn active" data-zoom="200" onclick="setChartZoomWindow(200)">🎯 标准 200 根</button>
+              <button type="button" class="seg-btn" data-zoom="max" onclick="setChartZoomWindow('max')">🔄 复位标准视窗</button>
             </div>
 
             <!-- K线自定义时间区间控制器 -->
@@ -2349,6 +2347,82 @@
     </div>
   </div>
 
-  <script src="/web/app.js?v=4.4.0"></script>
+  <!-- 需求REQ-026: 辅助线指标「!」口径说明弹窗（与算法同源，交易面积公式必须可见） -->
+  <div id="lineMetricHelpModal" class="modal-overlay" style="display: none; z-index: 99999; backdrop-filter: blur(8px); background-color: rgba(0, 0, 0, 0.85);">
+    <div class="modal-content" style="max-width: 880px; max-height: 86vh; overflow-y: auto; border: 1px solid rgba(56, 189, 248, 0.5); box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);">
+      <div class="modal-header" style="border-bottom: 1px solid rgba(56, 189, 248, 0.3);">
+        <div>
+          <h3 style="font-size: 1.25rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 0.6rem;">
+            <span>! 水平辅助线指标口径说明（交汇成交额 / 交易面积）</span>
+          </h3>
+          <p style="color: #38bdf8; font-size: 0.82rem; margin-top: 0.35rem;">
+            以下口径与图表内标签、图层管理面板数值同源同一算法，不另设口径
+          </p>
+        </div>
+        <button class="modal-close" onclick="closeLineMetricHelp()" style="font-size: 1.6rem; color: #94a3b8; cursor: pointer; background: transparent; border: none;">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1.4rem 1.6rem; color: #cbd5e1; font-size: 0.88rem; line-height: 1.75;">
+
+        <div style="margin-bottom: 1.1rem; background: rgba(30, 41, 59, 0.6); border-left: 4px solid #38bdf8; padding: 0.8rem 1rem; border-radius: 4px;">
+          <strong style="color: #e0f2fe;">📏 一、交汇成交额（既有指标）</strong>
+          <div style="font-size: 0.84rem; color: #cbd5e1; margin-top: 0.35rem;">
+            某条辅助线价格记作 <b>P</b>。对每根 K 线，若满足 <b>low ≤ P ≤ high</b>，则该 K 线与该辅助线「交汇」。<br>
+            <b>交汇成交额</b>＝所有交汇 K 线的成交额之和；<b>交汇交易日</b>＝交汇 K 线的根数（分时周期下即为交汇的分钟点数）。
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.1rem; background: rgba(245, 158, 11, 0.10); border-left: 4px solid #f59e0b; padding: 0.8rem 1rem; border-radius: 4px;">
+          <strong style="color: #fde68a;">📐 二、交易面积（本指标）</strong>
+          <div style="font-size: 0.84rem; color: #e2e8f0; margin-top: 0.35rem;">
+            定义：从该辅助线<b>首个与 K 线交汇的交易日</b>起，至<b>今天（最后一根可用 K 线）</b>为止，<b>剔除该线自身交汇的那些交易日后</b>，剩余交易日对应的 K 线<b>成交额之和</b>。<br>
+            等价说法：这段区间里「<b>没有落在辅助线上的 K 线</b>」的成交额总和。
+          </div>
+          <pre style="margin: 0.6rem 0 0; padding: 0.6rem 0.8rem; background: rgba(2, 6, 23, 0.75); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 4px; color: #f8fafc; font-size: 0.82rem; overflow-x: auto;">D         = 该线全部交汇交易日集合 { d | low_d ≤ P ≤ high_d }
+d_first   = min(D)                        // 无交汇 → 交易面积无定义，显示「未交汇」
+T         = { d | d_first ≤ d ≤ 今天 }
+S_area(P) = Σ amount(d)   for d in (T \ D)</pre>
+          <div style="font-size: 0.84rem; color: #fcd34d; margin-top: 0.5rem;">
+            <b>三条口径铁律：</b><br>
+            ① 累计口径：区间为「首个交汇日 → 今天」，<b>不受当前缩放窗口影响</b>（缩放到 5 根时该数值不变）；<br>
+            ② 必须<b>剔除该线自身交汇的交易日</b>，只统计没有落在辅助线上的 K 线；<br>
+            ③ 区间内若存在成交额不可得的交易日，标签显式标注「<b>覆盖不完整</b>」，<b>绝不以 0 补齐、绝不静默出数</b>。
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.1rem; background: rgba(16, 185, 129, 0.10); border-left: 4px solid #10b981; padding: 0.8rem 1rem; border-radius: 4px;">
+          <strong style="color: #a7f3d0;">💰 三、成交额取值与兜底口径（REQ-025）</strong>
+          <div style="font-size: 0.84rem; color: #e2e8f0; margin-top: 0.35rem;">
+            取值优先级（逐级降级，前一级取到即停止）：<br>
+            &nbsp;&nbsp;1) 来源直接提供的成交额；<br>
+            &nbsp;&nbsp;2) 来源提供的原始成交额（元）÷ 1e8 折算为亿元；<br>
+            &nbsp;&nbsp;3) 兜底：<b>成交额(亿元) = 当日均价 × 当日成交量 ÷ 1e8</b>，其中日 K 均价 = <b>(开 + 收 + 高 + 低) / 4</b>；分时均价优先取该分钟均价，缺失时退化为该分钟成交价。<br>
+            凡使用第 3 级兜底的数据与指标，统一以「<b>（估算：均价×成交量）</b>」后缀标注，与来源原始披露值严格区分。<br>
+            若连均价与成交量都缺失，则该周期<b>不生成自动多阶线</b>，并显式说明原因，不以 0 参与排序或求和。
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.1rem; background: rgba(168, 85, 247, 0.10); border-left: 4px solid #a855f7; padding: 0.8rem 1rem; border-radius: 4px;">
+          <strong style="color: #e9d5ff;">🤖 四、自动多阶线的排序与约束</strong>
+          <div style="font-size: 0.84rem; color: #e2e8f0; margin-top: 0.35rem;">
+            在候选价位池中按<b>交汇成交额降序</b>求解 1~4 根线：第 x 根线的交汇成交额排第 x 大，且其<b>交汇交易日集合不得与已选线完全重复</b>（S_x ≠ S_i），同时相邻线价格保持适度区分。<br>
+            无任何价位满足约束时，本周期不生成自动线并显式说明，而不是画一根凑数线。
+          </div>
+        </div>
+
+        <div style="background: rgba(148, 163, 184, 0.10); border-left: 4px solid #94a3b8; padding: 0.8rem 1rem; border-radius: 4px;">
+          <strong style="color: #e2e8f0;">ℹ️ 五、数据不足时的展示规则</strong>
+          <div style="font-size: 0.84rem; color: #cbd5e1; margin-top: 0.35rem;">
+            系统遵循「禁止虚构数据」底座：不可测算时显示「<b>无法测算</b>」并附具体原因（如成交额与成交量均缺失、无分时明细、无满足约束的价位），<b>不会显示 0 根、0 元或任何推测数值</b>。
+          </div>
+        </div>
+
+        <div style="margin-top: 1.4rem; display: flex; justify-content: flex-end;">
+          <button class="btn btn-secondary" onclick="closeLineMetricHelp()" style="background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; color: #e0f2fe;">已了解指标口径</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/web/app.js?v=5.0.0"></script>
 </body>
 </html>

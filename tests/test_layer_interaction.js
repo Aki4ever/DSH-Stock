@@ -149,4 +149,60 @@ assert.equal(a1._svgY, 180, '渲染必须回写 SVG 坐标供命中检测');
 const emptySvg = (() => { reset(); return ctx.buildHorizontalLinesSVG({ m: { left: 65, top: 20 }, innerW: 700, priceToY: p => 200 - p, refPrice: 18 }); })();
 assert.equal(emptySvg, '', '无任何辅助线时应返回空字符串，不产生占位图形');
 
-console.log('PASS: 多模型共存 / 分模型清除互不影响 / 分模型显隐 / 重合轮换置顶 / 标签精准置顶 / 未命中不改状态 / 统一渲染器');
+// ---------------- REQ-026 图层面板指标摘要与「!」说明入口 ----------------
+// 面板渲染依赖 formatTradeArea（REQ-026 的展示口径），一并注入
+const faStart = src.indexOf('function formatTradeArea(');
+assert(faStart >= 0, '未能定位 formatTradeArea');
+vm.runInContext(src.slice(faStart, src.indexOf('function amountCoverageFlags(', faStart)), ctx);
+
+const panelEl = { innerHTML: '' };
+const prevGetById = ctx.document.getElementById;
+ctx.document.getElementById = (id) => (id === 'chartLayerPanel' ? panelEl : null);
+
+reset();
+A.autoLinesCount = 0;
+A.autoLinesBlockedReason = null;
+ctx.addChartLine('manual_up', {
+  id: 'up1', price: 22, type: '压力位', crossedDays: 4, crossedAmountYi: 12.5,
+  tradeAreaYi: 88.5, tradeAreaDays: 120, tradeAreaExcludedDays: 4, tradeAreaIncomplete: false
+});
+ctx.addChartLine('manual_down', {
+  id: 'dn1', price: 12, type: '支撑位', crossedDays: 0, crossedAmountYi: 0,
+  tradeAreaYi: null, tradeAreaDays: 0, tradeAreaExcludedDays: 0, tradeAreaIncomplete: false
+});
+ctx.renderLineLayerPanel(null);
+assert(/id="btnLineMetricHelp"/.test(panelEl.innerHTML), '图层面板标题旁必须存在「!」指标说明按钮');
+assert(/! 指标说明/.test(panelEl.innerHTML), '按钮文案必须可辨识为指标说明');
+assert(/openLineMetricHelp\(\)/.test(panelEl.innerHTML), '「!」按钮必须绑定指标说明弹窗入口');
+assert(/交易面积: 88\.50亿 \(未交汇: 120天\)/.test(panelEl.innerHTML), '面板必须呈现交易面积（与图内标签同源口径）');
+assert(/交易面积: 未交汇/.test(panelEl.innerHTML), '未交汇的辅助线必须显示「未交汇」而不是 0');
+
+// 图内标签同样必须追加交易面积
+const labelSvg = ctx.buildHorizontalLinesSVG({ m: { left: 65, top: 20 }, innerW: 700, priceToY: p => 200 - p, refPrice: 18 });
+assert(/交易面积: 88\.50亿/.test(labelSvg), '图内辅助线标签必须追加交易面积');
+
+ctx.document.getElementById = prevGetById;
+
+// ---------------- REQ-026 「!」弹窗内容：交易面积公式必须可见 ----------------
+const html = fs.readFileSync('web/index.html', 'utf8');
+const modalStart = html.indexOf('id="lineMetricHelpModal"');
+assert(modalStart >= 0, '页面必须包含「!」指标说明弹窗容器');
+const modal = html.slice(modalStart, html.indexOf('</div>\n  </div>\n\n  <script', modalStart)).replace(/\u00a0/g, ' ');
+for (const [needle, why] of [
+  ['S_area(P)', '交易面积公式必须写入弹窗'],
+  ['d_first', '首个交汇交易日的锚定必须写明'],
+  ['T \\ D', '必须写明剔除自身交汇交易日'],
+  ['不受当前缩放窗口影响', '必须写明累计口径不受缩放影响'],
+  ['剔除该线自身交汇的交易日', '必须写明剔除规则'],
+  ['覆盖不完整', '必须写明覆盖不完整不得以 0 补齐'],
+  ['当日均价 × 当日成交量', '必须写明成交额兜底口径'],
+  ['（估算：均价×成交量）', '必须写明估算口径的显式标记'],
+  ['交汇交易日集合不得与已选线完全重复', '必须写明自动线排序约束'],
+  ['不会显示 0 根、0 元或任何推测数值', '必须写明数据不足时的展示规则']
+]) {
+  assert(modal.includes(needle), `弹窗缺少必要内容：${why}`);
+}
+assert(html.includes('onclick="closeLineMetricHelp()"'), '弹窗必须可关闭');
+assert(html.includes('id="lineMetricHelpModal"'), '弹窗容器 id 必须与 openLineMetricHelp 一致');
+
+console.log('PASS: 多模型共存 / 分模型清除互不影响 / 分模型显隐 / 重合轮换置顶 / 标签精准置顶 / 未命中不改状态 / 统一渲染器 / 交易面积与「!」入口与公式可见');
