@@ -127,8 +127,9 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     环境变量用于同机维护多份持仓底册；与 portfolio_checkup 保持同一口径，
     避免 CLI 的「持仓看板」与「风险体检」两条路径读出不同底册。
     """
-    if config_path is None:
-        config_path = os.environ.get("DSH_STOCK_CONFIG")
+    if not config_path:
+        # 空/空白环境变量等同未设置，否则会尝试打开空路径
+        config_path = (os.environ.get("DSH_STOCK_CONFIG") or "").strip() or None
     if config_path is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         config_path = os.path.join(base_dir, "config", "stock_config.json")
@@ -142,7 +143,11 @@ def build_portfolio_summary(config_path: Optional[str] = None, allow_mock: bool 
     """
     cfg = load_config(config_path)
     raw_positions = cfg.get("portfolio", [])
-    if raw_positions and cfg.get("portfolio_verified") is not True:
+    if not raw_positions:
+        # 空底册必须拒绝，而不是输出「共 0 只持仓 / ¥0.00」——那会被读成组合价值为 0
+        raise RuntimeError("持仓底册为空，未配置任何持仓，无可展示内容；"
+                           "请在 config/stock_config.json 的 portfolio 中填写持仓")
+    if cfg.get("portfolio_verified") is not True:
         raise RuntimeError("持仓配置未确认来源，不能作为真实持仓；核实后设置portfolio_verified=true")
     alert_rules = cfg.get("alert_rules", {})
 

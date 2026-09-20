@@ -1,0 +1,69 @@
+{
+  "checks": [
+    {
+      "n": "未配置持仓时门禁条明确说明原因",
+      "ok": true,
+      "d": "持仓底册为空，未配置任何持仓，无可体检内容（底册声明条数：0，未计入任何统计）"
+    },
+    {
+      "n": "未配置持仓时不显示任何汇总数字",
+      "ok": true,
+      "d": ""
+    },
+    {
+      "n": "未配置持仓时表格不产出任何行且文案明确",
+      "ok": true,
+      "d": "持仓底册未核实，本页不产出任何盈亏或风险结论。请先在 config/stock_config.json 的 portfolio 中填写持仓的"
+    },
+    {
+      "n": "空底册与已填未核实的引导动作被区分",
+      "ok": true,
+      "d": "空底册引导为填写而非核实"
+    },
+    {
+      "n": "持仓计数如实为 0 只",
+      "ok": true,
+      "d": "0 只"
+    },
+    {
+      "n": "数据口径提示不假装有数据",
+      "ok": true,
+      "d": "等待持仓核实"
+    },
+    {
+      "n": "接口如实返回空底册状态",
+      "ok": true,
+      "d": "持仓底册为空，未配置任何持仓，无可体检内容"
+    },
+    {
+      "n": "规则版本与免责声明仍然下发",
+      "ok": true,
+      "d": ""
+    },
+    {
+      "n": "页面控制台无未预期错误",
+      "ok": true,
+      "d": ""
+    }
+  ],
+  "console_errors": [],
+  "render": {
+    "gateShown": true,
+    "gateText": "持仓底册为空，未配置任何持仓，无可体检内容（底册声明条数：0，未计入任何统计）",
+    "summaryShown": false,
+    "count": "0 只",
+    "rows": 0,
+    "bodyText": "持仓底册未核实，本页不产出任何盈亏或风险结论。请先在 config/stock_config.json 的 portfolio 中填写持仓的代码、股数、成本价与买入日期，并将 portfolio_verified 置为 true。",
+    "dataStatus": "等待持仓核实",
+    "verifyTabHidden": true
+  },
+  "api": {
+    "status": "unverified",
+    "declared": 0,
+    "pos": 0,
+    "sum": 0,
+    "reason": "持仓底册为空，未配置任何持仓，无可体检内容",
+    "version": "REQ-021/v1",
+    "disclaim": true
+  }
+}

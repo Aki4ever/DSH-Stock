@@ -326,7 +326,14 @@ def cmd_status():
     print("  • 系统版本: " + json.load(open(os.path.join(BASE_DIR, 'config/version.json')))['version'])
     print(f"  • 大盘指数基准: {len(cfg.get('indices', []))} 只")
     print(f"  • 监控自选股: {len(cfg.get('watchlist', []))} 只")
-    print("  • 持仓状态: " + (str(len(cfg.get("portfolio", [])))+" 只已核实" if cfg.get("portfolio_verified") is True else "未核实，样例配置不计入实际持仓"))
+    _pf = cfg.get("portfolio") or []
+    if cfg.get("portfolio_verified") is True and _pf:
+        _pf_text = f"{len(_pf)} 只已核实"
+    elif not _pf:
+        _pf_text = "未配置持仓（体检与盈亏看板不会产出任何结论）"
+    else:
+        _pf_text = f"已填 {len(_pf)} 只但未核实，不计入实际持仓（体检不产出结论）"
+    print("  • 持仓状态: " + _pf_text)
     print(f"  • 预警参数: 止盈={cfg.get('alert_rules', {}).get('take_profit_ratio')*100:.0f}% ｜ 止损={cfg.get('alert_rules', {}).get('stop_loss_ratio')*100:.0f}%")
     print(f"  • 工作目录: {BASE_DIR}")
     return 0

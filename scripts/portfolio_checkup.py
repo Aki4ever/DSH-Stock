@@ -88,7 +88,9 @@ def resolve_config_path(config_path: Optional[str] = None) -> str:
     """
     if config_path:
         return config_path
-    return os.environ.get("DSH_STOCK_CONFIG") or os.path.join(BASE_DIR, "config", "stock_config.json")
+    # 空字符串环境变量等同未设置，否则会得到空路径
+    return (os.environ.get("DSH_STOCK_CONFIG") or "").strip() or \
+        os.path.join(BASE_DIR, "config", "stock_config.json")
 
 
 def load_stock_config(config_path: Optional[str] = None) -> Dict[str, Any]:

@@ -17,7 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts import portfolio_checkup  # noqa: E402
 from scripts.portfolio_checkup import (  # noqa: E402
     DEFAULT_DYNAMIC_RULES, DEFAULT_STATIC_RULES, RULE_VERSION, _position_dynamic_rules,
-    _position_static_rules, format_report, load_stock_config, run_checkup, verify_portfolio,
+    _position_static_rules, format_report, load_stock_config, resolve_config_path,
+    run_checkup, verify_portfolio,
 )
 
 
@@ -341,6 +342,53 @@ class FullCheckupTests(unittest.TestCase):
         pos = report["positions"][0]
         self.assertIn("D1_ma_breakdown", pos["unavailable_rules"])
         self.assertIn("D3_trailing_stop", pos["unavailable_rules"])
+
+    def test_env_var_override_and_empty_env_var_edge_case(self):
+        import os as _os
+        cfg = self.write([], verified=False)
+        # 显式参数优先
+        self.assertEqual(portfolio_checkup.resolve_config_path(cfg), cfg)
+        # 空/空白环境变量等同未设置，不得解析为空路径
+        old = _os.environ.get("DSH_STOCK_CONFIG")
+        try:
+            for value in ("", "   "):
+                _os.environ["DSH_STOCK_CONFIG"] = value
+                resolved = portfolio_checkup.resolve_config_path()
+                self.assertTrue(resolved.endswith("stock_config.json"), resolved)
+                self.assertNotEqual(resolved.strip(), "")
+            _os.environ["DSH_STOCK_CONFIG"] = cfg
+            self.assertEqual(portfolio_checkup.resolve_config_path(), cfg)
+        finally:
+            if old is None:
+                _os.environ.pop("DSH_STOCK_CONFIG", None)
+            else:
+                _os.environ["DSH_STOCK_CONFIG"] = old
+
+    def test_stock_portfolio_uses_same_path_precedence(self):
+        import os as _os
+        from scripts import stock_portfolio
+        cfg = self.write([], verified=False)
+        old = _os.environ.get("DSH_STOCK_CONFIG")
+        try:
+            _os.environ["DSH_STOCK_CONFIG"] = ""
+            self.assertTrue(stock_portfolio.load_config()["system"]["project_name"])
+            _os.environ["DSH_STOCK_CONFIG"] = cfg
+            self.assertEqual(stock_portfolio.load_config()["portfolio"], [],
+                             "两条 CLI 路径必须读出同一份底册")
+        finally:
+            if old is None:
+                _os.environ.pop("DSH_STOCK_CONFIG", None)
+            else:
+                _os.environ["DSH_STOCK_CONFIG"] = old
+
+    def test_empty_portfolio_reason_is_explicit(self):
+        cfg = self.write([])
+        with patch.object(portfolio_checkup, "get_batch_quotes") as fake:
+            report = run_checkup(cfg)
+        fake.assert_not_called()
+        self.assertEqual(report["status"], "unverified")
+        self.assertEqual(report["portfolio_declared_count"], 0)
+        self.assertIn("未配置任何持仓", report["reason"])
 
     def test_config_loader_reads_real_shape(self):
         cfg = self.write([{"code": "sh600519", "shares": 1, "cost_price": 1}])

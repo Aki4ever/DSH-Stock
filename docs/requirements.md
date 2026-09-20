@@ -1,7 +1,7 @@
 # DSH 股票量化与自选监控工程需求台账 (Requirements Ledger)
 
 > ### 🏷️ **版本信息与实施追踪**
-> - **当前系统实施总版本**：`v4.9.0`
+> - **当前系统实施总版本**：`v4.9.1`
 > - **维护工程**：DSH 股票监控与量化分析系统 (DSH Stock)
 > - **最后更新日期**：2026-09-20
 > - **版本状态**：`[Release 稳定生效 / R03 四批全部交付；REQ-021 待真实持仓核验后启用]`
@@ -374,3 +374,30 @@
 | REQ-021 持仓组合风险体检与动态止盈止损 | v4.9.0 | 已交付，**待用户核验真实持仓后启用** |
 
 遗留待用户确认事项：① 持仓底册 `portfolio_verified` 未设置，体检功能保持门禁关闭；② 飞书/钉钉 Webhook 未配置，真实下发联调未做；③ 数据来源 `web.ifzq.gtimg.cn` 当前返回 HTTP 501，日线依赖类功能（选股判定）在其恢复前无法产出当日结论。
+
+
+## 2026-09-20 生效变更：v4.9.1（持仓底册按用户确认归零 + 测试解耦）
+
+直接前版：v4.9.0。
+
+### 持仓底册状态变更
+用户确认 `config/stock_config.json` 中原有的 3 条持仓（贵州茅台 / 宁德时代 / 比亚迪）**是占位数据而非真实持仓**。据此：
+- `portfolio` 清空为 `[]`，`portfolio_verified` 显式置为 `false`（不再靠字段缺失隐式表达）。
+- 新增 `dynamic_rules` 显式配置块（`ma_period` / `trailing_drawdown_ratio` 与三个规则开关），默认值与代码内一致，便于用户自行调整。
+- `config/README.md` 新增持仓底册章节：说明为何需要 `portfolio_verified`、当前默认状态、填写示例与逐字段说明、规则阈值归属、以及 `DSH_STOCK_CONFIG` 多底册用法。
+
+### 空底册一律拒绝输出（不再显示 0 元）
+`scripts/stock_portfolio.py::build_portfolio_summary` 原先在空底册时返回空组合，CLI「投资组合资产全景看板」会打印「共 0 只持仓标的 / ¥0.00 / +¥0.00」。这会被读成「我的组合价值为 0 元」，属于会误导的呈现。现改为**与 REQ-021 体检同一口径拒绝**：抛出明确错误「持仓底册为空，未配置任何持仓，无可展示内容」。日报生成器已捕获该异常并以「持仓未获取：…」如实登记，不受影响。
+
+### Web 引导文案区分两种未就绪情形
+- **空底册**：引导「请先在 `config/stock_config.json` 的 `portfolio` 中填写持仓的代码、股数、成本价与买入日期」。
+- **已填但未核实**：引导「请先核实每条持仓…确认无误后由持仓本人将 `portfolio_verified` 置为 `true`」。
+两种情形此前套用同一句话，会对着空底册要求用户去「核实每条持仓」。
+
+### 缺陷修复
+- **`DSH_STOCK_CONFIG` 为空字符串导致崩溃**：空/空白环境变量此前被当作已设置，`load_config` 会尝试打开空路径并抛 `FileNotFoundError`。现空值等同未设置（`stock_portfolio` 与 `portfolio_checkup` 同一口径）。
+- **3 个既有测试耦合真实配置的占位数据**：`tests/test_stock_portfolio.py` 的两项与 `tests/test_stock_cli.py` 的子命令测试直接读取真实 `config/stock_config.json`，因此清空占位持仓后即失败。配置本就应该可以被改，测试不得依赖其内容。已全部改为**隔离 fixture 底册**（含经 `DSH_STOCK_CONFIG` 注入的子进程场景），并补测「空底册必须拒绝且输出中不得出现 `¥0.00`」。
+
+### 验证
+- `python3 -m unittest discover -s tests`：**177 项 PASS**（`test_r03_portfolio_checkup.py` 增至 34 项）。
+- 浏览器「未配置持仓」空态：9/9 PASS，证据 `docs/verification/2026-09-20-r03-p3/04-portfolio-empty.png` 与 `browser-report-empty.json`。

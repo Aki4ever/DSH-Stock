@@ -63,9 +63,42 @@ class TestStockCliAndReports(unittest.TestCase):
         for command in ['status','--help','data-audit']:
             res=subprocess.run([sys.executable,cli_py,command],capture_output=True,text=True)
             self.assertEqual(res.returncode,0,res.stderr)
-        res=subprocess.run([sys.executable,cli_py,'portfolio'],capture_output=True,text=True)
-        self.assertEqual(res.returncode,1)
-        self.assertIn('持仓配置未确认来源',res.stdout)
+        # 持仓命令用隔离 fixture 底册，不依赖真实配置里是否填了持仓
+        with tempfile.TemporaryDirectory() as tmp:
+            verified=os.path.join(tmp,'verified.json')
+            with open(verified,'w',encoding='utf-8') as f:
+                json.dump({"portfolio":[{"code":"sh600519","name":"贵州茅台","shares":100,
+                                        "cost_price":1000.0,"buy_date":"2026-06-15"}],
+                           "portfolio_verified":True,"alert_rules":{}}, f)
+            res=subprocess.run([sys.executable,cli_py,'portfolio','--json'],
+                               capture_output=True,text=True,
+                               env={**os.environ,'DSH_STOCK_CONFIG':verified})
+            # 真实行情若不可用应为明确失败，可用时必须是合法 JSON 且带规则版本
+            if res.returncode==0:
+                payload=json.loads(res.stdout)
+                self.assertEqual(payload['rule_version'],'REQ-021/v1')
+                self.assertEqual(payload['status'],'available')
+
+            unverified=os.path.join(tmp,'unverified.json')
+            with open(unverified,'w',encoding='utf-8') as f:
+                json.dump({"portfolio":[{"code":"sh600519","name":"贵州茅台","shares":100,
+                                       "cost_price":1000.0,"buy_date":"2026-06-15"}],
+                           "portfolio_verified":False,"alert_rules":{}}, f)
+            res=subprocess.run([sys.executable,cli_py,'portfolio'],
+                               capture_output=True,text=True,
+                               env={**os.environ,'DSH_STOCK_CONFIG':unverified})
+            self.assertEqual(res.returncode,1)
+            self.assertIn('未确认来源',res.stdout)
+
+            empty=os.path.join(tmp,'empty.json')
+            with open(empty,'w',encoding='utf-8') as f:
+                json.dump({"portfolio":[],"portfolio_verified":False,"alert_rules":{}}, f)
+            res=subprocess.run([sys.executable,cli_py,'portfolio'],
+                               capture_output=True,text=True,
+                               env={**os.environ,'DSH_STOCK_CONFIG':empty})
+            self.assertEqual(res.returncode,1)
+            self.assertIn('未配置任何持仓',res.stdout)
+            self.assertNotIn('¥0.00',res.stdout)
 
 
 if __name__ == "__main__":

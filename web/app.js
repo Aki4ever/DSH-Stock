@@ -6639,7 +6639,13 @@ function renderPortfolioTable() {
   const counter = document.getElementById('portfolioPositionCount');
   if (!body) return;
   if (renderPortfolioGate()) {
-    body.innerHTML = '<tr><td colspan="9" class="empty-cell">持仓底册未核实，本页不产出任何盈亏或风险结论。请先核实每条持仓的代码、股数、成本价与买入日期。</td></tr>';
+    // 空底册与「已填但未核实」是两种不同情形，引导动作也不同，不得套用同一句话
+    const report = portfolioState.report || {};
+    const empty = (report.portfolio_declared_count || 0) === 0;
+    const guidance = empty
+      ? '请先在 config/stock_config.json 的 portfolio 中填写持仓的代码、股数、成本价与买入日期，并将 portfolio_verified 置为 true。'
+      : '请先核实每条持仓的代码、股数、成本价与买入日期，确认无误后由持仓本人将 portfolio_verified 置为 true。';
+    body.innerHTML = `<tr><td colspan="9" class="empty-cell">持仓底册未核实，本页不产出任何盈亏或风险结论。${guidance}</td></tr>`;
     if (counter) counter.textContent = '0 只';
     return;
   }

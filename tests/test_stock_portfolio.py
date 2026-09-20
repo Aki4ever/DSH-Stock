@@ -73,8 +73,20 @@ class TestStockPortfolio(unittest.TestCase):
         self.assertIn("alert_rules", cfg)
         self.assertGreater(len(cfg["watchlist"]), 0)
 
+    # 以下用例一律使用隔离 fixture 底册，不依赖真实 config/stock_config.json 的内容——
+    # 配置本就应该可以被改（例如清空占位持仓），测试不得因此失败。
+    FIXTURE = {
+        "portfolio_verified": True,
+        "portfolio": [
+            {"code": "sh600519", "name": "贵州茅台", "shares": 100, "cost_price": 1000.0, "buy_date": "2026-06-15"},
+            {"code": "sz300750", "name": "宁德时代", "shares": 500, "cost_price": 200.0, "buy_date": "2026-07-20"},
+        ],
+        "alert_rules": {"take_profit_ratio": 0.20, "stop_loss_ratio": -0.08,
+                        "daily_surge_ratio": 0.05, "daily_plunge_ratio": -0.05},
+    }
+
     def test_build_portfolio_summary_and_alerts(self):
-        cfg=load_config();cfg['portfolio_verified']=True
+        cfg=dict(self.FIXTURE)
         with patch('scripts.stock_portfolio.load_config',return_value=cfg),patch('scripts.stock_portfolio.get_batch_quotes',return_value=[generate_mock_quote(p['code']) for p in cfg['portfolio']]):
             summary, alerts = build_portfolio_summary()
         self.assertGreater(summary.total_market_value, 0)
@@ -85,10 +97,22 @@ class TestStockPortfolio(unittest.TestCase):
             self.assertIn(a.level, ["INFO", "WARNING", "DANGER", "SUCCESS"])
 
     def test_unverified_positions_and_missing_prices_blocked(self):
-        with self.assertRaises(RuntimeError):build_portfolio_summary()
-        cfg=load_config();cfg['portfolio_verified']=True
+        # 1. 已填持仓但未核实 → 拒绝
+        cfg=dict(self.FIXTURE);cfg['portfolio_verified']=False
+        with patch('scripts.stock_portfolio.load_config',return_value=cfg):
+            with self.assertRaises(RuntimeError):build_portfolio_summary()
+        # 2. 已核实但真实行情未获取 → 拒绝，且不得输出 0 盈亏
+        cfg=dict(self.FIXTURE)
         with patch('scripts.stock_portfolio.load_config',return_value=cfg),patch('scripts.stock_portfolio.get_batch_quotes',return_value=[]):
             with self.assertRaises(RuntimeError):build_portfolio_summary()
+
+    def test_empty_portfolio_is_refused_without_zero_totals(self):
+        # 空底册必须拒绝：绝不能输出「共 0 只持仓 / ¥0.00」这种会被读成组合价值为 0 的结果
+        cfg={"portfolio": [], "portfolio_verified": False, "alert_rules": {}}
+        with patch('scripts.stock_portfolio.load_config',return_value=cfg):
+            with self.assertRaises(RuntimeError) as ctx:
+                build_portfolio_summary()
+        self.assertIn("持仓底册为空", str(ctx.exception))
 
 if __name__ == "__main__":
     unittest.main()
