@@ -4,7 +4,7 @@
 > - **当前系统实施总版本**：`v5.0.0`（**已交付**／R04 全批）
 > - **维护工程**：DSH 股票监控与量化分析系统 (DSH Stock)
 > - **最后更新日期**：2026-09-20
-> - **版本状态**：`[Release 稳定生效 / R03 四批全部交付（v4.6.0~v4.9.1）；REQ-021 功能已交付但因持仓底册为空而处于门禁关闭状态；R04（REQ-022~026）v5.0.0 已交付并完成真机浏览器验收（30/30 PASS）]`
+> - **版本状态**：`[Release 稳定生效 / R03 四批全部交付（v4.6.0~v4.9.1）；REQ-021 功能已交付但因持仓底册为空而处于门禁关闭状态；R04（REQ-022~026）v5.0.0 已交付并完成真机浏览器验收（37/37 PASS，个股 + 指数双路径）]`
 
 本文档是本工程唯一的**独立核心需求管理台账**。任何规则与代码的变更必须在此溯源记录。
 
@@ -499,8 +499,10 @@
   - [x] 图层面板标题旁存在「!」按钮，可点击打开说明弹窗，弹窗内含交易面积公式原文与三条口径铁律；
   - [x] 手动画一条压力线 → 标签出现「交易面积」且数值 = 首个交汇日至今非交汇日成交额之和——浏览器实测以全量 6007 根 K 线独立手算比对，两条自动线逐条一致（83434.80 亿 / 82527.03 亿）；
   - [x] 缩放窗口从 200 根改到 5 根，同一条线的交易面积数值**保持不变**；
+  - [x] 指数详情页同口径：首次切「全部K线」实绘 200 根，连续缩小后仍被夹取在 200 根，首根左缘 / 占用宽度 / 单根宽度缩放前后逐位不变。
   - [x] 该线从未交汇时显示「未交汇」而非 0；
-  - [x] 使用 REQ-025 兜底成交额时，标签带「估算」标记。
+  - [x] 使用 REQ-025 兜底成交额时，标签带「估算」标记；
+  - [x] 指数详情页副图同样走兜底口径：来源 200/200 根缺 `amount_yi` 而 `volume` 可得时，副图实绘 200 根柱并标注「（含估算：均价×成交量）」与估算根数（修复前此处为空白副图）。
 
 ### R04 实施影响面（已逐项落实）
 | 文件 | 实际改动 |
@@ -510,12 +512,12 @@
 | `web/style.css` | 新增 `.chart-layer-btn.help` 与 `.chart-layer-metric`（复用 `chart-layer-btn` 谱系） |
 | `scripts/stock_web_server.py` | 新增 `build_intraday_chanlun()` 与 `GET /api/stock/<code>/intraday-chanlun`（分钟点→K线，复用 `scripts.chanlun_analysis.analyze_bars`） |
 | `tests/test_chart_integrity.js` | 按 REQ-025 改写既有断言：`amount_yi: null` 且无成交量/均价时为空 |
-| `tests/` 新增 | `test_r04_chart_viewport.js`（槽宽/右侧留白/兜底/交易面积/分时 time 基准）、`test_r04_intraday_chanlun.py`（分时端点 6 项）、`browser_r04_verify.js`（真机 30 项） |
+| `tests/` 新增 | `test_r04_chart_viewport.js`（槽宽/右侧留白/兜底/交易面积/分时 time 基准）、`test_r04_intraday_chanlun.py`（分时端点 6 项）、`browser_r04_verify.js`（真机 37 项） |
 | `web/index.html` / `web/style.css` | 静态版本徽标与首屏回退版本同步至 `v5.0.0`（与 `config/version.json` 一致） |
 
 **版本差异**：新增 REQ-022/023/024/025/026（R04 全批，v5.0.0）；REQ-014 中「禁止 volume×close 推造成交额」的表述由 REQ-025 修订为「允许带标记的兜底估算」。
 
 ### R04 验证证据
 - 静态回归：`python3 -m unittest discover -s tests` **183 项 PASS**（新增 `test_r04_intraday_chanlun.py` 6 项）；`node tests/test_r04_chart_viewport.js` / `test_chart_integrity.js` / `test_layer_interaction.js` / `test_detail_requests.js` 全 PASS。
-- 真机浏览器：`node tests/browser_r04_verify.js` **30/30 PASS**，证据 `docs/verification/2026-09-20-r04/`（6 张截图 + `browser-report.json` + 验证记录 README）。
+- 真机浏览器：`node tests/browser_r04_verify.js` **37/37 PASS**（个股 + 指数双路径；含分时禁缩放、指数 200 根与几何不变、成交额副图与指数副图估算标注），证据 `docs/verification/2026-09-20-r04/`（7 张截图 + `browser-report.json` + 验证记录 README）。
 - R03 既有浏览器回归同步按 REQ-025 修订断言后 `node tests/browser_r03_verify.js` **20/20 PASS**。

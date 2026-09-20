@@ -1,6 +1,6 @@
 {
   "base": "http://127.0.0.1:8888",
-  "generated_at": "2026-09-20T11:07:28.696Z",
+  "generated_at": "2026-09-20T11:40:10.745Z",
   "checks": [
     {
       "name": "headless Chrome 已就绪",
@@ -58,6 +58,36 @@
       "detail": "首根左缘 65.5 / 绘图区左缘 65"
     },
     {
+      "name": "REQ-022 分时图滚轮不缩放（维持全天全景）",
+      "ok": true,
+      "detail": "缩放计数 0 → 0 / 仍为分时=true"
+    },
+    {
+      "name": "REQ-022 指数详情页首次切 Tab 同样固定标准 200 根",
+      "ok": true,
+      "detail": "sh000001 · 实绘 200 根"
+    },
+    {
+      "name": "REQ-022 指数详情页缩放上限严格 200 根（不得超出）",
+      "ok": true,
+      "detail": "状态 200 / 实绘 200 根"
+    },
+    {
+      "name": "REQ-022 指数详情页缩放不改变绘图区几何与首根位置（同口径）",
+      "ok": true,
+      "detail": "首根左缘 60.9121 → 60.9121 · 占用宽度 1301.1758 → 1301.1758 · 单根宽度 4.690799999999999 → 4.690799999999999"
+    },
+    {
+      "name": "REQ-025 指数副图成交额同样走兜底口径（不再因来源缺 amount_yi 而空白）",
+      "ok": true,
+      "detail": "来源缺成交额 200/200 根 · 副图柱 200 根 · 阻断提示=false"
+    },
+    {
+      "name": "REQ-025 指数副图的估算口径被显式标注",
+      "ok": true,
+      "detail": "标题标注=true / 根数说明=true"
+    },
+    {
       "name": "REQ-025 日线来源未提供成交额（旧口径下无法画线）",
       "ok": true,
       "detail": "200/200 根缺成交额"
@@ -76,6 +106,11 @@
       "name": "REQ-025 副图/主图必须显式标注估算口径与估算根数（副图切为成交量时同样可见）",
       "ok": true,
       "detail": "副图=vol / 成交额副图标注=false / 成交量副图标注=true"
+    },
+    {
+      "name": "REQ-025 成交额副图本身也必须标注估算口径与估算根数",
+      "ok": true,
+      "detail": "副图=amt / 标题标注=true / 根数说明=true / 副图柱 200 根 / 蜡烛实体 202 根"
     },
     {
       "name": "REQ-026 交易面积与「首个交汇日→今天剔除自身交汇日」手算一致",
@@ -157,6 +192,7 @@
     "01-standard-200-bars.png",
     "02-zoom-same-page.png",
     "03-right-padding-60-bars.png",
+    "07-index-standard-200-bars.png",
     "04-auto-lines-with-derived-amount.png",
     "05-metric-help-modal.png",
     "06-timeline-chanlun-and-autolines.png"

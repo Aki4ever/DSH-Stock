@@ -11,22 +11,48 @@ function slice(startMarker, endMarker) {
   return src.slice(a, b);
 }
 
-// ---------- 上下文 1: K线视图工具 + 日K/分时 SVG ----------
+// ---------- 上下文 1: 真实 app.js 全量加载 ----------
+// 早期按标记切片拼装的做法存在一个致命盲点：后加载的切片会再次定义同名函数，
+// 于是先前加载的「旧副本」会把新实现静默覆盖，测试看起来在验证新代码、实际跑的是旧逻辑。
+// 本用例因此直接在全量源码上求值，只补 DOM/事件桩，保证断言对象永远是文件里的那一份实现。
 const ctx = {
-  appState: { showChanlunDraw: false, chanlunLayers: {}, lineLayers: {}, topLineId: null, autoLinesCount: 0 },
+  appState: {
+    showChanlunDraw: false, chanlunLayers: {}, lineLayers: {}, topLineId: null, autoLinesCount: 0,
+    chartPeriod: 'all', chartCustomZoomCount: 0, chartSubplot: 'vol', activeDetailStock: null,
+    intradayChanlunCode: null, intradayChanlunPending: null, autoLinesBlockedReason: null, version: 'test'
+  },
   console,
-  document: { querySelectorAll: () => [], getElementById: () => null },
   window: {},
-  Math, Number, Object, Array, JSON, Map, Set, Date, isNaN, isFinite, parseFloat, parseInt, String, Boolean, Error
+  navigator: { userAgent: 'node-vm' },
+  location: { href: 'http://127.0.0.1:0/', search: '', hash: '' },
+  localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+  fetch: async () => ({ ok: false, json: async () => ({}) }),
+  setTimeout, clearTimeout, setInterval, clearInterval,
+  Math, Number, Object, Array, JSON, Map, Set, Date, isNaN, isFinite, parseFloat, parseInt,
+  String, Boolean, Error, Promise, RegExp, Symbol, encodeURIComponent, decodeURIComponent
+};
+// DOM 桩：任何 getElementById/querySelector 都返回一个记录型空元素，避免初始化阶段抛错
+function stubEl() {
+  return {
+    style: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    dataset: {}, children: [], value: '', textContent: '', innerHTML: '', hidden: false,
+    appendChild() {}, removeChild() {}, remove() {}, setAttribute() {}, getAttribute: () => null,
+    addEventListener() {}, removeEventListener() {}, querySelector: () => null, querySelectorAll: () => [],
+    closest: () => null, insertAdjacentHTML() {}, focus() {}, click() {}, contains: () => false
+  };
+}
+ctx.document = {
+  getElementById: () => stubEl(),
+  querySelector: () => stubEl(),
+  querySelectorAll: () => [],
+  createElement: () => stubEl(),
+  addEventListener() {}, removeEventListener() {},
+  documentElement: stubEl(), body: stubEl(), title: 'test'
 };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-vm.runInContext(slice('const STANDARD_KLINE_VIEW_COUNT', 'function generateDailyKlineSVG('), ctx);
-vm.runInContext(slice('function formatTradeArea(', 'function generateDailyKlineSVG('), ctx);
-vm.runInContext(slice('function generateChanlunOverlaySVG(', 'function renderChanlunLegend('), ctx);
-vm.runInContext(slice('function calculateDistributionSummary(', 'function attachTradeAreaToLines('), ctx);
-vm.runInContext(slice('function calculateAutoSupportResistanceLevels(', 'function setAutoLinesCount('), ctx);
-vm.runInContext(slice('function generateDailyKlineSVG(', '/**\n * 需求1: 关闭股票详情全屏页面'), ctx);
+vm.runInContext(src, ctx, { filename: 'web/app.js' });
+// 初始化阶段注册的 DOMContentLoaded 回调不会在 vm 中触发，此处不执行任何 DOM 初始化逻辑。
 // 渲染路径依赖的既有小工具：在真实页面中由 app.js 提供，此处按原实现注入
 ctx.roundTo = (num, decimals = 2) => {
   const f = Math.pow(10, decimals);
@@ -123,6 +149,16 @@ const fallbackBars = [
 ].map(ctx.withResolvedAmount);
 assert(fallbackBars.every(b => b.amount_derived === true && b.amount_yi > 0), '兜底后每根都必须带有估算标记与正成交额');
 assert(ctx.calculateAutoSupportResistanceLevels(fallbackBars, 11, 1).length > 0, '兜底口径下自动多阶线必须能够生成');
+// 估算标记的「粘性」：withResolvedAmount 补齐后 amount_yi 已是具体数值，
+// 覆盖判定必须仍能识别其来源为估算，否则副图/指数图的估算标注会静默消失。
+const enrichedBars = fallbackBars.map(ctx.withResolvedAmount);
+const enrichedFlags = ctx.amountCoverageFlags(enrichedBars);
+assert.equal(enrichedFlags.derived, enrichedBars.length, '已补齐的估算样本必须仍被判定为估算口径（标记不得因补齐而丢失）');
+assert.equal(enrichedFlags.anyDerived, true, 'anyDerived 必须在补齐后仍为真');
+assert.equal(ctx.amountCoverageFlags(fallbackBars).derived, fallbackBars.length, '未补齐的原始样本同样必须被判定为估算');
+const realBars = [{ amount_yi: 3.2, volume: 10000, open: 10, close: 10, high: 10, low: 10 }];
+assert.equal(ctx.amountCoverageFlags(realBars).anyDerived, false, '真实成交额不得被误判为估算口径');
+
 // 连成交量都缺失 → 仍然严格拒绝
 const blockedBars = [{ date: '2026-09-01', open: 10, close: 10.5, high: 11, low: 9.5, amount_yi: null, volume: null }];
 assert.equal(ctx.calculateAutoSupportResistanceLevels(blockedBars, 10.5, 1).length, 0, '无成交额且无法兜底时仍必须拒绝生成');

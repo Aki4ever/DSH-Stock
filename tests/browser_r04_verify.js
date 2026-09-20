@@ -198,6 +198,100 @@ const CHIP_PROBE = `(() => {
       `首根左缘 ${p60.firstLeft.toFixed(1)} / 绘图区左缘 ${p60.plotLeft}`);
     const shotPad = await cdp.shot('03-right-padding-60-bars.png');
 
+    // ---------- REQ-022：分时图仍必须禁用滚轮缩放（全天全景）----------
+    await cdp.eval(`switchChartPeriod('timeline')`);
+    await sleep(2500);
+    const tlZoomGuard = await cdp.eval(`(() => {
+      const before = appState.chartCustomZoomCount;
+      const svg = document.getElementById('stockInteractiveSvg');
+      const barsBefore = svg ? [...svg.querySelectorAll('rect')].filter(r => r.getAttribute('width') === '1').length : -1;
+      for (let i = 0; i < 20; i++) svg.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, bubbles: true, cancelable: true }));
+      for (let i = 0; i < 20; i++) svg.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }));
+      return { before: before, after: appState.chartCustomZoomCount, barsBefore: barsBefore,
+               stillTimeline: appState.chartPeriod === 'timeline' };
+    })()`);
+    check('REQ-022 分时图滚轮不缩放（维持全天全景）',
+      tlZoomGuard.after === tlZoomGuard.before && tlZoomGuard.stillTimeline === true,
+      `缩放计数 ${tlZoomGuard.before} → ${tlZoomGuard.after} / 仍为分时=${tlZoomGuard.stillTimeline}`);
+
+    // ---------- REQ-022：指数详情页同口径（标准 200 根 + 上限 200）----------
+    await cdp.eval(`closeStockDetailPage()`);
+    await sleep(600);
+    await cdp.eval(`switchMainTab('index')`);
+    await sleep(1800);
+    await cdp.eval(`loadIndicesList()`);
+    await sleep(2500);
+    const indexProbe = await cdp.eval(`(async () => {
+      const j = await (await fetch('/api/index/list')).json();
+      const first = (j.data || [])[0];
+      if (!first) return { error: '指数列表为空' };
+      await openIndexDetail(first.code);
+      await new Promise(r => setTimeout(r, 3500));
+      switchIndexChartPeriod('all');
+      await new Promise(r => setTimeout(r, 1200));
+      const svg = document.getElementById('indexKLineSvg');
+      const probe = s => {
+        if (!s) return { error: '未找到指数图表 SVG' };
+        // 指数蜡烛实体用 CSS 变量着色（var(--color-up/down)）并带 opacity="0.9" 以区别于网格与副图柱
+        const body = [...s.querySelectorAll('rect')].filter(r => r.getAttribute('opacity') === '0.9');
+        if (!body.length) return { error: '未找到指数蜡烛实体' };
+        const xs = body.map(r => parseFloat(r.getAttribute('x')));
+        const ws = body.map(r => parseFloat(r.getAttribute('width')));
+        // 指数图不提供背景矩形，绘图区几何以「首根左缘 + 占用宽度」直接测量，避免 null === null 的假通过
+        const firstLeft = Math.min(...xs);
+        const lastRight = Math.max(...xs) + ws[xs.indexOf(Math.max(...xs))];
+        return { candles: body.length, candleWidth: ws[0], firstLeft: firstLeft,
+                 lastRight: lastRight, span: Number((lastRight - firstLeft).toFixed(4)) };
+      };
+      const initial = probe(svg);
+      let afterZoomOut = initial;
+      for (let i = 0; i < 40; i++) svg.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }));
+      await new Promise(r => setTimeout(r, 1200));
+      afterZoomOut = probe(document.getElementById('indexKLineSvg'));
+      return { code: first.code, initial: initial, afterZoomOut: afterZoomOut,
+               state: indexState.customZoomCount };
+    })()`);
+    check('REQ-022 指数详情页首次切 Tab 同样固定标准 200 根',
+      !indexProbe.error && indexProbe.initial.candles === 200,
+      indexProbe.error || `${indexProbe.code} · 实绘 ${indexProbe.initial.candles} 根`);
+    check('REQ-022 指数详情页缩放上限严格 200 根（不得超出）',
+      !indexProbe.error && indexProbe.afterZoomOut.candles === 200 && indexProbe.state <= 200,
+      indexProbe.error || `状态 ${indexProbe.state} / 实绘 ${indexProbe.afterZoomOut.candles} 根`);
+    check('REQ-022 指数详情页缩放不改变绘图区几何与首根位置（同口径）',
+      !indexProbe.error && Number.isFinite(indexProbe.initial.span) && indexProbe.initial.span > 0 &&
+      Math.abs(indexProbe.afterZoomOut.firstLeft - indexProbe.initial.firstLeft) < 0.01 &&
+      Math.abs(indexProbe.afterZoomOut.span - indexProbe.initial.span) < 0.01 &&
+      Math.abs(indexProbe.afterZoomOut.candleWidth - indexProbe.initial.candleWidth) < 1e-6,
+      indexProbe.error || `首根左缘 ${indexProbe.initial.firstLeft} → ${indexProbe.afterZoomOut.firstLeft} · ` +
+        `占用宽度 ${indexProbe.initial.span} → ${indexProbe.afterZoomOut.span} · ` +
+        `单根宽度 ${indexProbe.initial.candleWidth} → ${indexProbe.afterZoomOut.candleWidth}`);
+    const indexAmount = await cdp.eval(`(() => {
+      const svg = document.getElementById('indexKLineSvg');
+      const text = svg ? svg.textContent.replace(/\\s+/g, ' ') : '';
+      const bars = indexState.activeIndex ? (indexState.activeIndex.daily_bars || []).slice(-200) : [];
+      return {
+        sourceMissing: bars.filter(b => b.amount_yi == null).length,
+        total: bars.length,
+        subBars: svg ? [...svg.querySelectorAll('rect')].filter(r => r.getAttribute('opacity') === '0.8').length : -1,
+        derivedLabel: text.includes('含估算：均价×成交量'),
+        derivedCount: /其中 \\d+ 根成交额为估算/.test(text),
+        blockedNote: text.includes('未提供完整成交额，且均价或成交量缺失无法兜底推算')
+      }; })()`);
+    check('REQ-025 指数副图成交额同样走兜底口径（不再因来源缺 amount_yi 而空白）',
+      indexAmount.total > 0 && indexAmount.sourceMissing === indexAmount.total &&
+      indexAmount.subBars > 0 && indexAmount.blockedNote === false,
+      `来源缺成交额 ${indexAmount.sourceMissing}/${indexAmount.total} 根 · 副图柱 ${indexAmount.subBars} 根 · 阻断提示=${indexAmount.blockedNote}`);
+    check('REQ-025 指数副图的估算口径被显式标注',
+      indexAmount.derivedLabel === true && indexAmount.derivedCount === true,
+      `标题标注=${indexAmount.derivedLabel} / 根数说明=${indexAmount.derivedCount}`);
+    const shotIndex = await cdp.shot('07-index-standard-200-bars.png');
+
+    // 回到个股详情，继续 REQ-025 兜底链路验证
+    await cdp.eval(`closeIndexDetailPage()`);
+    await sleep(600);
+    await cdp.eval(`openStockDetail('sh600519')`);
+    await sleep(5000);
+
     // ---------- REQ-025：日线缺成交额时按「均价×成交量」兜底生成自动线 ----------
     await cdp.eval(`switchChartPeriod('all')`);
     await sleep(800);
@@ -239,6 +333,24 @@ const CHIP_PROBE = `(() => {
     check('REQ-025 副图/主图必须显式标注估算口径与估算根数（副图切为成交量时同样可见）',
       estNote.hasAny === true && (estNote.legendAmount || estNote.legendVolume),
       `副图=${estNote.subplot} / 成交额副图标注=${estNote.legendAmount} / 成交量副图标注=${estNote.legendVolume}`);
+    // 副图必须两种口径都标注：切到「成交额(亿元)」副图时标题同样要带估算字样
+    await cdp.eval(`switchChartSubplot('amt')`);
+    await sleep(1200);
+    const estAmtNote = await cdp.eval(`(() => {
+      const svg = document.getElementById('stockInteractiveSvg');
+      const text = svg ? svg.textContent.replace(/\\s+/g, ' ') : '';
+      const svgEl = document.getElementById('stockInteractiveSvg');
+      const rects = svgEl ? [...svgEl.querySelectorAll('rect')] : [];
+      // 日K主图蜡烛与副图柱共用同一槽位宽度：副图柱为 opacity="0.85"，蜡烛实体为 opacity 缺省
+      const subBars = rects.filter(r => r.getAttribute('opacity') === '0.85').length;
+      const bodies = rects.filter(r => r.getAttribute('opacity') === null && r.getAttribute('width') !== '730').length;
+      return { subplot: appState.chartSubplot, title: text.includes('含估算：均价×成交量'),
+               legend: text.includes('根成交额为估算（均价 × 成交量）'), subBars: subBars, bodies: bodies }; })()`);
+    check('REQ-025 成交额副图本身也必须标注估算口径与估算根数',
+      estAmtNote.subplot === 'amt' && estAmtNote.title === true && estAmtNote.legend === true && estAmtNote.subBars > 0,
+      `副图=${estAmtNote.subplot} / 标题标注=${estAmtNote.title} / 根数说明=${estAmtNote.legend} / 副图柱 ${estAmtNote.subBars} 根 / 蜡烛实体 ${estAmtNote.bodies} 根`);
+    await cdp.eval(`switchChartSubplot('vol')`);
+    await sleep(800);
     const shotAuto = await cdp.shot('04-auto-lines-with-derived-amount.png');
 
     // ---------- REQ-026：交易面积 = 首个交汇日至今剔除自身交汇日 ----------
@@ -372,7 +484,7 @@ const CHIP_PROBE = `(() => {
     fs.mkdirSync(OUT, { recursive: true });
     fs.writeFileSync(path.join(OUT, 'browser-report.json'), JSON.stringify({
       base: BASE, generated_at: new Date().toISOString(), checks: results,
-      screenshots: [shot200, shotZoom, shotPad, shotAuto, shotHelp, shotTimeline].map(f => path.basename(f)),
+      screenshots: [shot200, shotZoom, shotPad, shotIndex, shotAuto, shotHelp, shotTimeline].map(f => path.basename(f)),
       console_errors: consoleErrors
     }, null, 2), 'utf8');
 

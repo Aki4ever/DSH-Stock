@@ -4326,7 +4326,11 @@ function resetAllChartLayers() {
  */
 async function loadIntradayChanlun(code) {
   if (!code) return;
-  if (appState.intradayChanlunCode === code) return;
+  // 需求REQ-024: 缓存必须绑在「当前详情对象」上，而非仅按代码判断 ——
+  // 关闭详情再重新打开会得到全新的 stock 对象，此时旧的代码级缓存会让分时缠论永远不再拉取。
+  const current = appState.activeDetailStock;
+  const hasDataOnCurrent = !!current && current.code === code && !!current.intraday_chanlun;
+  if (hasDataOnCurrent && appState.intradayChanlunCode === code) return;
   if (appState.intradayChanlunPending === code) return;
   appState.intradayChanlunPending = code;
   try {
@@ -5093,10 +5097,14 @@ function resolveKlineAmount(k) {
 /** 需求REQ-025: 为单根K线补齐成交额与来源标记（不改动原始来源字段） */
 function withResolvedAmount(k) {
   const resolved = resolveKlineAmount(k);
+  // 需求REQ-025: 本函数必须幂等 —— 对已补齐的样本再次调用时，amount_yi 已是具体数值，
+  // 解析器会按「真实值」返回 derived=false，若直接覆盖就会把估算来源标记抹掉，
+  // 导致副图/指数图的估算标注静默消失。因此估算标记与原因一旦成立即保持粘性。
+  const keepDerived = k && k.amount_derived === true;
   return Object.assign({}, k, {
     amount_yi: resolved.amountYi,
-    amount_derived: resolved.derived,
-    __amount_reason: resolved.reason
+    amount_derived: resolved.derived || keepDerived,
+    __amount_reason: resolved.reason || (keepDerived ? k.__amount_reason : null)
   });
 }
 
@@ -5176,7 +5184,9 @@ function amountCoverageFlags(klines) {
   list.forEach(k => {
     const r = resolveKlineAmount(k);
     if (r.amountYi === null) missing++;
-    else if (r.derived) derived++;
+    // 已通过 withResolvedAmount 补齐的样本，其 amount_yi 已是兜底后的具体数值，
+    // 再走解析器只会看到「有限值」而丢失来源标记；因此必须优先采信对象自身的来源标记。
+    else if (k.amount_derived === true || r.derived) derived++;
   });
   return { derived: derived, missing: missing, anyDerived: derived > 0, anyMissing: missing > 0 };
 }
@@ -6051,13 +6061,19 @@ function renderActiveIndexChart() {
       klines = klines.slice(klines.length - winCount);
     }
 
+    // 需求REQ-025: 指数副图成交额同样必须走「真实值 → 原始 amount → 均价×成交量」兜底口径；
+    // 指数来源的 amount_yi 长期缺失而 volume 可得，因此这里的兜底是副图能否显示金额的唯一路径。
+    const indexKlinesWithAmount = klines.map(withResolvedAmount);
+    const indexAnchorKlines = indexData.daily_bars.map(withResolvedAmount);
+    const indexAmountFlags = amountCoverageFlags(indexKlinesWithAmount);
+
     let minPrice = Infinity;
     let maxPrice = -Infinity;
     let maxAmount = 0.1;
-    klines.forEach(k => {
+    indexKlinesWithAmount.forEach(k => {
       if (k.low < minPrice) minPrice = k.low;
       if (k.high > maxPrice) maxPrice = k.high;
-      if (k.amount_yi > maxAmount) maxAmount = k.amount_yi;
+      if (k.amount_yi != null && k.amount_yi > maxAmount) maxAmount = k.amount_yi;
     });
 
     const pPad = (maxPrice - minPrice) * 0.08 || 5;
@@ -6108,16 +6124,17 @@ function renderActiveIndexChart() {
       const hRect = Math.max(1.5, Math.abs(yOpen - yClose));
       candlesSvg += `<rect x="${x - candleWidth / 2}" y="${yTop}" width="${candleWidth}" height="${hRect}" fill="${color}" opacity="0.9"/>`;
 
-      // 副图柱 (仅成交金额)
-      const ySub = k.amount_yi == null ? subTop + subHeight : getSubY(k.amount_yi);
-      const hSub = Math.max(1, subTop + subHeight - ySub);
-      if (k.amount_yi != null) subBarsSvg += `<rect x="${x - candleWidth / 2}" y="${ySub}" width="${candleWidth}" height="${hSub}" fill="${color}" opacity="0.8"/>`;
+      // 副图柱 (仅成交金额；需求REQ-025: 走兜底口径，仅当均价与成交量同时缺失时才留空)
+      const subAmount = (indexKlinesWithAmount[idx] || {}).amount_yi;
+      if (subAmount != null) {
+        const ySub = getSubY(subAmount);
+        const hSub = Math.max(1, subTop + subHeight - ySub);
+        subBarsSvg += `<rect x="${x - candleWidth / 2}" y="${ySub}" width="${candleWidth}" height="${hSub}" fill="${color}" opacity="0.8"/>`;
+      }
     });
 
     // 需求REQ-014/015: 指数多阶自动画线 (1~4 根筹码中枢线) —— 写入独立图层模型，按 zIndex 参与层级排序
-    // 需求REQ-025: 成交额缺失时按「均价 × 成交量」兜底；需求REQ-026: 交易面积按全量K线锚定
-    const indexKlinesWithAmount = klines.map(withResolvedAmount);
-    const indexAnchorKlines = indexData.daily_bars.map(withResolvedAmount);
+    // 需求REQ-025/026: 兜底口径的 indexKlinesWithAmount / indexAnchorKlines 已在上方统一构造，此处复用
     if (indexState.showAutoLines && indexState.autoLinesCount > 0) {
       const autoLevels = calculateAutoSupportResistanceLevels(indexKlinesWithAmount, indexData.price, indexState.autoLinesCount);
       attachTradeAreaToLines(autoLevels, indexAnchorKlines);
@@ -6196,7 +6213,8 @@ function renderActiveIndexChart() {
 
         <!-- 副图网格 (仅成交金额) -->
         <rect x="${margin.left}" y="${subTop}" width="${plotWidth}" height="${subHeight}" fill="none" stroke="rgba(51, 65, 85, 0.4)"/>
-        <text x="${margin.left + 8}" y="${subTop + 16}" fill="#f59e0b" font-size="11" font-weight="700">💰 副图: 成交金额 (亿元)${amountCoverageFlags(indexKlinesWithAmount).anyDerived ? '（含估算：均价×成交量）' : ''}</text>
+        <text x="${margin.left + 8}" y="${subTop + 16}" fill="#f59e0b" font-size="11" font-weight="700">💰 副图: 成交金额 (亿元)${indexAmountFlags.anyDerived ? '（含估算：均价×成交量）' : ''}</text>
+        ${indexAmountFlags.anyDerived ? `<text x="${margin.left + 8}" y="${subTop + subHeight + 11}" fill="#fbbf24" font-size="10">⚠️ 其中 ${indexAmountFlags.derived} 根成交额为估算（均价 × 成交量），非来源原始披露</text>` : ''}
         ${indexSlotGeo.partial ? `<text x="${margin.left + plotWidth - 6}" y="${subTop + 16}" fill="#64748b" font-size="10" text-anchor="end">标准视窗 ${STANDARD_KLINE_VIEW_COUNT} 根 · 当前显示 ${klines.length} 根（右侧留白）</text>` : ''}
         ${indexSummarySvg}
 

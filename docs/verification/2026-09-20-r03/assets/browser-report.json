@@ -1,6 +1,6 @@
 {
   "base": "http://127.0.0.1:8888",
-  "generated_at": "2026-09-20T11:03:30.307Z",
+  "generated_at": "2026-09-20T11:40:36.599Z",
   "checks": [
     {
       "name": "headless Chrome 已就绪",
@@ -10,7 +10,7 @@
     {
       "name": "页面加载成功",
       "ok": true,
-      "detail": "【v4.9.1】A股多维量化筛选器 - DSH Stock Web"
+      "detail": "【v5.0.0】A股多维量化筛选器 - DSH Stock Web"
     },
     {
       "name": "数据中心新增复选框列",
