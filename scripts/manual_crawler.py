@@ -125,7 +125,7 @@ class ManualCrawlerJob:
                     record_crawl_audit(
                         task_id=self.job_id,
                         crawl_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        status="用户手动取消",
+                        status="用户手动取消(真实行情部分获取)",
                         fingerprint=cancel_fp,
                         target_scope="已收录前100只" if self.mode == "core" else "已收录A股",
                         total_items=total,
@@ -170,7 +170,7 @@ class ManualCrawlerJob:
         import hashlib
         fp_raw = f"{self.mode}:{total}:{updated_so_far}:{self.skipped_count}:{datetime.now().strftime('%Y-%m-%d')}"
         batch_fp = hashlib.sha256(fp_raw.encode('utf-8')).hexdigest()[:16]
-        crawl_status_str = "成功(真实行情全量)" if updated_so_far == total else "部分覆盖(来源未获取完整)"
+        crawl_status_str = "成功(真实行情全量)" if updated_so_far == total else "部分覆盖(真实行情未获取完整)"
         
         try:
             record_crawl_audit(

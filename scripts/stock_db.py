@@ -131,6 +131,12 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawl_date ON crawl_audit_records(crawl_date);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawl_fp ON crawl_audit_records(fingerprint);")
 
+        # 4.1.0 需求REQ-017: 旧库迁移 —— 补齐数据基准标记列 (is_baseline, 全局唯一)
+        existing_cols = {row["name"] for row in cursor.execute("PRAGMA table_info(crawl_audit_records);").fetchall()}
+        if "is_baseline" not in existing_cols:
+            cursor.execute("ALTER TABLE crawl_audit_records ADD COLUMN is_baseline INTEGER DEFAULT 0;")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawl_baseline ON crawl_audit_records(is_baseline);")
+
         # 6. 需求1/4: 历史日K线结构表 (stock_daily_kline - 轻量、去重、低耦合)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS stock_daily_kline (
@@ -163,6 +169,12 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_timeline_code ON stock_timeline(code, trade_date);")
 
         conn.commit()
+
+    # 需求REQ-017: 基准兜底初始化 (无基准时回填最近一条已核验成功批次)
+    try:
+        ensure_crawl_baseline()
+    except Exception:
+        pass
 
 
 def save_master_stocks(stocks: List[Dict[str, Any]]):
@@ -415,6 +427,18 @@ def load_all_stocks_from_db() -> List[Dict[str, Any]]:
         return result
 
 
+def is_baseline_eligible_status(status: str) -> bool:
+    """
+    需求REQ-017: 判定一条抓取审计流水是否具备成为「数据库基准」的资格。
+    仅接受已核验的真实行情批次；旧版无来源日志、手动取消、部分覆盖一律不具备资格，
+    以免不完整口径被提升为全局基准 (沿用 REQ-012 禁止虚构/误导原则)。
+    """
+    text = status or ""
+    if "真实行情" not in text:
+        return False
+    return "成功" in text
+
+
 def record_crawl_audit(
     task_id: str,
     crawl_date: str,
@@ -426,21 +450,135 @@ def record_crawl_audit(
     skipped_items: int = 0,
     details: str = ""
 ) -> int:
-    """持久化记录一次数据中心抓取审计流水"""
+    """
+    持久化记录一次数据中心抓取审计流水。
+    需求REQ-017: 成功的真实行情批次落库后，自动成为最新「数据库基准」(清掉旧基准)。
+    """
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    auto_baseline = is_baseline_eligible_status(status)
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        if auto_baseline:
+            cursor.execute("UPDATE crawl_audit_records SET is_baseline = 0;")
         cursor.execute("""
         INSERT INTO crawl_audit_records (
             task_id, crawl_date, status, fingerprint, target_scope,
-            total_items, updated_items, skipped_items, details, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            total_items, updated_items, skipped_items, details, created_at, is_baseline
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, (
             task_id, crawl_date, status, fingerprint, target_scope,
-            total_items, updated_items, skipped_items, details, now_str
+            total_items, updated_items, skipped_items, details, now_str,
+            1 if auto_baseline else 0
         ))
         conn.commit()
         return cursor.lastrowid
+
+
+def get_crawl_baseline() -> Optional[Dict[str, Any]]:
+    """需求REQ-017: 读取当前全局「数据库基准」批次记录 (至多一条)"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute("""
+        SELECT * FROM crawl_audit_records
+        WHERE is_baseline = 1
+        ORDER BY id DESC LIMIT 1;
+        """).fetchone()
+        return dict(row) if row else None
+
+
+def ensure_crawl_baseline() -> Optional[Dict[str, Any]]:
+    """
+    需求REQ-017: 基准兜底初始化。
+    若当前不存在基准 (旧库升级后的首次进入)，把最近一条已核验的真实行情成功批次回填为基准。
+    不回退、不伪造：若无任何合规批次，保持无基准状态。
+    """
+    existing = get_crawl_baseline()
+    if existing:
+        return existing
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute("""
+        SELECT * FROM crawl_audit_records
+        WHERE status LIKE '%真实行情%' AND status LIKE '%成功%'
+        ORDER BY id DESC LIMIT 1;
+        """).fetchone()
+        if not row:
+            return None
+        cursor.execute("UPDATE crawl_audit_records SET is_baseline = 0;")
+        cursor.execute("UPDATE crawl_audit_records SET is_baseline = 1 WHERE id = ?;", (row["id"],))
+        conn.commit()
+        record = dict(row)
+        record["is_baseline"] = 1
+        return record
+
+
+def set_crawl_baseline(record_id: int) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """
+    需求REQ-017: 手动把某条抓取记录设为全局「数据库基准」。
+    返回 (是否成功, 说明, 基准记录)。失败时基准保持不变。
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute("SELECT * FROM crawl_audit_records WHERE id = ?;", (record_id,)).fetchone()
+        if not row:
+            return False, "未找到该抓取记录", None
+        record = dict(row)
+        if not is_baseline_eligible_status(record.get("status", "")):
+            return False, "该记录不是已核验的真实行情成功批次，不能作为数据库基准", None
+        cursor.execute("UPDATE crawl_audit_records SET is_baseline = 0;")
+        cursor.execute("UPDATE crawl_audit_records SET is_baseline = 1 WHERE id = ?;", (record_id,))
+        conn.commit()
+        record["is_baseline"] = 1
+        return True, "已切换数据库基准", record
+
+
+def delete_crawl_audit_records(record_ids: List[int]) -> Dict[str, Any]:
+    """
+    需求REQ-016: 批量删除数据中心抓取审计流水记录。
+    边界: 仅作用于审计流水表，绝不联动删除行情/K线/股东等业务数据；
+         当前「数据库基准」记录受保护，不可删除。
+    """
+    ids: List[int] = []
+    for raw in record_ids or []:
+        try:
+            ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    result: Dict[str, Any] = {"deleted": [], "skipped": [], "protected": [], "reason": ""}
+    if not ids:
+        result["reason"] = "未提供有效的记录ID"
+        return result
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in ids)
+        rows = cursor.execute(
+            f"SELECT id, task_id, is_baseline FROM crawl_audit_records WHERE id IN ({placeholders});",
+            tuple(ids)
+        ).fetchall()
+        found = {int(r["id"]): dict(r) for r in rows}
+
+        deletable: List[int] = []
+        for rid in ids:
+            rec = found.get(rid)
+            if rec is None:
+                result["skipped"].append({"id": rid, "reason": "记录不存在"})
+            elif int(rec.get("is_baseline") or 0) == 1:
+                result["protected"].append({"id": rid, "task_id": rec.get("task_id"), "reason": "当前数据库基准记录不可删除，请先切换基准"})
+            else:
+                deletable.append(rid)
+
+        if deletable:
+            ph = ",".join("?" for _ in deletable)
+            cursor.execute(f"DELETE FROM crawl_audit_records WHERE id IN ({ph});", tuple(deletable))
+            conn.commit()
+            result["deleted"] = sorted(deletable)
+
+    if result["protected"]:
+        result["reason"] = "部分记录为当前数据库基准，已保护未删除"
+    elif result["skipped"]:
+        result["reason"] = "部分记录不存在，已跳过"
+    return result
 
 
 def save_daily_klines(code: str, klines: List[Dict[str, Any]]) -> int:

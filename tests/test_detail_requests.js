@@ -10,6 +10,12 @@ const context = {AbortController, console, dom, appState:{detailRequestId:0,shar
  formatReal:v=>v==null?"未获取":String(v),escapeHtml:v=>String(v),switchDetailDimension(){},hideTooltip(){},roundTo:x=>x,renderFinancialTables(){},renderActiveStockChart(){context.rendered=context.appState.activeDetailStock.code},
  fetch: url => url.includes('/finance?') ? Promise.resolve({ok:true,json:async()=>({data:{}})}) : new Promise(resolve=>pending.set(url.match(/stock\/([^?]+)/)[1],resolve))};
 vm.createContext(context);
+// 需求REQ-014: openStockDetail 会复位图表图层模型，因此需要一并注入图层模型代码
+const layerBegin = source.indexOf('const LINE_LAYER_ORDER');
+const layerEnd = source.indexOf('/**\n * 需求1/2: 智能自动画线算法', layerBegin);
+vm.runInContext(source.slice(layerBegin, layerEnd), context);
+const resetBegin = source.indexOf('function resetAllChartLayers(');
+vm.runInContext(source.slice(resetBegin, source.indexOf('\n}', resetBegin) + 2), context);
 const begin=source.indexOf('async function openStockDetail(');
 const end=source.indexOf('/**\n * 切换财务分析',begin);
 vm.runInContext(source.slice(begin,end),context);

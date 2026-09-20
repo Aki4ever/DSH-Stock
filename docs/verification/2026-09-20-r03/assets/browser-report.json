@@ -1,0 +1,115 @@
+{
+  "base": "http://127.0.0.1:8888",
+  "generated_at": "2026-09-20T08:12:54.318Z",
+  "checks": [
+    {
+      "name": "headless Chrome 已就绪",
+      "ok": true,
+      "detail": "Chrome/148.0.7778.96"
+    },
+    {
+      "name": "页面加载成功",
+      "ok": true,
+      "detail": "【v4.5.0】A股多维量化筛选器 - DSH Stock Web"
+    },
+    {
+      "name": "数据中心新增复选框列",
+      "ok": true,
+      "detail": "行数 12 / 复选框 12"
+    },
+    {
+      "name": "恰好一行标记为当前基准",
+      "ok": true,
+      "detail": "基准行 1 / 徽标 1"
+    },
+    {
+      "name": "基准口径条已渲染并区分批次日期与行情日期",
+      "ok": true,
+      "detail": "📌 当前数据库基准：批次 #crawl_1789891698 · 基准日期 2026-09-20 页面顶部「数据有效日期」与列表筛选口径均以此批次为准；每完成一次真实抓取会自动切换到最新批次，也可在下方列表手动指定。真实行情来源日期在状态栏单独显示。"
+    },
+    {
+      "name": "未选中时批量操作条不占位（视觉上真正隐藏）",
+      "ok": true,
+      "detail": "hidden=true / display=none"
+    },
+    {
+      "name": "勾选 1 条 → 批量操作条出现并计数",
+      "ok": true,
+      "detail": "已选 1 条 / 高亮行 1"
+    },
+    {
+      "name": "表头全选可选中全部记录",
+      "ok": true,
+      "detail": "12/12 · 已选 12 条"
+    },
+    {
+      "name": "部分选中时表头呈半选态 (indeterminate)",
+      "ok": true,
+      "detail": "已选 11 条"
+    },
+    {
+      "name": "当前基准记录受删除保护",
+      "ok": true,
+      "detail": "部分记录为当前数据库基准，已保护未删除"
+    },
+    {
+      "name": "个股详情已打开且图层面板已渲染",
+      "ok": true,
+      "detail": "模型行 8"
+    },
+    {
+      "name": "三个画线模型可同时存在（自动线 3 根 + 压力线 + 支撑线）",
+      "ok": true,
+      "detail": "自动 3 / 压力 1 / 支撑 1 / 可见 5"
+    },
+    {
+      "name": "日线缺成交额时自动线不生成并显式说明原因",
+      "ok": true,
+      "detail": "当前周期的真实来源未提供成交额，按真实数据原则不生成自动多阶线（如需自动线，请切换到已提供成交额的分时周期）"
+    },
+    {
+      "name": "图表 SVG 实际渲染出全部模型的辅助线",
+      "ok": true,
+      "detail": "SVG 中 5 条"
+    },
+    {
+      "name": "清除压力线后自动线与支撑线完整保留",
+      "ok": true,
+      "detail": "自动 3 / 压力 0 / 支撑 1 / SVG 4"
+    },
+    {
+      "name": "点击重合辅助线可轮换置顶",
+      "ok": true,
+      "detail": "ov_auto>ov_up>ov_down → ov_up>ov_down>ov_auto → ov_down>ov_auto>ov_up"
+    },
+    {
+      "name": "重合线在图上标注重合条数",
+      "ok": true,
+      "detail": "出现 3 处「重合3」标注"
+    },
+    {
+      "name": "指数详情图层面板已渲染两个模型（自动线 / 手动线）",
+      "ok": true,
+      "detail": "sh000001 · 🤖 自动多阶线 未绘制 👁 显示 🧹 清除 📏 手动水平线 未绘制 👁 显示 🧹 清除"
+    },
+    {
+      "name": "指数图清除自动线后手动线完整保留",
+      "ok": true,
+      "detail": "清除前 自动 0 / 手动 1 → 清除后 自动 0 / 手动 1"
+    },
+    {
+      "name": "页面控制台无未预期错误",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "screenshots": [
+    "01-data-center.png",
+    "02-data-center-multi-select.png",
+    "03-stock-layers-all.png",
+    "04-clear-pressure-only.png",
+    "05-overlap-topmost.png",
+    "06-index-layers.png"
+  ],
+  "console_errors": []
+}

@@ -378,8 +378,11 @@ class StockDataManager:
         total_cap = aggregate('market_cap')
         total_circ_cap = aggregate('circulating_cap')
 
-        # 需求1: 真实且同步的数据快照截取日期
-        real_snapshot_date = filter_date or datetime.now().strftime("%Y-%m-%d")
+        # 需求REQ-017: 快照截取日期以「数据库基准」批次为准 (不再由请求参数或本地时钟推断)
+        caliber = resolve_data_caliber()
+        real_snapshot_date = caliber["snapshot_date"]
+        if not real_snapshot_date:
+            real_snapshot_date = filter_date or None
 
         stats = {
             "total_universe_count": len(candidates),
@@ -390,13 +393,16 @@ class StockDataManager:
             "total_circ_cap": total_circ_cap,
             "filter_date": real_snapshot_date,
             "snapshot_date": real_snapshot_date,
+            "snapshot_source": caliber["snapshot_source"],
+            "quote_date": caliber["quote_date"],
+            "baseline": caliber["baseline"],
             "page": page,
             "page_size": page_size,
             "server_state": current_state
         }
         stats['coverage']={k:sum(s.get(k) is not None for s in matched) for k in ('price','change_pct','market_cap','circulating_cap')}
         stats['quote_dates']=sorted({str(s.get('timestamp') or '')[:8] for s in matched if s.get('timestamp')})
-        stats['snapshot_note']='当前已获取行情快照；日期筛选仅约束股东行为，未提供历史全市场行情截面'
+        stats['snapshot_note']='行情为当前已获取快照；日期口径以数据中心「数据库基准」批次为准，未提供历史全市场行情截面'
 
         stats["shareholder_actions"] = {k: v for k, v in action_snapshot.items() if k != "records"}
         start_idx = (page - 1) * page_size
@@ -417,6 +423,74 @@ DATA_MANAGER = StockDataManager()
 SERVER_START_TIME = time.time()
 SERVER_INSTANCE = None
 SHUTDOWN_REQUESTED = False
+
+
+# ====================================================
+# 需求REQ-017: 数据基准 (Baseline) 口径辅助函数
+# 说明: 基准只决定「系统认定正在使用的采集批次」这一口径，
+#      绝不改写、不伪造任何行情/K线数值；行情真实日期始终单独呈现。
+# ====================================================
+
+def normalize_crawl_date(value: Optional[str]) -> Optional[str]:
+    """把抓取时间戳统一归一化为 YYYY-MM-DD 日期口径"""
+    if not value:
+        return None
+    text = str(value).strip()
+    if len(text) >= 10 and text[4] == "-" and text[7] == "-":
+        return text[:10]
+    if len(text) >= 8 and text[:8].isdigit():
+        return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
+    return text
+
+
+def current_quote_date() -> Optional[str]:
+    """读取当前实际行情快照的真实交易日 (不由基准改写)"""
+    quote_dates = sorted({
+        str(s.get("timestamp"))[:8]
+        for s in DATA_MANAGER.stocks_dict.values() if s.get("timestamp")
+    })
+    if not quote_dates:
+        return None
+    return normalize_crawl_date(quote_dates[-1])
+
+
+def serialize_baseline(record: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """把基准审计记录序列化为前端可用结构"""
+    if not record:
+        return None
+    return {
+        "id": int(record.get("id")) if record.get("id") is not None else None,
+        "task_id": record.get("task_id"),
+        "crawl_date": normalize_crawl_date(record.get("crawl_date")),
+        "raw_crawl_date": record.get("crawl_date"),
+        "status": record.get("status"),
+        "fingerprint": record.get("fingerprint"),
+        "target_scope": record.get("target_scope"),
+        "total_items": record.get("total_items"),
+        "updated_items": record.get("updated_items"),
+        "skipped_items": record.get("skipped_items"),
+        "details": record.get("details"),
+        "is_baseline": bool(int(record.get("is_baseline") or 0)),
+    }
+
+
+def resolve_data_caliber() -> Dict[str, Any]:
+    """
+    汇总当前数据口径: 以「数据库基准」为准，同时如实暴露真实行情日期。
+    基准缺失时明确置空，不回退到其他批次冒充。
+    """
+    from scripts.stock_db import ensure_crawl_baseline
+    try:
+        baseline = ensure_crawl_baseline()
+    except Exception:
+        baseline = None
+    quote_date = current_quote_date()
+    return {
+        "baseline": serialize_baseline(baseline),
+        "quote_date": quote_date,
+        "snapshot_date": normalize_crawl_date(baseline.get("crawl_date")) if baseline else None,
+        "snapshot_source": "baseline" if baseline else "unavailable",
+    }
 
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
@@ -499,19 +573,45 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
 
         # 3.1.0 需求1: 数据中心抓取审计列表端点 /api/crawler/audit-list (ID、抓取日期、抓取状态、抓取指纹)
         if url_path == "/api/crawler/audit-list":
-            from scripts.stock_db import list_crawl_audit_records, get_latest_crawl_fingerprint
+            from scripts.stock_db import (
+                list_crawl_audit_records, get_latest_crawl_fingerprint,
+                get_crawl_baseline, ensure_crawl_baseline, is_baseline_eligible_status
+            )
             records = list_crawl_audit_records(limit=30)
+            baseline = ensure_crawl_baseline()
+            baseline_id = int(baseline["id"]) if baseline else None
             for rec in records:
-                rec["verification_status"]="verified-quotes" if "真实行情" in (rec.get("status") or "") else "legacy-unverified"
-                if rec["verification_status"]=="legacy-unverified":
-                    rec["status"]="旧版日志（数据未核验）"
-                    rec["details"]="历史操作记录，仅供审计，不能证明数据真实或覆盖完整。"
+                raw_status = rec.get("status") or ""
+                verified = "真实行情" in raw_status
+                rec["verification_status"] = "verified-quotes" if verified else "legacy-unverified"
+                if not verified:
+                    rec["status"] = "旧版日志（数据未核验）"
+                    rec["details"] = "历史操作记录，仅供审计，不能证明数据真实或覆盖完整。"
+                # 需求REQ-016/017: 基准标记与可否设为基准/可否删除，均由后端权威判定
+                rec["is_baseline"] = bool(int(rec.get("is_baseline") or 0))
+                rec["can_set_baseline"] = verified and is_baseline_eligible_status(raw_status)
+                rec["can_delete"] = not rec["is_baseline"]
+                rec["crawl_date_display"] = normalize_crawl_date(rec.get("crawl_date")) or rec.get("crawl_date") or ""
             latest_fp = get_latest_crawl_fingerprint()
             self._send_json(200, {
                 "records": records,
                 "total": len(records),
                 "latest_fingerprint": latest_fp,
+                "baseline_id": baseline_id,
+                "baseline_task_id": baseline.get("task_id") if baseline else None,
+                "baseline_crawl_date": normalize_crawl_date(baseline.get("crawl_date")) if baseline else None,
                 "freshness_check": "audit-only"
+            })
+            return
+
+        # 3.1.1 需求REQ-017: 读取当前数据基准 /api/crawler/baseline
+        if url_path == "/api/crawler/baseline":
+            from scripts.stock_db import ensure_crawl_baseline
+            baseline = ensure_crawl_baseline()
+            self._send_json(200, {
+                "code": 200,
+                "baseline": serialize_baseline(baseline),
+                "quote_date": current_quote_date(),
             })
             return
 
@@ -810,8 +910,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 curr_state = SERVER_STATE
 
             uptime = int(time.time() - SERVER_START_TIME)
-            quote_dates=sorted({str(s["timestamp"])[:8] for s in DATA_MANAGER.stocks_dict.values() if s.get("timestamp")})
-            qdate=quote_dates[-1] if quote_dates else None
+            caliber = resolve_data_caliber()
             data = {
                 "status": curr_state,
                 "service": "DSH Stock Web Server",
@@ -823,7 +922,11 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "csi50_count": len(DATA_MANAGER.csi50_set),
                 "csi100_count": len(DATA_MANAGER.csi100_set),
                 "db_path": DB_FILE,
-                "snapshot_date": (qdate[:4]+"-"+qdate[4:6]+"-"+qdate[6:8]) if qdate else None,
+                # 需求REQ-017: 快照日期以「数据库基准」批次为准；真实行情日期单独如实暴露
+                "snapshot_date": caliber["snapshot_date"],
+                "snapshot_source": caliber["snapshot_source"],
+                "quote_date": caliber["quote_date"],
+                "baseline": caliber["baseline"],
                 "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             self._send_json(200, data)
@@ -957,7 +1060,56 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
-        # 7. 彻底注销进程 API (/api/server/kill)
+        # 7. 需求REQ-016: 数据中心抓取记录批量删除 (/api/crawler/audit-delete)
+        if url_path == "/api/crawler/audit-delete":
+            from scripts.stock_db import delete_crawl_audit_records, list_crawl_audit_records
+            raw_ids = params.get("ids")
+            if raw_ids is None:
+                raw_ids = params.get("record_ids") or []
+            if not isinstance(raw_ids, list):
+                self._send_json(400, {"code": 400, "message": "ids 必须为数组"})
+                return
+            outcome = delete_crawl_audit_records(raw_ids)
+            ok = bool(outcome["deleted"]) and not outcome["protected"] and not outcome["skipped"]
+            self._send_json(200, {
+                "code": 200,
+                "success": ok,
+                "message": (
+                    f"已删除 {len(outcome['deleted'])} 条抓取审计记录"
+                    if outcome["deleted"] else "没有可删除的记录"
+                ),
+                "deleted": outcome["deleted"],
+                "skipped": outcome["skipped"],
+                "protected": outcome["protected"],
+                "reason": outcome["reason"],
+                "records": list_crawl_audit_records(limit=30),
+            })
+            return
+
+        # 8. 需求REQ-017: 手动切换数据库基准 (/api/crawler/baseline)
+        if url_path == "/api/crawler/baseline":
+            from scripts.stock_db import set_crawl_baseline, ensure_crawl_baseline
+            record_id = params.get("id")
+            if record_id is None:
+                record_id = params.get("record_id")
+            if record_id is None:
+                self._send_json(400, {"code": 400, "message": "缺少基准记录 id"})
+                return
+            success, message, _record = set_crawl_baseline(int(record_id))
+            baseline = ensure_crawl_baseline()
+            caliber = resolve_data_caliber()
+            self._send_json(200 if success else 400, {
+                "code": 200 if success else 400,
+                "success": success,
+                "message": message,
+                "baseline": serialize_baseline(baseline),
+                "snapshot_date": caliber["snapshot_date"],
+                "snapshot_source": caliber["snapshot_source"],
+                "quote_date": caliber["quote_date"],
+            })
+            return
+
+        # 9. 彻底注销进程 API (/api/server/kill)
         if url_path == "/api/server/kill":
             self._send_json(200, {
                 "code": 200,

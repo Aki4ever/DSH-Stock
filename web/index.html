@@ -1302,20 +1302,43 @@
             </div>
           </div>
 
+          <!-- 需求REQ-017: 当前数据基准口径条 (格式塔·共同区域：与列表同属一个卡片，说明紧贴其约束对象) -->
+          <div id="dataBaselineBar" class="data-baseline-bar" role="status" aria-live="polite">
+            正在读取当前数据基准…
+          </div>
+
+          <!-- 需求REQ-016: 批量操作条 (格式塔·简洁性：仅在选中记录后出现，不占位不挤动表格) -->
+          <div id="crawlerBatchBar" class="crawler-batch-bar" hidden>
+            <span class="crawler-batch-count" id="crawlerBatchCount">已选 0 条</span>
+            <div class="crawler-batch-actions">
+              <button type="button" class="btn btn-danger-soft" id="btnCrawlerBatchDelete" onclick="deleteSelectedAuditRecords()">
+                🗑️ 删除选中
+              </button>
+              <button type="button" class="btn btn-secondary" onclick="clearAuditSelection()">
+                ✖️ 取消选择
+              </button>
+            </div>
+          </div>
+
           <div class="table-container" style="max-height: 420px; overflow-y: auto;">
             <table class="stock-table" id="crawlerAuditTable">
               <thead>
                 <tr>
-                  <th style="width: 160px;">抓取信息ID</th>
+                  <th style="width: 44px;">
+                    <input type="checkbox" id="crawlerAuditSelectAll" class="audit-checkbox" onclick="toggleSelectAllAuditRecords(this)"
+                           title="全选/取消全选当前列表的抓取记录" aria-label="全选抓取记录">
+                  </th>
+                  <th style="width: 150px;">抓取信息ID</th>
                   <th style="width: 170px;">抓取日期</th>
                   <th style="width: 160px;">抓取状态</th>
                   <th style="width: 190px;">采集批次标识</th>
                   <th>抓取范围与摘要说明</th>
+                  <th style="width: 190px;">数据基准 / 操作</th>
                 </tr>
               </thead>
               <tbody id="crawlerAuditTableBody">
                 <tr>
-                  <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                  <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
                     正在加载数据中心最新抓取审计流水...
                   </td>
                 </tr>
@@ -1412,12 +1435,15 @@
               <button type="button" class="btn-chart-tool" id="btnIndexDrawHorizontal" onclick="setIndexDrawingMode('horizontal')" title="在走势图上点击绘制水平压力/支撑辅助线">
                 <span>📏 画水平线</span>
               </button>
-              <button type="button" class="btn-chart-tool" onclick="clearIndexChartDrawings()" title="一键清除当前图表上所有手动与自动辅助线">
-                <span>🧹 清除</span>
+              <button type="button" class="btn-chart-tool" onclick="clearIndexChartDrawings()" title="兜底操作：清除指数图上的自动线与手动线；只想清一类请用下方图层管理面板中对应的清除按钮">
+                <span>🧹 清除全部</span>
               </button>
             </div>
           </div>
         </div>
+
+        <!-- 需求REQ-014/015: 指数图层管理面板 (格式塔·共同区域) -->
+        <div id="indexLayerPanel" class="chart-layer-panel" role="group" aria-label="指数图表画线图层管理"></div>
 
         <!-- 走势图 SVG 渲染容器 -->
         <div class="chart-canvas-wrapper" id="indexChartWrapper" style="position: relative; min-height: 480px; width: 100%; border-radius: 8px; background: #070d1e; border: 1px solid rgba(56, 189, 248, 0.15);">
@@ -1514,23 +1540,27 @@
               </button>
             </div>
 
-            <!-- 画图辅助工具 (手动画线 / 清除) -->
+            <!-- 需求REQ-014: 画图辅助工具 (手动画线 / 清除全部) —— 分模型清除见下方图层管理面板 -->
             <div class="chart-draw-toolbox">
-              <button type="button" id="btnToggleHLine" class="btn-draw-tool" onclick="toggleDrawHLineMode()" title="开启画水平线模式后，在图表任意价格位置点击即可放置手动辅助线">
+              <button type="button" id="btnToggleHLine" class="btn-draw-tool" onclick="toggleDrawHLineMode()" title="开启画水平线模式后，在图表任意价格位置点击即可放置手动辅助线，并按价格自动归入「压力线」或「支撑线」模型">
                 📏 画水平线
               </button>
-              <button type="button" id="btnClearLines" class="btn-draw-tool" onclick="clearAllChartDrawLines()" title="清除当前图表上所有自动绘制与手动的压力/支撑辅助线及交汇金额标签">
-                🧹 清除
+              <button type="button" id="btnClearLines" class="btn-draw-tool danger" onclick="clearAllChartDrawLines()" title="兜底操作：清除全部画线模型（自动多阶线 + 压力线 + 支撑线）；只想清一类请用下方图层管理面板中对应的清除按钮">
+                🧹 清除全部
               </button>
             </div>
           </div>
         </div>
+
+          <!-- 需求REQ-014/015: 图层管理面板 (格式塔·共同区域) —— 每个画线模型一行，各自独立显示/清除 -->
+          <div id="chartLayerPanel" class="chart-layer-panel" role="group" aria-label="图表画线图层管理"></div>
 
           <section id="stockActionSummary" style="font-size:.8rem;margin-bottom:1rem"></section>
           <p id="historyCoverage" role="status" style="color:var(--text-secondary);font-size:.8rem;line-height:1.6"></p>
 
         <!-- 动态矢量图表容器 -->
         <div id="chanlunLegend" class="chanlun-legend" hidden></div>
+        <div id="chartToastHost" class="chart-toast-host" role="status" aria-live="polite"></div>
         <div id="modalChartWrapper" class="chart-wrapper">
           <div id="chartTooltipBox" class="chart-tooltip-box">
             <div class="chart-tooltip-row"><span class="chart-tooltip-label">时间</span><span id="ttDate" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>

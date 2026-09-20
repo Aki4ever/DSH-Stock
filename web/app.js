@@ -40,7 +40,19 @@ const appState = {
   chanlunLayers: {},
   showChanlunDraw: false,  // 需求4: 缠论自动画线与买卖点开关
   drawHLineMode: false,    // 需求1: 是否处于绘制水平压力/支撑线模式
-  drawnHorizontalLines: [], // 用户已绘制的水平辅助线列表 [{ price, y, id }]
+  // 需求REQ-014/015: 图表辅助线改为「多模型图层」结构，各模型独立存储/独立清除/独立层级
+  //   auto        自动多阶线 (1~4 根筹码中枢线)
+  //   manual_up   手动压力线
+  //   manual_down 手动支撑线
+  lineLayers: {
+    auto:        { key: 'auto',        lines: [], visible: true },
+    manual_up:   { key: 'manual_up',   lines: [], visible: true },
+    manual_down: { key: 'manual_down', lines: [], visible: true }
+  },
+  lineZCounter: 1000,      // 需求REQ-015: 置顶用的单调递增层级游标
+  topLineId: null,         // 需求REQ-015: 当前被用户置顶高亮的辅助线
+  autoLinesBlockedReason: null, // 需求REQ-012: 自动线无法测算时给出真实原因，禁止静默显示 0 根
+  drawnHorizontalLines: [], // 兼容旧引用：渲染与逻辑一律以 lineLayers 为准
   rawKlineData: [],        // 原始全量日K
   activeFinTab: 'main',    // 'main' | 'balance' | 'income' | 'cash'
   activeFinGranularity: 'annual', // 'annual' (按年度/图2) | 'report' (按报告期) | 'quarter' (按单季度)
@@ -2637,6 +2649,13 @@ function updateCrawlerDashboardUI(snap) {
 /**
  * 需求1/2: 数据中心拉取并渲染抓取审计流水列表 (展示抓取信息的ID、抓取日期、抓取状态、抓取指纹)
  */
+/**
+ * 需求REQ-016: 数据中心审计记录选择态 (跨刷新保留已选 ID)
+ */
+let auditSelection = new Set();
+let auditRecordsCache = [];
+let auditBaselineInfo = null;
+
 async function loadCrawlerAuditList() {
   const tbody = document.getElementById('crawlerAuditTableBody');
   if (!tbody) return;
@@ -2646,11 +2665,24 @@ async function loadCrawlerAuditList() {
     if (!res.ok) throw new Error('拉取审计记录失败');
     const json = await res.json();
     const records = json.records || [];
+    auditRecordsCache = records;
+    auditBaselineInfo = {
+      id: json.baseline_id,
+      task_id: json.baseline_task_id,
+      crawl_date: json.baseline_crawl_date
+    };
+
+    // 已不存在的记录自动从选择集中剔除
+    const liveIds = new Set(records.map(r => Number(r.id)));
+    auditSelection = new Set([...auditSelection].filter(id => liveIds.has(id)));
+
+    renderAuditBaselineBar();
+    updateAuditSelectionUI();
 
     if (records.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
             暂无抓取审计记录，可点击上方「一键全量抓取」或「核心资产增量抓取」生成首个抓取指纹。
           </td>
         </tr>
@@ -2663,13 +2695,34 @@ async function loadCrawlerAuditList() {
       const isSkip = (rec.status || '').includes('免抓') || (rec.status || '').includes('一致') || (rec.status || '').includes('跳过');
       const pillCls = isNew ? 'audit-status-new' : isSkip ? 'audit-status-skip' : 'audit-status-fail';
       const statusIcon = isNew ? '✅' : isSkip ? '⚡' : '❌';
-      
       const fpShort = rec.fingerprint || 'fp:--';
+      const recId = Number(rec.id);
+      const isBaseline = !!rec.is_baseline;
+      const canSetBaseline = !!rec.can_set_baseline && !isBaseline;
+
+      // 需求REQ-016/017: 基准行闭合高亮；不可设基准的记录给出明确原因而不是静默禁用
+      const rowCls = [
+        'audit-row',
+        isBaseline ? 'is-baseline' : '',
+        auditSelection.has(recId) ? 'is-selected' : ''
+      ].filter(Boolean).join(' ');
+
+      const baselineCell = isBaseline
+        ? `<span class="baseline-badge" title="当前系统认定正在使用的采集批次，页面日期与筛选口径均以它为准">📌 当前基准</span>`
+        : (canSetBaseline
+          ? `<button type="button" class="btn btn-secondary btn-tiny" onclick="setAuditBaseline(${recId})" title="把该批次设为数据库基准，页面快照日期与筛选口径将随之切换">📌 设为基准</button>`
+          : `<span class="baseline-blocked" title="仅已核验的真实行情成功批次可作为基准">🚫 不可作基准</span>`);
 
       return `
-        <tr>
+        <tr class="${rowCls}" data-record-id="${recId}">
+          <td>
+            <input type="checkbox" class="audit-checkbox audit-row-checkbox" data-record-id="${recId}"
+                   ${auditSelection.has(recId) ? 'checked' : ''}
+                   onclick="toggleAuditRecordSelection(${recId}, this.checked)"
+                   aria-label="选择抓取记录 #${rec.task_id}">
+          </td>
           <td><strong style="font-family: monospace; color: #f1f5f9; font-size: 0.9rem;">#${rec.task_id}</strong></td>
-          <td style="font-family: monospace; color: #cbd5e1; font-size: 0.85rem;">${rec.crawl_date}</td>
+          <td style="font-family: monospace; color: #cbd5e1; font-size: 0.85rem;">${rec.crawl_date_display || rec.crawl_date}</td>
           <td>
             <span class="audit-status-pill ${pillCls}">
               ${statusIcon} ${rec.status}
@@ -2683,19 +2736,162 @@ async function loadCrawlerAuditList() {
           <td style="color: var(--text-secondary); font-size: 0.82rem;">
             <strong style="color: #93c5fd;">[${rec.target_scope || '全市场'}]</strong> ${rec.details || '--'}
           </td>
+          <td class="audit-action-cell">${baselineCell}</td>
         </tr>
       `;
     }).join('');
+
+    syncAuditSelectAllCheckbox();
 
   } catch (err) {
     console.error('加载抓取审计列表异常:', err);
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" style="text-align: center; color: var(--color-up); padding: 1.5rem;">
+        <td colspan="7" style="text-align: center; color: var(--color-up); padding: 1.5rem;">
           获取抓取审计流水异常: ${err.message}
         </td>
       </tr>
     `;
+  }
+}
+
+/** 需求REQ-017: 顶部数据基准口径条 —— 明确区分「基准批次日期」与「真实行情日期」，避免口径混淆 */
+function renderAuditBaselineBar() {
+  const bar = document.getElementById('dataBaselineBar');
+  if (!bar) return;
+  if (!auditBaselineInfo || !auditBaselineInfo.id) {
+    bar.className = 'data-baseline-bar is-warning';
+    bar.innerHTML = `⚠️ <strong>尚未选定数据库基准</strong>：当前无任何已核验的真实行情成功批次，页面日期口径不可用。完成一次真实抓取后会自动以最新批次为基准。`;
+    return;
+  }
+  bar.className = 'data-baseline-bar';
+  bar.innerHTML = `
+    <span class="baseline-line">
+      📌 <strong>当前数据库基准</strong>：批次 <code>#${auditBaselineInfo.task_id}</code>
+      · 基准日期 <strong>${auditBaselineInfo.crawl_date || '未获取'}</strong>
+    </span>
+    <span class="baseline-hint">页面顶部「数据有效日期」与列表筛选口径均以此批次为准；每完成一次真实抓取会自动切换到最新批次，也可在下方列表手动指定。真实行情来源日期在状态栏单独显示。</span>
+  `;
+}
+
+/** 需求REQ-016: 单条记录勾选 */
+function toggleAuditRecordSelection(recordId, checked) {
+  const id = Number(recordId);
+  if (checked) auditSelection.add(id); else auditSelection.delete(id);
+  const row = document.querySelector(`tr[data-record-id="${id}"]`);
+  if (row) row.classList.toggle('is-selected', checked);
+  updateAuditSelectionUI();
+}
+
+/** 需求REQ-016: 全选/取消全选 (含半选态) */
+function toggleSelectAllAuditRecords(source) {
+  const ids = auditRecordsCache.map(r => Number(r.id));
+  if (source && source.checked) {
+    ids.forEach(id => auditSelection.add(id));
+  } else {
+    auditSelection.clear();
+  }
+  document.querySelectorAll('.audit-row-checkbox').forEach(cb => {
+    const id = Number(cb.getAttribute('data-record-id'));
+    cb.checked = auditSelection.has(id);
+    const row = cb.closest('tr');
+    if (row) row.classList.toggle('is-selected', cb.checked);
+  });
+  updateAuditSelectionUI();
+}
+
+/** 需求REQ-016/018: 选择态 UI 同步 (批量操作条显隐 + 表头半选态) */
+function updateAuditSelectionUI() {
+  const ids = auditRecordsCache.map(r => Number(r.id));
+  const selectedInView = ids.filter(id => auditSelection.has(id));
+  const bar = document.getElementById('crawlerBatchBar');
+  const count = document.getElementById('crawlerBatchCount');
+  if (bar) bar.hidden = selectedInView.length === 0;
+  if (count) count.textContent = `已选 ${selectedInView.length} 条`;
+  syncAuditSelectAllCheckbox();
+}
+
+function syncAuditSelectAllCheckbox() {
+  const head = document.getElementById('crawlerAuditSelectAll');
+  if (!head) return;
+  const ids = auditRecordsCache.map(r => Number(r.id));
+  const selected = ids.filter(id => auditSelection.has(id)).length;
+  head.checked = ids.length > 0 && selected === ids.length;
+  // 半选态：部分选中时表头呈现 indeterminate，避免"全选/未选"的二值误读
+  head.indeterminate = selected > 0 && selected < ids.length;
+}
+
+function clearAuditSelection() {
+  auditSelection.clear();
+  document.querySelectorAll('.audit-row-checkbox').forEach(cb => {
+    cb.checked = false;
+    const row = cb.closest('tr');
+    if (row) row.classList.remove('is-selected');
+  });
+  updateAuditSelectionUI();
+}
+
+/** 需求REQ-016: 批量删除选中的抓取审计记录 (含二次确认与基准保护提示) */
+async function deleteSelectedAuditRecords() {
+  const ids = [...auditSelection];
+  if (ids.length === 0) return;
+
+  const protectedIds = auditRecordsCache.filter(r => ids.includes(Number(r.id)) && r.is_baseline).map(r => r.task_id);
+  const confirmLines = [
+    `即将删除 ${ids.length} 条抓取审计记录：`,
+    ids.map(id => {
+      const rec = auditRecordsCache.find(r => Number(r.id) === id);
+      return rec ? `  · #${rec.task_id}（${rec.crawl_date_display || rec.crawl_date}）` : `  · ID ${id}`;
+    }).join('\n'),
+    '',
+    '说明：删除仅作用于「抓取审计流水」，不会删除行情、K线、股东等业务数据。'
+  ];
+  if (protectedIds.length) {
+    confirmLines.push(`注意：其中 ${protectedIds.join('、')} 为当前数据库基准，将被保护而不删除。`);
+  }
+  if (!window.confirm(confirmLines.join('\n'))) return;
+
+  try {
+    const res = await fetch('/api/crawler/audit-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+    const json = await res.json();
+    const deleted = json.deleted || [];
+    deleted.forEach(id => auditSelection.delete(Number(id)));
+    if (json.protected && json.protected.length) {
+      window.alert(`已删除 ${deleted.length} 条。\n${json.protected.length} 条记录为当前数据库基准，已保护未删除，请先切换基准后重试。`);
+    }
+    await loadCrawlerAuditList();
+  } catch (err) {
+    console.error('删除抓取审计记录异常:', err);
+    window.alert(`删除失败：${err.message}`);
+  }
+}
+
+/** 需求REQ-017: 手动把某条抓取记录设为数据库基准 */
+async function setAuditBaseline(recordId) {
+  try {
+    const res = await fetch('/api/crawler/baseline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: recordId })
+    });
+    const json = await res.json();
+    if (!json.success) {
+      window.alert(`未能切换数据库基准：${json.message || '未知原因'}`);
+      return;
+    }
+    // 需求REQ-017.6: 切换基准后必须重新拉取列表与筛选数据，禁止新旧口径混显
+    await loadCrawlerAuditList();
+    checkServerHealth();
+    if (typeof executeFilter === 'function' && appState.currentTab === 'filter') {
+      executeFilter();
+    }
+  } catch (err) {
+    console.error('切换数据库基准异常:', err);
+    window.alert(`切换数据库基准失败：${err.message}`);
   }
 }
 
@@ -3031,6 +3227,301 @@ function calculateDistributionSummary(arr) {
   };
 }
 
+// ====================================================
+// 需求REQ-014/015: 图表辅助线图层模型
+//   1. 多模型共存：自动多阶线 / 手动压力线 / 手动支撑线 / 缠论五类图层可同时存在，互不覆盖
+//   2. 分模型清除：每个模型拥有独立清除按钮，只清自身
+//   3. 重合置顶：zIndex 决定绘制顺序，点击可把目标线提升到最顶层
+// ====================================================
+
+const LINE_LAYER_ORDER = ['auto', 'manual_up', 'manual_down'];
+const LINE_LAYER_META = {
+  auto:        { name: '自动多阶线', icon: '🤖', base: 10, empty: '未绘制' },
+  manual_up:   { name: '压力线',     icon: '🔺', base: 20, empty: '未绘制' },
+  manual_down: { name: '支撑线',     icon: '🔻', base: 30, empty: '未绘制' }
+};
+const LINE_HIT_TOLERANCE = 6; // 命中判定容差 (SVG 坐标像素)
+
+// 缠论五类图层元数据 (与 lineLayers 同构呈现，用于统一图层管理面板)
+const CHANLUN_LAYER_META = [
+  { key: 'pens', name: '缠论笔', icon: '✒️' },
+  { key: 'segments', name: '线段', icon: '📐' },
+  { key: 'pivots', name: '笔中枢', icon: '🔲' },
+  { key: 'divergences', name: '背离', icon: '⚡' },
+  { key: 'ma_entanglements', name: '均线缠绕', icon: '🌀' }
+];
+
+function ensureLineLayers() {
+  if (!appState.lineLayers || typeof appState.lineLayers !== 'object') appState.lineLayers = {};
+  LINE_LAYER_ORDER.forEach(key => {
+    const layer = appState.lineLayers[key];
+    if (!layer || !Array.isArray(layer.lines)) {
+      appState.lineLayers[key] = { key, lines: [], visible: layer ? layer.visible !== false : true };
+    } else if (layer.visible === undefined) {
+      layer.visible = true;
+    }
+  });
+  return appState.lineLayers;
+}
+
+function nextLineZIndex() {
+  appState.lineZCounter = (appState.lineZCounter || 1000) + 1;
+  return appState.lineZCounter;
+}
+
+/** 把某一图层内部的层级重排为基础区间，保持跨图层稳定顺序 */
+function normalizeLayerZ(layerKey) {
+  const layer = ensureLineLayers()[layerKey];
+  if (!layer) return;
+  const base = LINE_LAYER_META[layerKey] ? LINE_LAYER_META[layerKey].base : 50;
+  layer.lines.forEach((line, idx) => { line.zIndex = base + idx; });
+}
+
+/** 需求REQ-015: 获取当前所有可见辅助线，并按 zIndex 升序返回 (数组末尾者绘制在最顶层) */
+function getVisibleChartLines() {
+  const layers = ensureLineLayers();
+  const out = [];
+  LINE_LAYER_ORDER.forEach(key => {
+    const layer = layers[key];
+    if (layer.visible === false) return;
+    layer.lines.forEach(line => { line.layerKey = key; out.push(line); });
+  });
+  out.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  return out;
+}
+
+function addChartLine(layerKey, line) {
+  const layers = ensureLineLayers();
+  const layer = layers[layerKey];
+  if (!layer) return null;
+  line.layerKey = layerKey;
+  line.zIndex = nextLineZIndex();
+  layer.lines.push(line);
+  return line;
+}
+
+function replaceLayerLines(layerKey, lines) {
+  const layers = ensureLineLayers();
+  const layer = layers[layerKey];
+  if (!layer) return;
+  layer.lines = (lines || []).map(l => ({ ...l, layerKey }));
+  normalizeLayerZ(layerKey);
+}
+
+function countLayerLines(layerKey) {
+  const layer = ensureLineLayers()[layerKey];
+  return layer ? layer.lines.length : 0;
+}
+
+/** 需求REQ-015: 把指定辅助线提升到最顶层并高亮 */
+function bringChartLineToFront(line) {
+  if (!line) return;
+  line.zIndex = nextLineZIndex();
+  appState.topLineId = line.id;
+  renderActiveStockChart();
+  showChartToast(`已置顶：${line.type} ¥${Number(line.price).toFixed(2)}`);
+}
+
+/** 需求REQ-014: 只清除指定模型的辅助线，其他模型完整保留 */
+function clearChartLayer(layerKey) {
+  const layers = ensureLineLayers();
+  const layer = layers[layerKey];
+  if (!layer) return;
+  layer.lines = [];
+  if (layerKey === 'auto') {
+    appState.autoLinesCount = 0;
+    const ctrl = document.getElementById('autoLinesCountControl');
+    if (ctrl) {
+      ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
+      });
+    }
+  }
+  renderActiveStockChart();
+}
+
+/** 需求REQ-014: 切换某个图层模型的显示/隐藏 */
+function toggleChartLayerVisible(layerKey) {
+  const layers = ensureLineLayers();
+  const layer = layers[layerKey];
+  if (!layer) return;
+  layer.visible = layer.visible === false;
+  renderActiveStockChart();
+}
+
+/** 计算同一图层模型内的条数摘要文案 */
+function layerCountText(layerKey) {
+  const meta = LINE_LAYER_META[layerKey];
+  const n = countLayerLines(layerKey);
+  if (!meta) return `${n} 条`;
+  if (n === 0) return meta.empty;
+  return `${n} 根`;
+}
+
+/** 在图表右上角浮出一句轻量反馈 (格式塔: 就近反馈，不打断操作流) */
+let chartToastTimer = null;
+function showChartToast(text) {
+  const hosts = document.querySelectorAll('.chart-toast-host');
+  if (!hosts.length) return;
+  hosts.forEach(host => {
+    host.textContent = text;
+    host.classList.add('show');
+  });
+  if (chartToastTimer) clearTimeout(chartToastTimer);
+  chartToastTimer = setTimeout(() => {
+    hosts.forEach(host => host.classList.remove('show'));
+  }, 1900);
+}
+
+/**
+ * 需求REQ-014/015: 统一水平辅助线 SVG 渲染器 (个股分时图 / 个股K线图 共用同一套图层与层级规则)
+ * 渲染过程中把每条线的 SVG 坐标与标签矩形回写到线对象上，供命中检测使用。
+ */
+function buildHorizontalLinesSVG(opts) {
+  const { m, innerW, priceToY, refPrice } = opts;
+  const lines = getVisibleChartLines();
+  if (!lines.length) return '';
+
+  // 1) 先标注重合关系 (图底关系: 重合线需要区分主次)
+  const visibleInPlot = lines.filter(l => Number.isFinite(priceToY(l.price)));
+  visibleInPlot.forEach(l => { l._svgY = priceToY(l.price); l._overlapCount = 1; });
+  for (let i = 0; i < visibleInPlot.length; i++) {
+    for (let j = i + 1; j < visibleInPlot.length; j++) {
+      if (Math.abs(visibleInPlot[i]._svgY - visibleInPlot[j]._svgY) <= LINE_HIT_TOLERANCE) {
+        visibleInPlot[i]._overlapCount++;
+        visibleInPlot[j]._overlapCount++;
+      }
+    }
+  }
+
+  const maxZ = Math.max(...visibleInPlot.map(l => l.zIndex || 0));
+  const topLine = visibleInPlot.find(l => l.id === appState.topLineId);
+  const topZ = topLine ? (topLine.zIndex || 0) : maxZ;
+
+  return visibleInPlot.map(line => {
+    const yPos = line._svgY;
+    const isAuto = line.layerKey === 'auto';
+    const isUp = Number(line.price) >= Number(refPrice);
+    const color = line.color || (isUp ? '#f43f5e' : '#10b981');
+    const isTop = (line.zIndex || 0) >= topZ;
+    const overlapNote = line._overlapCount > 1 ? ` ·重合${line._overlapCount}` : '';
+    const topNote = isTop ? '⭐ ' : '';
+
+    let amtText = `${line.type}: ¥${Number(line.price).toFixed(2)}`;
+    let tagW = 130;
+    if (line.crossedAmountYi != null) {
+      const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
+      amtText = `${line.type}: ¥${Number(line.price).toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
+      tagW = line.crossedDays !== undefined ? 285 : 210;
+    }
+    amtText = `${topNote}${amtText}${overlapNote}`;
+    tagW += (isTop ? 16 : 0) + (line._overlapCount > 1 ? 52 : 0);
+
+    const baseWidth = isAuto ? ((line.rank === 1 || line.isMaxPeak) ? 2.2 : 1.7) : 1.6;
+    const strokeWidth = isTop ? baseWidth + 0.9 : baseWidth;
+    const opacity = isTop ? 1 : (line._overlapCount > 1 ? 0.55 : 0.92);
+
+    const tagX = m.left + innerW - tagW;
+    line._tagX = tagX;
+    line._tagW = tagW;
+
+    return `
+      <g class="chart-hline layer-${line.layerKey}" data-line-id="${line.id}" opacity="${opacity}">
+        <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="${strokeWidth}" stroke-dasharray="${isAuto ? '6,3' : '5,3'}"/>
+        <rect x="${tagX}" y="${yPos - 10}" width="${tagW}" height="20" fill="rgba(15, 23, 42, 0.95)" rx="3" stroke="${color}" stroke-width="${isTop ? 1.6 : 1}"/>
+        <text x="${m.left + innerW - 6}" y="${yPos + 4}" fill="${color}" font-size="10" text-anchor="end" font-family="monospace" font-weight="${isTop ? 700 : 600}">
+          ${amtText}
+        </text>
+      </g>
+    `;
+  }).join('');
+}
+
+/**
+ * 需求REQ-014: 图层管理面板渲染 (格式塔: 共同区域 + 邻近性 + 相似性)
+ * 每个模型一行：模型名 → 条数 → 显示开关 → 仅作用于该模型的清除按钮
+ */
+function renderLineLayerPanel(analysis) {
+  const panel = document.getElementById('chartLayerPanel');
+  if (!panel) return;
+  ensureLineLayers();
+
+  const rows = LINE_LAYER_ORDER.map(key => {
+    const meta = LINE_LAYER_META[key];
+    const layer = appState.lineLayers[key];
+    const n = layer.lines.length;
+    const visible = layer.visible !== false;
+    // 需求REQ-012: 自动线因缺少真实成交额而无法测算时，必须显式说明原因，不得静默显示"未绘制"
+    const blocked = (key === 'auto' && appState.autoLinesBlockedReason && appState.autoLinesCount > 0)
+      ? appState.autoLinesBlockedReason : null;
+    const countText = blocked ? '⚠️ 无法测算' : (n === 0 ? meta.empty : `已绘制 ${n} 根`);
+    return `
+      <div class="chart-layer-row ${blocked ? 'is-blocked' : ''} ${appState.topLineId && layer.lines.some(l => l.id === appState.topLineId) ? 'is-active' : ''}" data-layer="${key}">
+        <span class="chart-layer-name">${meta.icon} ${meta.name}</span>
+        <span class="chart-layer-count" title="${blocked ? blocked.replace(/"/g, '') : ''}">${countText}</span>
+        <button type="button" class="chart-layer-btn ${visible ? 'on' : ''}" onclick="toggleChartLayerVisible('${key}')"
+                title="${visible ? '隐藏' : '显示'}${meta.name}（不影响其他模型）">${visible ? '👁 显示' : '🚫 隐藏'}</button>
+        <button type="button" class="chart-layer-btn danger" onclick="clearChartLayer('${key}')" ${n === 0 ? 'disabled' : ''}
+                title="仅清除「${meta.name}」，其他画线模型保持不变">🧹 清除</button>
+      </div>
+      ${blocked ? `<p class="chart-layer-note">${blocked}（如需自动线，请切换到已提供成交额的分时周期）</p>` : ''}
+    `;
+  }).join('');
+
+  const chanlunRows = CHANLUN_LAYER_META.map(item => {
+    const on = appState.showChanlunDraw && appState.chanlunLayers[item.key] !== false;
+    const count = analysis && analysis.counts ? analysis.counts[item.key] : null;
+    const label = count === null || count === undefined ? '未获取' : (count > 0 ? `${count} 个` : '未识别');
+    return `
+      <div class="chart-layer-row" data-layer="chanlun-${item.key}">
+        <span class="chart-layer-name">${item.icon} ${item.name}</span>
+        <span class="chart-layer-count">${label}</span>
+        <button type="button" class="chart-layer-btn ${on ? 'on' : ''}" onclick="toggleChanlunLayer('${item.key}')"
+                title="${on ? '隐藏' : '显示'}${item.name}（不影响其他缠论图层与画线模型）">${on ? '👁 显示' : '🚫 隐藏'}</button>
+        <button type="button" class="chart-layer-btn danger" onclick="clearChanlunLayer('${item.key}')"
+                title="仅关闭「${item.name}」图层，其他图层保持不变">🧹 清除</button>
+      </div>
+    `;
+  }).join('');
+
+  const anyChanlun = CHANLUN_LAYER_META.some(i => appState.chanlunLayers[i.key] !== false);
+
+  panel.innerHTML = `
+    <div class="chart-layer-group">
+      <div class="chart-layer-group-title">📏 水平辅助线模型（各模型可同时存在，清除互不影响）</div>
+      ${rows}
+    </div>
+    <div class="chart-layer-group">
+      <div class="chart-layer-group-title">
+        ☯️ 缠论图层
+        <button type="button" class="chart-layer-btn danger" onclick="clearAllChanlunLayers()"
+                ${anyChanlun ? '' : 'disabled'} title="仅关闭全部缠论图层，不影响水平辅助线模型">🧹 清除全部缠论图层</button>
+      </div>
+      ${chanlunRows}
+    </div>
+  `;
+}
+
+/** 需求REQ-014: 切换单个缠论图层显隐 (与图层管理面板、图例复选框保持同步) */
+function toggleChanlunLayer(key) {
+  appState.showChanlunDraw = true;
+  appState.chanlunLayers[key] = appState.chanlunLayers[key] === false;
+  if (dom.btnChanlunDraw) dom.btnChanlunDraw.classList.add('active');
+  renderActiveStockChart();
+}
+
+/** 需求REQ-014: 只清除指定缠论图层 */
+function clearChanlunLayer(key) {
+  appState.chanlunLayers[key] = false;
+  renderActiveStockChart();
+}
+
+/** 需求REQ-014: 清除全部缠论图层 (不影响水平辅助线模型) */
+function clearAllChanlunLayers() {
+  CHANLUN_LAYER_META.forEach(i => { appState.chanlunLayers[i.key] = false; });
+  renderActiveStockChart();
+}
+
 /**
  * 需求1/2: 智能自动画线算法 (支持严格求解 1~4 根辅助线)
  * 约束条件: 第 x 根辅助线交汇交易额第 x 大，且交汇交易日集合绝不能与前面已选的所有辅助线完全重复 (S_x != S_i)
@@ -3167,8 +3658,8 @@ function setAutoLinesCount(count) {
   }
 
   if (appState.autoLinesCount === 0) {
-    // 过滤掉所有自动画线，保留可能的手动画线
-    appState.drawnHorizontalLines = appState.drawnHorizontalLines.filter(l => !l.isAuto);
+    // 需求REQ-014: 仅清空「自动多阶线」模型，手动压力线/支撑线与其他模型完整保留
+    ensureLineLayers().auto.lines = [];
   } else {
     recomputeAutoLines();
   }
@@ -3180,6 +3671,7 @@ function setAutoLinesCount(count) {
  * 重新计算当前个股在当前周期下的自动多阶筹码线
  */
 function recomputeAutoLines() {
+  appState.autoLinesBlockedReason = null;
   if (!appState.activeDetailStock || !appState.autoLinesCount) return;
   const stock = appState.activeDetailStock;
 
@@ -3187,7 +3679,7 @@ function recomputeAutoLines() {
   if (appState.chartPeriod === 'timeline') {
     const tlData = stock.timeline_data || { pre_close: stock.prev_close || stock.price, items: [] };
     const items = (tlData.items && tlData.items.length > 0) ? tlData.items : [];
-    if (items.length === 0) return;
+    if (items.length === 0) { appState.autoLinesBlockedReason = '当前无分时明细，无法测算自动线'; return; }
     klines = items.map(it => ({
       date: it.time,
       open: it.price,
@@ -3199,7 +3691,7 @@ function recomputeAutoLines() {
     }));
   } else {
     klines = (stock.daily_bars && stock.daily_bars.length > 0) ? stock.daily_bars : [];
-    if (klines.length === 0) return;
+    if (klines.length === 0) { appState.autoLinesBlockedReason = '当前周期无K线数据，无法测算自动线'; return; }
 
     let winCount = klines.length;
     if (appState.chartPeriod === 'kline5') winCount = Math.min(klines.length, 5);
@@ -3217,12 +3709,23 @@ function recomputeAutoLines() {
     }
   }
 
+  // 需求REQ-012: 排序取第 x 大交汇成交额必须依赖完整真实成交额；来源未提供即不测算、不推造
+  if (klines.some(k => k.amount_yi == null && k.amount == null)) {
+    appState.autoLinesBlockedReason = '当前周期的真实来源未提供成交额，按真实数据原则不生成自动多阶线';
+    ensureLineLayers().auto.lines = [];
+    return;
+  }
+
   const autoLevels = calculateAutoSupportResistanceLevels(klines, stock.price, appState.autoLinesCount);
   autoLevels.forEach(l => { l.isAuto = true; });
+  if (autoLevels.length === 0) {
+    appState.autoLinesBlockedReason = '当前周期内没有满足「交汇交易日集合互不重复」条件的价位，本周期不生成自动线';
+  }
 
-  // 保留手动绘制的线，替换掉旧自动线
-  const manualLines = appState.drawnHorizontalLines.filter(l => !l.isAuto);
-  appState.drawnHorizontalLines = [...autoLevels, ...manualLines];
+  // 需求REQ-014: 只替换「自动多阶线」模型，手动压力线/支撑线模型完全不受影响
+  const prevTopId = appState.autoLinesCount ? appState.topLineId : null;
+  replaceLayerLines('auto', autoLevels);
+  if (prevTopId && !getVisibleChartLines().some(l => l.id === prevTopId)) appState.topLineId = null;
 }
 
 /**
@@ -3248,6 +3751,10 @@ function toggleDrawHLineMode() {
  */
 function toggleChanlunDraw() {
   appState.showChanlunDraw = !appState.showChanlunDraw;
+  // 需求REQ-014: 重新打开缠论叠加时，若此前被逐层清除过，则恢复全部缠论图层显示
+  if (appState.showChanlunDraw && CHANLUN_LAYER_META.every(i => appState.chanlunLayers[i.key] === false)) {
+    CHANLUN_LAYER_META.forEach(i => { appState.chanlunLayers[i.key] = true; });
+  }
   if (dom.btnChanlunDraw) {
     dom.btnChanlunDraw.classList.toggle('active', appState.showChanlunDraw);
   }
@@ -3273,12 +3780,15 @@ function closeChanlunScopeModal() {
 }
 
 /**
- * 需求1/3: 清除所有已绘制的自动及手动水平辅助线
+ * 需求REQ-014: 清除全部水平辅助线模型 (仅在用户明确点击「清除全部」时使用)
+ * 各模型自身的清除入口为 clearChartLayer(layerKey)，两者互不替代。
  */
 function clearAllChartDrawLines() {
-  appState.drawnHorizontalLines = [];
+  const layers = ensureLineLayers();
+  LINE_LAYER_ORDER.forEach(key => { layers[key].lines = []; });
   appState.autoLinesCount = 0;
   appState.drawHLineMode = false;
+  appState.topLineId = null;
   if (dom.btnToggleHLine) {
     dom.btnToggleHLine.classList.remove('active');
     dom.btnToggleHLine.innerHTML = '📏 画水平线';
@@ -3430,7 +3940,7 @@ async function openStockDetail(code, refresh = false) {
   appState.detailAbortController = controller;
   appState.activeDetailStock = null;
   appState.rawKlineData = [];
-  appState.drawnHorizontalLines = [];
+  resetAllChartLayers();
   if (!refresh) {
     if (dom.klineStartDate) dom.klineStartDate.value = '';
     if (dom.klineEndDate) dom.klineEndDate.value = '';
@@ -3694,6 +4204,21 @@ function renderFinancialTables(fin) {
   }
 }
 
+/** 需求REQ-014: 切换个股时清空全部图层模型并复位层级 (仅作用于图表呈现状态，不触碰任何数据) */
+function resetAllChartLayers() {
+  const layers = ensureLineLayers();
+  LINE_LAYER_ORDER.forEach(key => { layers[key].lines = []; layers[key].visible = true; });
+  appState.lineZCounter = 1000;
+  appState.topLineId = null;
+  if (appState.autoLinesCount) appState.autoLinesCount = 0;
+  const ctrl = document.getElementById('autoLinesCountControl');
+  if (ctrl) {
+    ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
+    });
+  }
+}
+
 /**
  * 核心渲染器：根据当前选中的 period 与 subplot 动态生成高保真矢量 SVG 与鼠标十字光标交互
  */
@@ -3905,16 +4430,17 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
     renderActiveStockChart();
   }, { passive: false });
 
-  // 2. 点击绘制水平辅助线 (压力/支撑线) 逻辑
+  // 2. 点击交互：绘制水平辅助线 (压力/支撑线) + 需求REQ-015 重合辅助线置顶
   svg.addEventListener('click', (e) => {
-    if (!appState.drawHLineMode) return;
-
     const rect = svg.getBoundingClientRect();
     const scaleY = h / rect.height;
+    const scaleX = w / rect.width;
     const mouseY = (e.clientY - rect.top) * scaleY;
+    const mouseX = (e.clientX - rect.left) * scaleX;
 
-    // 仅在主图价格区域内生效
-    if (mouseY >= m.top && mouseY <= m.top + mh) {
+    if (appState.drawHLineMode) {
+      // 仅在主图价格区域内生效
+      if (mouseY < m.top || mouseY > m.top + mh) return;
       // 依据 Y 坐标反算价格
       let priceVal = 0;
       if (mode === 'timeline') {
@@ -3953,19 +4479,67 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
         }
       });
 
-      appState.drawnHorizontalLines.push({
-        id: 'line_' + Date.now(),
+      // 需求REQ-014: 手动画线按价格归属自动落到「压力线」或「支撑线」模型，两个模型独立可清除
+      const isPressure = priceVal >= preClose;
+      const layerKey = isPressure ? 'manual_up' : 'manual_down';
+      const newLine = addChartLine(layerKey, {
+        id: `${layerKey}_${Date.now()}_${Math.round(priceVal * 100)}`,
         y: mouseY,
         price: Number(priceVal.toFixed(2)),
-        type: priceVal >= preClose ? '压力位' : '支撑位',
+        type: isPressure ? '压力位' : '支撑位',
         crossedDays: crossedDays,
         crossedAmountYi: dataList.some(k => k.amount_yi == null && k.amount == null) ? null : Number(crossedAmountYi.toFixed(2))
       });
+      appState.topLineId = newLine ? newLine.id : null;
 
-      // 画完保持模式或更新
       renderActiveStockChart();
+      showChartToast(`已加入「${LINE_LAYER_META[layerKey].name}」模型`);
+      return;
     }
+
+    // 需求REQ-015: 非绘制模式下点击辅助线 → 置顶
+    handleChartLineClick(mouseX, mouseY, w, h, m, mh);
   });
+}
+
+/**
+ * 需求REQ-015: 辅助线点击置顶
+ * 1. 命中标签徽章 → 精准置顶该条线
+ * 2. 命中线段本体：唯一命中直接置顶；多条重合（视觉上叠在一起）则轮换置顶，
+ *    每次点击把当前最底层的一条提到最顶层，用户可逐条看清重合的全部辅助线。
+ */
+function handleChartLineClick(mouseX, mouseY, w, h, m, mh) {
+  const lines = getVisibleChartLines().filter(l => Number.isFinite(l._svgY));
+  if (!lines.length) return;
+
+  // 1) 标签徽章精准命中 (命中容差与标签矩形一致)
+  const tagHits = lines.filter(l =>
+    l._tagX !== undefined &&
+    mouseX >= l._tagX && mouseX <= l._tagX + l._tagW &&
+    Math.abs(mouseY - l._svgY) <= 10
+  );
+  if (tagHits.length) {
+    bringChartLineToFront(tagHits[tagHits.length - 1]);
+    return;
+  }
+
+  // 2) 线段本体命中 (绘制区内 + 垂直距离在容差内)
+  if (mouseX < m.left || mouseX > m.left + (w - m.left - m.right)) return;
+  const hits = lines.filter(l => Math.abs(mouseY - l._svgY) <= LINE_HIT_TOLERANCE);
+  if (!hits.length) return;
+
+  if (hits.length === 1) {
+    bringChartLineToFront(hits[0]);
+    return;
+  }
+
+  // 重合多条：按 zIndex 升序取最底层一条提升到最顶层，实现轮换巡览
+  hits.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  const target = hits[0];
+  target.zIndex = nextLineZIndex();
+  appState.topLineId = target.id;
+  renderActiveStockChart();
+  showChartToast(`重合 ${hits.length} 条 → 已置顶：${target.type} ¥${Number(target.price).toFixed(2)}`);
 }
 
 function hideTooltip() {
@@ -4201,28 +4775,13 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
       <text x="${m.left + innerW * 0.5}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">11:30 / 13:00</text>
       <text x="${m.left + innerW}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="end">15:00</text>
 
-      <!-- 需求1/2/4: 渲染用户绘制或自动测算的水平压力/支撑辅助线及交汇成交额 -->
-      ${appState.drawnHorizontalLines.map(line => {
-        const yPos = line.y !== undefined ? line.y : (m.top + ((pTop - line.price) / (pTop - pBottom)) * mh);
-        const isUp = line.price >= preClose;
-        const color = isUp ? '#f43f5e' : '#10b981';
-        const txtColor = isUp ? '#fca5a5' : '#86efac';
-        // 需求1: 自动画线还要著名这个辅助线交汇了几个交易日，显示: 交易日:x
-        let amtText = `${line.type}: ¥${line.price.toFixed(2)}`;
-        let tagW = 120;
-        if (line.crossedAmountYi != null) {
-          const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
-          amtText = `${line.type}: ¥${line.price.toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
-          tagW = line.crossedDays !== undefined ? 270 : 190;
-        }
-        return `
-          <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="1.5" stroke-dasharray="5,3"/>
-          <rect x="${m.left + innerW - tagW}" y="${yPos - 9}" width="${tagW}" height="18" fill="rgba(15, 23, 42, 0.92)" rx="3" stroke="${color}" stroke-width="1"/>
-          <text x="${m.left + innerW - 6}" y="${yPos + 4}" fill="${txtColor}" font-size="10" text-anchor="end" font-family="monospace" font-weight="600">
-            ${amtText}
-          </text>
-        `;
-      }).join('')}
+      <!-- 需求REQ-014/015: 统一渲染多模型辅助线（自动多阶线/手动压力线/手动支撑线可同时存在，按 zIndex 决定层级） -->
+      ${buildHorizontalLinesSVG({
+        m: m,
+        innerW: innerW,
+        priceToY: (p) => m.top + ((pTop - p) / (pTop - pBottom)) * mh,
+        refPrice: preClose
+      })}
 
       <!-- 副图量额区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
@@ -4282,11 +4841,10 @@ function generateChanlunOverlaySVG(klines, getX, getY, analysis) {
 }
 
 function renderChanlunLegend(analysis) {
-  const panel=document.getElementById('chanlunLegend'); if(!panel)return;
-  panel.hidden=!appState.showChanlunDraw;
-  if(!analysis){panel.textContent='缠论数据未获取';return;}
-  const names={pens:'笔',segments:'线段',pivots:'笔中枢',divergences:'背离',ma_entanglements:'均线缠绕'};
-  panel.innerHTML=Object.entries(names).map(([key,label])=>`<label><input type="checkbox" ${appState.chanlunLayers[key]!==false?'checked':''} onchange="appState.chanlunLayers['${key}']=this.checked;renderActiveStockChart()">${label} ${analysis.counts[key]} ${analysis.counts[key]?'':'（未识别）'}</label>`).join(' ') + `<p>基于完整历史；实线已确认，虚线/问号待确认。均线 MA${analysis.parameters.ma_periods.join('/')}，极差≤${analysis.parameters.threshold_pct}%，连续≥${analysis.parameters.min_bars}根。${analysis.status==='insufficient'?'历史不足。':''}</p>`;
+  // 需求REQ-014: 原独立图例已并入统一的「图层管理面板」，此处仅驱动面板刷新，避免重复的并列控制区
+  const legacy = document.getElementById('chanlunLegend');
+  if (legacy) { legacy.hidden = true; legacy.innerHTML = ''; }
+  renderLineLayerPanel(analysis);
 }
 
 /**
@@ -4436,29 +4994,13 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
       <text x="${m.left + innerW * 0.5}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[Math.floor(n / 2)].date}</text>
       <text x="${m.left + innerW}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="end">${klines[n - 1].date}</text>
 
-      <!-- 需求2: 渲染用户绘制或自动测算的多阶水平辅助线 (支持 1~4 根独立交易日筹码中枢线) -->
-      ${appState.drawnHorizontalLines.map((line, idx) => {
-        const yPos = priceToY(line.price);
-        const lastClose = Number(klines[klines.length - 1].close || klines[klines.length - 1].price);
-        const isUp = line.price >= lastClose;
-        const color = line.color || (line.isMaxPeak ? '#f59e0b' : (isUp ? '#f43f5e' : '#10b981'));
-        const txtColor = color;
-        // 需求1: 自动画线还要著名这个辅助线交汇了几个交易日，显示: 交易日:x
-        let amtText = `${line.type}: ¥${line.price.toFixed(2)}`;
-        let tagW = 120;
-        if (line.crossedAmountYi != null) {
-          const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
-          amtText = `${line.type}: ¥${line.price.toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
-          tagW = line.crossedDays !== undefined ? 285 : 205;
-        }
-        return `
-          <line x1="${m.left}" y1="${yPos}" x2="${m.left + innerW}" y2="${yPos}" stroke="${color}" stroke-width="${line.rank === 1 || line.isMaxPeak ? '2.2' : '1.6'}" stroke-dasharray="6,3"/>
-          <rect x="${m.left + innerW - tagW}" y="${yPos - 9}" width="${tagW}" height="18" fill="rgba(15, 23, 42, 0.95)" rx="3" stroke="${color}" stroke-width="1.2"/>
-          <text x="${m.left + innerW - 6}" y="${yPos + 4}" fill="${txtColor}" font-size="10" text-anchor="end" font-family="monospace" font-weight="700">
-            ${amtText}
-          </text>
-        `;
-      }).join('')}
+      <!-- 需求REQ-014/015: 统一渲染多模型辅助线（自动多阶线/手动压力线/手动支撑线共存，按 zIndex 分层） -->
+      ${buildHorizontalLinesSVG({
+        m: m,
+        innerW: innerW,
+        priceToY: (p) => priceToY(p),
+        refPrice: Number(klines[klines.length - 1].close || klines[klines.length - 1].price)
+      })}
 
       <!-- 副图区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
@@ -4660,9 +5202,132 @@ let indexState = {
   showAutoLines: false,
   autoLinesCount: 0,
   drawingMode: 'none',
-  customLines: [],
+  // 需求REQ-014/015: 指数图表同样采用图层模型，自动线与手动线可共存、可分别清除、可点击置顶
+  lineLayers: {
+    auto:   { key: 'auto',   lines: [], visible: true },
+    manual: { key: 'manual', lines: [], visible: true }
+  },
+  lineZCounter: 1000,
+  topLineId: null,
+  customLines: [], // 兼容旧引用：渲染与逻辑一律以 lineLayers 为准
   customZoomCount: 0 // 需求3: 指数K线图支持滚轮自由缩放
 };
+
+const INDEX_LINE_LAYER_META = {
+  auto:   { name: '自动多阶线', icon: '🤖', base: 10 },
+  manual: { name: '手动水平线', icon: '📏', base: 20 }
+};
+
+function ensureIndexLineLayers() {
+  if (!indexState.lineLayers || typeof indexState.lineLayers !== 'object') indexState.lineLayers = {};
+  Object.keys(INDEX_LINE_LAYER_META).forEach(key => {
+    const layer = indexState.lineLayers[key];
+    if (!layer || !Array.isArray(layer.lines)) {
+      indexState.lineLayers[key] = { key, lines: [], visible: layer ? layer.visible !== false : true };
+    } else if (layer.visible === undefined) {
+      layer.visible = true;
+    }
+  });
+  return indexState.lineLayers;
+}
+
+function nextIndexLineZ() {
+  indexState.lineZCounter = (indexState.lineZCounter || 1000) + 1;
+  return indexState.lineZCounter;
+}
+
+function getVisibleIndexLines() {
+  const layers = ensureIndexLineLayers();
+  const out = [];
+  Object.keys(INDEX_LINE_LAYER_META).forEach(key => {
+    const layer = layers[key];
+    if (layer.visible === false) return;
+    layer.lines.forEach(l => { l.layerKey = key; out.push(l); });
+  });
+  out.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  return out;
+}
+
+/** 需求REQ-014: 指数图表 —— 只清除指定模型 */
+function clearIndexLayer(layerKey) {
+  const layers = ensureIndexLineLayers();
+  if (!layers[layerKey]) return;
+  layers[layerKey].lines = [];
+  if (layerKey === 'auto') {
+    indexState.autoLinesCount = 0;
+    indexState.showAutoLines = false;
+    const ctrl = document.getElementById('indexAutoLinesCountControl');
+    if (ctrl) ctrl.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-count') === '0'));
+  }
+  renderActiveIndexChart();
+}
+
+/** 需求REQ-014: 指数图表 —— 切换模型显隐 */
+function toggleIndexLayerVisible(layerKey) {
+  const layers = ensureIndexLineLayers();
+  if (!layers[layerKey]) return;
+  layers[layerKey].visible = layers[layerKey].visible === false;
+  renderActiveIndexChart();
+}
+
+/** 需求REQ-014: 指数图层管理面板 (格式塔: 共同区域 + 邻近性) */
+function renderIndexLineLayerPanel() {
+  const panel = document.getElementById('indexLayerPanel');
+  if (!panel) return;
+  ensureIndexLineLayers();
+  panel.innerHTML = Object.keys(INDEX_LINE_LAYER_META).map(key => {
+    const meta = INDEX_LINE_LAYER_META[key];
+    const layer = indexState.lineLayers[key];
+    const n = layer.lines.length;
+    const visible = layer.visible !== false;
+    return `
+      <div class="chart-layer-row" data-layer="${key}">
+        <span class="chart-layer-name">${meta.icon} ${meta.name}</span>
+        <span class="chart-layer-count">${n === 0 ? '未绘制' : `已绘制 ${n} 根`}</span>
+        <button type="button" class="chart-layer-btn ${visible ? 'on' : ''}" onclick="toggleIndexLayerVisible('${key}')"
+                title="${visible ? '隐藏' : '显示'}${meta.name}（不影响另一模型）">${visible ? '👁 显示' : '🚫 隐藏'}</button>
+        <button type="button" class="chart-layer-btn danger" onclick="clearIndexLayer('${key}')" ${n === 0 ? 'disabled' : ''}
+                title="仅清除「${meta.name}」，另一模型保持不变">🧹 清除</button>
+      </div>
+    `;
+  }).join('');
+}
+
+/** 需求REQ-015: 指数图表 —— 重合辅助线点击置顶 (含标签精准命中与轮换巡览) */
+function handleIndexLineClick(mouseX, mouseY, margin, plotWidth, mainHeight) {
+  const lines = getVisibleIndexLines().filter(l => Number.isFinite(l._svgY));
+  if (!lines.length) return;
+
+  const tagHits = lines.filter(l =>
+    l._tagX !== undefined && mouseX >= l._tagX && mouseX <= l._tagX + l._tagW &&
+    Math.abs(mouseY - l._svgY) <= 12
+  );
+  if (tagHits.length) {
+    const target = tagHits[tagHits.length - 1];
+    target.zIndex = nextIndexLineZ();
+    indexState.topLineId = target.id;
+    renderActiveIndexChart();
+    showChartToast(`已置顶：${target.type} ¥${Number(target.price).toFixed(2)}`);
+    return;
+  }
+
+  if (mouseY < margin.top || mouseY > mainHeight) return;
+  const hits = lines.filter(l => Math.abs(mouseY - l._svgY) <= LINE_HIT_TOLERANCE);
+  if (!hits.length) return;
+  if (hits.length === 1) {
+    hits[0].zIndex = nextIndexLineZ();
+    indexState.topLineId = hits[0].id;
+    renderActiveIndexChart();
+    showChartToast(`已置顶：${hits[0].type} ¥${Number(hits[0].price).toFixed(2)}`);
+    return;
+  }
+  hits.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  const target = hits[0];
+  target.zIndex = nextIndexLineZ();
+  indexState.topLineId = target.id;
+  renderActiveIndexChart();
+  showChartToast(`重合 ${hits.length} 条 → 已置顶：${target.type} ¥${Number(target.price).toFixed(2)}`);
+}
 
 /**
  * 需求3/4: 加载大盘指数列表 (上证指数、深证成指)
@@ -4854,10 +5519,14 @@ function setIndexDrawingMode(mode) {
 }
 
 function clearIndexChartDrawings() {
-  indexState.customLines = [];
+  // 需求REQ-014: 兜底「清除全部」；各模型自身的清除入口为 clearIndexLayer(layerKey)
+  const layers = ensureIndexLineLayers();
+  Object.keys(INDEX_LINE_LAYER_META).forEach(key => { layers[key].lines = []; layers[key].visible = true; });
   indexState.autoLinesCount = 0;
   indexState.showAutoLines = false;
   indexState.drawingMode = 'none';
+  indexState.topLineId = null;
+  indexState.lineZCounter = 1000;
   const ctrl = document.getElementById('indexAutoLinesCountControl');
   if (ctrl) {
     ctrl.querySelectorAll('.seg-btn').forEach(btn => {
@@ -4872,6 +5541,7 @@ function clearIndexChartDrawings() {
  * 需求6: 渲染指数专属走势图谱 (分时、5天、10天、20天、60天、全部K线，副图只有成交金额，配备自动画线)
  */
 function renderActiveIndexChart() {
+  renderIndexLineLayerPanel();
   const indexData = indexState.activeIndex;
   if (!indexData || !dom.indexChartSvgContainer) return;
 
@@ -5061,33 +5731,66 @@ function renderActiveIndexChart() {
       if (k.amount_yi != null) subBarsSvg += `<rect x="${x - candleWidth / 2}" y="${ySub}" width="${candleWidth}" height="${hSub}" fill="${color}" opacity="0.8"/>`;
     });
 
-    // 需求1/2: 指数多阶自动画线 (支持 1~4 根独立交易日筹码中枢线)
-    let autoLinesSvg = '';
+    // 需求REQ-014/015: 指数多阶自动画线 (1~4 根筹码中枢线) —— 写入独立图层模型，按 zIndex 参与层级排序
     if (indexState.showAutoLines && indexState.autoLinesCount > 0) {
       const autoLevels = calculateAutoSupportResistanceLevels(klines, indexData.price, indexState.autoLinesCount);
-      autoLinesSvg = autoLevels.map((line, idx) => {
-        const lineY = getY(line.price);
-        const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
-        const tagW = line.crossedDays !== undefined ? 300 : 225;
-        const color = line.color || '#f59e0b';
-        return `
-          <g class="auto-line-multi-peak rank-${line.rank || idx + 1}">
-            <line x1="${margin.left}" y1="${lineY}" x2="${margin.left + plotWidth}" y2="${lineY}" stroke="${color}" stroke-width="${line.rank === 1 ? '2.5' : '1.8'}" stroke-dasharray="6,4"/>
-            <rect x="${margin.left + plotWidth - tagW}" y="${lineY - 12}" width="${tagW}" height="24" rx="4" fill="#0f172a" stroke="${color}" stroke-width="1.2" opacity="0.95"/>
-            <text x="${margin.left + plotWidth - tagW + 8}" y="${lineY + 4}" fill="${color}" font-size="11" font-weight="700" font-family="monospace">
-              ${line.type}: ${line.price} (交汇: ${line.crossedAmountYi}亿${daysPart})
-            </text>
-          </g>
-        `;
-      }).join('');
+      indexState.lineLayers.auto.lines = autoLevels.map((line, idx) => ({
+        ...line,
+        id: `index_auto_${line.rank || idx + 1}_${Math.round(line.price * 100)}`,
+        type: line.type,
+        layerKey: 'auto',
+        zIndex: INDEX_LINE_LAYER_META.auto.base + idx
+      }));
+    } else if (!indexState.showAutoLines) {
+      indexState.lineLayers.auto.lines = [];
     }
 
-    // 自定义水平线
-    const customLinesSvg = indexState.customLines.map(p => {
-      const ly = getY(p);
+    // 需求REQ-014/015: 统一渲染指数图多模型辅助线
+    const indexRefPrice = Number(indexData.price || klines[klines.length - 1].close);
+    const indexVisibleLines = getVisibleIndexLines();
+    indexVisibleLines.forEach(l => { l._svgY = getY(l.price); l._overlapCount = 1; });
+    for (let i = 0; i < indexVisibleLines.length; i++) {
+      for (let j = i + 1; j < indexVisibleLines.length; j++) {
+        if (Math.abs(indexVisibleLines[i]._svgY - indexVisibleLines[j]._svgY) <= LINE_HIT_TOLERANCE) {
+          indexVisibleLines[i]._overlapCount++;
+          indexVisibleLines[j]._overlapCount++;
+        }
+      }
+    }
+    const indexMaxZ = indexVisibleLines.length ? Math.max(...indexVisibleLines.map(l => l.zIndex || 0)) : 0;
+    const indexTopLine = indexVisibleLines.find(l => l.id === indexState.topLineId);
+    const indexTopZ = indexTopLine ? (indexTopLine.zIndex || 0) : indexMaxZ;
+
+    const autoLinesSvg = indexVisibleLines.map(line => {
+      const lineY = line._svgY;
+      const isAuto = line.layerKey === 'auto';
+      const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
+      const color = line.color || (isAuto ? '#f59e0b' : (line.price >= indexRefPrice ? '#f43f5e' : '#10b981'));
+      const isTop = (line.zIndex || 0) >= indexTopZ;
+      const overlapNote = line._overlapCount > 1 ? ` ·重合${line._overlapCount}` : '';
+      const topNote = isTop ? '⭐ ' : '';
+      let labelText = `${line.type}: ¥${Number(line.price).toFixed(2)}`;
+      let tagW = 150;
+      if (line.crossedAmountYi != null) {
+        labelText = `${line.type}: ¥${Number(line.price).toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
+        tagW = 320;
+      }
+      labelText = `${topNote}${labelText}${overlapNote}`;
+      tagW += (isTop ? 16 : 0) + (line._overlapCount > 1 ? 52 : 0);
+      const tagX = margin.left + plotWidth - tagW;
+      line._tagX = tagX;
+      line._tagW = tagW;
+      const baseWidth = isAuto ? (line.rank === 1 ? 2.5 : 1.8) : 1.8;
+      const strokeWidth = isTop ? baseWidth + 0.8 : baseWidth;
+      const opacity = isTop ? 1 : (line._overlapCount > 1 ? 0.55 : 0.92);
       return `
-        <line x1="${margin.left}" y1="${ly}" x2="${margin.left + plotWidth}" y2="${ly}" stroke="#38bdf8" stroke-width="1.8" stroke-dasharray="4,4"/>
-        <text x="${margin.left + plotWidth + 6}" y="${ly + 4}" fill="#38bdf8" font-size="11" font-family="monospace">水平位: ${p}</text>
+        <g class="chart-hline layer-${line.layerKey}" data-line-id="${line.id}" opacity="${opacity}">
+          <line x1="${margin.left}" y1="${lineY}" x2="${margin.left + plotWidth}" y2="${lineY}" stroke="${color}" stroke-width="${strokeWidth}" stroke-dasharray="${isAuto ? '6,4' : '5,3'}"/>
+          <rect x="${tagX}" y="${lineY - 12}" width="${tagW}" height="24" rx="4" fill="#0f172a" stroke="${color}" stroke-width="${isTop ? 1.8 : 1.2}" opacity="0.95"/>
+          <text x="${margin.left + plotWidth - 6}" y="${lineY + 4}" fill="${color}" font-size="11" font-weight="${isTop ? 700 : 600}" text-anchor="end" font-family="monospace">
+            ${labelText}
+          </text>
+        </g>
       `;
     }).join('');
 
@@ -5105,9 +5808,8 @@ function renderActiveIndexChart() {
         ${candlesSvg}
         ${subBarsSvg}
 
-        <!-- 自动画线与手动线 -->
+        <!-- 需求REQ-014/015: 多模型辅助线（自动线与手动线共存，按 zIndex 分层） -->
         ${autoLinesSvg}
-        ${customLinesSvg}
 
         <!-- 坐标刻度 -->
         <text x="${margin.left - 8}" y="${margin.top + 10}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">${maxPrice.toFixed(2)}</text>
@@ -5143,16 +5845,33 @@ function renderActiveIndexChart() {
       }, { passive: false });
 
       svgElem.addEventListener('click', (e) => {
-        if (indexState.drawingMode !== 'horizontal') return;
         const rect = svgElem.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
         const clickY = e.clientY - rect.top;
-        if (clickY >= margin.top && clickY <= mainHeight) {
-          const ratio = 1 - (clickY - margin.top) / (mainHeight - margin.top);
-          const clickPrice = roundTo(minPrice + ratio * (maxPrice - minPrice), 2);
-          indexState.customLines.push(clickPrice);
-          setIndexDrawingMode('none');
-          renderActiveIndexChart();
+
+        if (indexState.drawingMode === 'horizontal') {
+          if (clickY >= margin.top && clickY <= mainHeight) {
+            const ratio = 1 - (clickY - margin.top) / (mainHeight - margin.top);
+            const clickPrice = roundTo(minPrice + ratio * (maxPrice - minPrice), 2);
+            const isPressure = clickPrice >= Number(indexData.price || clickPrice);
+            const newLine = {
+              id: `index_manual_${Date.now()}_${Math.round(clickPrice * 100)}`,
+              price: clickPrice,
+              type: isPressure ? '压力位' : '支撑位',
+              layerKey: 'manual',
+              zIndex: nextIndexLineZ()
+            };
+            indexState.lineLayers.manual.lines.push(newLine);
+            indexState.topLineId = newLine.id;
+            setIndexDrawingMode('none');
+            renderActiveIndexChart();
+            showChartToast('已加入「手动水平线」模型');
+          }
+          return;
         }
+
+        // 需求REQ-015: 点击重合辅助线置顶
+        handleIndexLineClick(clickX, clickY, margin, plotWidth, mainHeight);
       });
     }
   }
