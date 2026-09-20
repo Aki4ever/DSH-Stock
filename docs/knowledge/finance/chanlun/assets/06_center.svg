@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820" role="img"><title>06  中枢：三个完整次级别走势的交集</title><desc>先确认组成单位和级别，再计算价格公共区间。</desc>
+<style>text{font-family:"PingFang SC","Heiti SC","STHeiti",sans-serif}</style>
+<rect x="0" y="0" width="1200" height="820" rx="0" fill="#f7f6f0" stroke="none"/>
+<text x="44" y="54" fill="#183642" font-size="32" font-weight="600" text-anchor="start">06  中枢：三个完整次级别走势的交集</text>
+<text x="44" y="90" fill="#546d76" font-size="18" font-weight="400" text-anchor="start">先确认组成单位和级别，再计算价格公共区间。</text>
+<text x="44" y="795" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">自制教学示意 · 非真实行情 · 定义与前提见教程及原作者出处</text>
+<rect x="44" y="130" width="1112" height="420" rx="14" fill="white" stroke="#ccd9db"/>
+<rect x="105" y="332" width="947" height="84" rx="0" fill="#e6f2f1" stroke="none"/>
+<line x1="105" y1="332" x2="1052" y2="332" stroke="#087f8c" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>
+<line x1="105" y1="416" x2="1052" y2="416" stroke="#087f8c" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>
+<text x="1030" y="320" fill="#087f8c" font-size="18" font-weight="400" text-anchor="end">ZG=13</text>
+<text x="1030" y="441" fill="#087f8c" font-size="18" font-weight="400" text-anchor="end">ZD=11</text>
+<polyline points="130,290 300,458 470,332 640,416 810,206 980,290" fill="none" stroke="#087f8c" stroke-width="4" stroke-dasharray="" stroke-linejoin="round"/>
+<circle cx="130" cy="290" r="5" fill="#087f8c"/>
+<text x="122" y="276" fill="#183642" font-size="20" font-weight="400" text-anchor="start">14</text>
+<circle cx="300" cy="458" r="5" fill="#087f8c"/>
+<text x="292" y="444" fill="#183642" font-size="20" font-weight="400" text-anchor="start">10</text>
+<circle cx="470" cy="332" r="5" fill="#087f8c"/>
+<text x="462" y="318" fill="#183642" font-size="20" font-weight="400" text-anchor="start">13</text>
+<circle cx="640" cy="416" r="5" fill="#087f8c"/>
+<text x="632" y="402" fill="#183642" font-size="20" font-weight="400" text-anchor="start">11</text>
+<circle cx="810" cy="206" r="5" fill="#087f8c"/>
+<text x="802" y="192" fill="#183642" font-size="20" font-weight="400" text-anchor="start">16</text>
+<circle cx="980" cy="290" r="5" fill="#087f8c"/>
+<text x="972" y="276" fill="#183642" font-size="20" font-weight="400" text-anchor="start">14</text>
+<text x="215.0" y="356.0" fill="#183642" font-size="18" font-weight="400" text-anchor="middle">A</text>
+<text x="385.0" y="377.0" fill="#183642" font-size="18" font-weight="400" text-anchor="middle">B</text>
+<text x="555.0" y="356.0" fill="#183642" font-size="18" font-weight="400" text-anchor="middle">C</text>
+<text x="725.0" y="293.0" fill="#183642" font-size="18" font-weight="400" text-anchor="middle">D 离开</text>
+<text x="895.0" y="230.0" fill="#183642" font-size="18" font-weight="400" text-anchor="middle">E 首次回试</text>
+<text x="75" y="527" fill="#183642" font-size="22" font-weight="400" text-anchor="start">A、B、C均已完成： [10,14] ∩ [10,13] ∩ [11,13] = [11,13]</text>
+<rect x="44" y="579" width="540" height="132" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="66" y="614" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">区间计算</text>
+<text x="66" y="650" fill="#183642" font-size="18" font-weight="400" text-anchor="start">ZD=max(10,10,11)=11</text>
+<text x="66" y="678" fill="#183642" font-size="18" font-weight="400" text-anchor="start">ZG=min(14,13,13)=13</text>
+<rect x="612" y="579" width="544" height="132" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="634" y="614" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">三买清晰例：还需满足图外前提</text>
+<text x="634" y="650" fill="#183642" font-size="18" font-weight="400" text-anchor="start">D、E为相应次级别且均已完成；E为首次回试。</text>
+<text x="634" y="678" fill="#183642" font-size="18" font-weight="400" text-anchor="start">E低点14 &gt; ZG13，留在中枢上方。</text>
+<text x="44" y="751" fill="#bc5a2e" font-size="19" font-weight="400" text-anchor="start">三根任意折线只展示交集；未确认级别与完成状态时，不能认定正式中枢或三买。</text></svg>

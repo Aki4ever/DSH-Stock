@@ -36,9 +36,9 @@ def fetch_ipo_and_dividend(code: str) -> Dict[str, Any]:
     """通过新浪财经稳健提取上市日期与累计分红次数"""
     clean = code.lower().replace("sh", "").replace("sz", "").replace("bj", "")
     
-    ipo_date = ""
-    years = 0.0
-    div_count = 0
+    ipo_date = None
+    years = None
+    div_count = None
     now = datetime.now()
 
     # 1. 抓取 IPO 上市日期
@@ -66,36 +66,6 @@ def fetch_ipo_and_dividend(code: str) -> Dict[str, Any]:
             years = round(days / 365.25, 1)
         except Exception:
             pass
-    else:
-        # 基于 A 股代码发行批次规则推算基准上市年限（真实兜底）
-        if clean.startswith("600"):
-            years = round(15.0 + (int(clean[3:]) % 120) / 10.0, 1)
-            div_count = int(years * 0.8)
-            ipo_date = f"{int(now.year - years)}-06-15"
-        elif clean.startswith("601"):
-            years = round(8.0 + (int(clean[3:]) % 100) / 10.0, 1)
-            div_count = int(years * 0.9)
-            ipo_date = f"{int(now.year - years)}-08-20"
-        elif clean.startswith("603"):
-            years = round(4.0 + (int(clean[3:]) % 60) / 10.0, 1)
-            div_count = int(years * 0.7)
-            ipo_date = f"{int(now.year - years)}-05-18"
-        elif clean.startswith("000"):
-            years = round(16.0 + (int(clean[3:]) % 120) / 10.0, 1)
-            div_count = int(years * 0.8)
-            ipo_date = f"{int(now.year - years)}-04-10"
-        elif clean.startswith("002"):
-            years = round(7.0 + (int(clean[3:]) % 100) / 10.0, 1)
-            div_count = int(years * 0.85)
-            ipo_date = f"{int(now.year - years)}-09-12"
-        elif clean.startswith("300"):
-            years = round(5.0 + (int(clean[3:]) % 80) / 10.0, 1)
-            div_count = int(years * 0.75)
-            ipo_date = f"{int(now.year - years)}-10-25"
-        elif clean.startswith("301"):
-            years = round(1.5 + (int(clean[3:]) % 30) / 10.0, 1)
-            div_count = int(years * 0.6)
-            ipo_date = f"{int(now.year - years)}-03-15"
 
     return {
         "code": code,
@@ -106,47 +76,7 @@ def fetch_ipo_and_dividend(code: str) -> Dict[str, Any]:
 
 
 def get_fallback_ipo_and_dividend(code: str, raw_code: str) -> Dict[str, Any]:
-    clean = raw_code
-    now = datetime.now()
-    if clean.startswith("600"):
-        years = round(15.0 + (int(clean[3:]) % 120) / 10.0, 1)
-        div_count = int(years * 0.8)
-        ipo_date = f"{int(now.year - years)}-06-15"
-    elif clean.startswith("601"):
-        years = round(8.0 + (int(clean[3:]) % 100) / 10.0, 1)
-        div_count = int(years * 0.9)
-        ipo_date = f"{int(now.year - years)}-08-20"
-    elif clean.startswith("603"):
-        years = round(4.0 + (int(clean[3:]) % 60) / 10.0, 1)
-        div_count = int(years * 0.7)
-        ipo_date = f"{int(now.year - years)}-05-18"
-    elif clean.startswith("000"):
-        years = round(16.0 + (int(clean[3:]) % 120) / 10.0, 1)
-        div_count = int(years * 0.8)
-        ipo_date = f"{int(now.year - years)}-04-10"
-    elif clean.startswith("002"):
-        years = round(7.0 + (int(clean[3:]) % 100) / 10.0, 1)
-        div_count = int(years * 0.85)
-        ipo_date = f"{int(now.year - years)}-09-12"
-    elif clean.startswith("300"):
-        years = round(5.0 + (int(clean[3:]) % 80) / 10.0, 1)
-        div_count = int(years * 0.75)
-        ipo_date = f"{int(now.year - years)}-10-25"
-    elif clean.startswith("301"):
-        years = round(1.5 + (int(clean[3:]) % 30) / 10.0, 1)
-        div_count = int(years * 0.6)
-        ipo_date = f"{int(now.year - years)}-03-15"
-    else:
-        years = 5.0
-        div_count = 3
-        ipo_date = f"{int(now.year - 5)}-01-01"
-
-    return {
-        "code": code,
-        "ipo_date": ipo_date,
-        "listing_years": years,
-        "dividend_count": div_count
-    }
+    return {'ipo_date': None, 'listing_years': None, 'dividend_count': None}
 
 
 def populate():

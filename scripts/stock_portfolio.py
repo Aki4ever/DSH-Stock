@@ -128,12 +128,14 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
         return json.load(f)
 
 
-def build_portfolio_summary(config_path: Optional[str] = None, allow_mock: bool = True) -> Tuple[PortfolioSummary, List[AlertMessage]]:
+def build_portfolio_summary(config_path: Optional[str] = None, allow_mock: bool = False) -> Tuple[PortfolioSummary, List[AlertMessage]]:
     """
     根据配置文件加载持仓底册，联网获取实时行情并生成全景投资组合报告与预警清单
     """
     cfg = load_config(config_path)
     raw_positions = cfg.get("portfolio", [])
+    if raw_positions and cfg.get("portfolio_verified") is not True:
+        raise RuntimeError("持仓配置未确认来源，不能作为真实持仓；核实后设置portfolio_verified=true")
     alert_rules = cfg.get("alert_rules", {})
 
     tp_ratio = alert_rules.get("take_profit_ratio", 0.20) * 100.0  # +20%
@@ -157,7 +159,9 @@ def build_portfolio_summary(config_path: Optional[str] = None, allow_mock: bool 
         notes = raw.get("notes", "")
 
         q = quotes_map.get(code)
-        curr_price = q.price if q else cost
+        if q is None:
+            raise RuntimeError('持仓证券真实行情缺失：' + code)
+        curr_price = q.price
         prev_close = q.prev_close if q else curr_price
 
         pos = PositionItem(

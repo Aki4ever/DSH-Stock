@@ -3137,3 +3137,5 @@ body {
 .chanlun-signal-badge:hover {
   transform: scale(1.15);
 }
+
+.chanlun-legend {padding:12px 16px;border:1px solid #334155;border-radius:8px;background:#111827;color:#cbd5e1;font-size:12px}.chanlun-legend label{display:inline-flex;align-items:center;gap:4px;margin-right:14px;cursor:pointer}.chanlun-legend p{margin:8px 0 0}.missing-data{color:#64748b;font-size:12px}.data-source-status{color:#94a3b8;font-size:12px;line-height:1.6}

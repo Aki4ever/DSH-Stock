@@ -1,9 +1,9 @@
 # DSH 股票量化监控与投资组合分析工程 (DSH Stock)
 
 > ### 🏷️ **版本信息与实施追踪**
-> - **当前系统实施总版本**：`v1.0.0`
+> - **当前系统实施总版本**：`v4.5.0`
 > - **维护团队**：DSH 量化生态与智能体工程组
-> - **最后更新日期**：2026-09-16
+> - **最后更新日期**：2026-09-20
 > - **版本状态**：`[Release 稳定生效]`
 
 ---
@@ -19,7 +19,7 @@
 >   - [x] **3. 动态 Agent Skill 技能包**：在 `skills/` 输出标准 `SKILL.md` 与 Schema 规范，使 DSH 智能体能自然语言秒级调用行情获取、量化打分与图表研报生成能力。
 > - 🔌 **具体集成与落地方式**：
 >   - 接口契约：提供 `python3 scripts/dsh_stock_cli.py <quote|list|analyze|portfolio|chart|report|status>` 命令行。
->   - 数据流转：实时对接腾讯/新浪公开金融接口（带离线 Mock 降级保护），零依赖纯 Python 标准库驱动，自动渲染独立 SVG 矢量图表并输出 Markdown 研报。
+>   - 数据流转：实时对接腾讯/新浪公开金融接口（失败明确未获取，产品禁止Mock回退），零依赖纯 Python 标准库驱动，自动渲染独立 SVG 矢量图表并输出 Markdown 研报。
 >   - 原生可视化呈现：在 DSH Web 终端呈现 ANSI 彩色涨跌表与进度条，在会话尾部输出可直接点击的 SVG 走势图与研报路径。
 > - 📈 **预期效能增益**：实现秒级获取行情与多空量化体检，告别繁重的商业炒股软件等待，零外部三方依赖安装，单测 0.6 秒全量绿灯，大幅提升投资决策与风险预警效率。
 
@@ -33,7 +33,7 @@
 │   ├── stock_config.json        # 监控指数、自选股池、持仓底册、预警规则与指标参数
 │   └── README.md                # 配置中心说明
 ├── scripts/                     # 核心业务引擎与运维脚本
-│   ├── stock_data_engine.py     # 实时/历史行情数据引擎 (腾讯公开接口 + 拟真K线 + Mock回退)
+│   ├── stock_data_engine.py     # 实时/历史行情数据引擎 (真实公开接口 + 可信历史缓存)
 │   ├── stock_indicators.py      # 技术指标计算库 (MA/MACD/RSI/BOLL/KDJ) 与 100分制量化模型
 │   ├── stock_portfolio.py       # 持仓投资组合管理与多维风险/止盈止损预警中枢
 │   ├── stock_chart_svg.py       # 原生纯 SVG 矢量 K线/均线/成交量走势图生成引擎
@@ -127,9 +127,30 @@ python3 scripts/dsh_stock_cli.py status
 
 ## 🧪 自动化测试与质量门禁验证
 
-本工程遵循质量零缺陷法典，测试用例覆盖全部核心模块，具备离线内置 Mock 机制，可随时进行一键验证：
+本工程遵循质量零缺陷法典，测试用例覆盖全部核心模块，构造数据仅位于隔离测试fixture，可随时进行一键验证：
 
 ```bash
 python3 -m unittest discover -s tests -p "test_*.py" -v
 ```
-> **当前门禁状态**：19 个测试用例全部通过，100% 绿灯。
+> **当前门禁状态**：58 个 Python 测试通过；另有两组 JavaScript 完整性验证，详见本版验收记录。
+
+
+## v4.5.0 当前入口和基线
+
+本地网页：[打开产品](http://127.0.0.1:8888/)。[入口版本记录](docs/operations/product-entry.json)、[整体基线与回退](docs/baselines/2026-09-20/README.md)、[真实来源与未覆盖字段](docs/baselines/2026-09-20/data-sources.md)、[需求台账](docs/requirements.md)、[本地验证](docs/verification/2026-09-20-r02/README.md)。
+
+```sh
+python3 scripts/dsh_stock_cli.py status
+python3 scripts/dsh_stock_cli.py data-audit
+python3 scripts/dsh_stock_cli.py holders --json
+python3 scripts/dsh_stock_cli.py holders --refresh --start-page 1 --max-pages 250 --json
+python3 scripts/dsh_stock_cli.py chanlun sh600519 --json
+```
+
+股东刷新按批采集，依据返回的 `next_page` 继续；失败页必须单独补采，`complete=false` 不能标作全部完成。范围是来源披露的十大股东，按姓名去重，不是证券账户总户数。未核实的样例持仓须先替换为本人真实数据并设置 `portfolio_verified: true`，系统才计算实际组合。
+
+```sh
+python3 -m unittest discover -s tests -v
+node tests/test_detail_requests.js
+node tests/test_chart_integrity.js
+```

@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from scripts.data_sources.safe_session import safe_session
+from scripts.verified_sources import number
 
 EASTMONEY_DC_URL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
 EASTMONEY_REFERER = "https://data.eastmoney.com/gdfx/gdcj.html"
@@ -61,6 +62,8 @@ class ShareholderAdapter:
         if not data_list:
             return output
 
+        data_list = [r for r in data_list if str(r.get("END_DATE") or "")[:10] <= datetime.now().date().isoformat() and str(r.get("NOTICE_DATE") or "")[:10] <= datetime.now().date().isoformat()]
+        if not data_list: return output
         # 取最新一个报告期
         latest_period = (data_list[0].get("END_DATE") or "").split(" ")[0]
         output["period"] = latest_period
@@ -71,17 +74,17 @@ class ShareholderAdapter:
             if curr_period != latest_period:
                 continue
 
-            change_str = item.get("HOLD_NUM_CHANGE", "不变")
+            change_str = str(item.get("HOLD_NUM_CHANGE") if item.get("HOLD_NUM_CHANGE") is not None else "未提供")
             if not change_str or change_str == "0":
                 change_str = "不变"
 
             output["holders"].append({
-                "rank": int(item.get("HOLDER_RANK") or len(output["holders"]) + 1),
+                "rank": item.get("HOLDER_RANK") or "未提供",
                 "name": item.get("HOLDER_NAME", "未知"),
-                "hold_num_wan": round(float(item.get("HOLD_NUM") or 0.0) / 10000, 2), # 万股
-                "hold_ratio": float(item.get("HOLD_NUM_RATIO") or 0.0),               # 占比 %
+                "hold_num_wan": round(number(item["HOLD_NUM"]) / 10000, 2) if number(item.get("HOLD_NUM")) is not None else None, # 万股
+                "hold_ratio": number(item.get("HOLD_NUM_RATIO")),               # 占比 %
                 "change": change_str,
-                "share_type": item.get("SHARES_TYPE", "流通A股")
+                "share_type": item.get("SHARES_TYPE") or "未提供"
             })
 
         return output
@@ -119,12 +122,13 @@ class ShareholderAdapter:
         data_list = (resp.get("result") or {}).get("data") or []
         for item in data_list:
             period = (item.get("END_DATE") or "").split(" ")[0]
+            if not period or period > datetime.now().date().isoformat(): continue
             results.append({
                 "period": period,
-                "holder_num": int(item.get("HOLDER_TOTAL_NUM") or 0),
-                "change_ratio": float(item.get("TOTAL_NUM_RATIO") or 0.0), # 户数变动比例%
-                "avg_hold_num": round(float(item.get("AVG_FREE_SHARES") or 0.0), 1),
-                "focus_level": item.get("HOLD_FOCUS", "一般")
+                "holder_num": number(item.get("HOLDER_TOTAL_NUM")),
+                "change_ratio": number(item.get("TOTAL_NUM_RATIO")), # 户数变动比例%
+                "avg_hold_num": round(number(item["AVG_FREE_SHARES"]),1) if number(item.get("AVG_FREE_SHARES")) is not None else None,
+                "focus_level": item.get("HOLD_FOCUS") or "未提供"
             })
 
         return results

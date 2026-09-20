@@ -2,49 +2,46 @@
   "schema_version": 1,
   "product": {
     "name": "DSH股票",
-    "form": "web"
+    "form": "web+CLI"
   },
   "requirements": {
-    "id": "REQ-008/REQ-009",
-    "version": "v1",
-    "previous": "v4.3.0运行基线；两项为新增需求"
+    "id": "REQ-008/009v2/010/011/012/013",
+    "version": "v4.5.0",
+    "previous": "v4.4.0"
   },
-  "version": "v4.4.0",
-  "built_at": "2026-09-19T20:52:02.031910+08:00",
+  "version": "v4.5.0",
+  "built_at": "2026-09-20T06:42:09.031861+00:00",
   "source": {
     "vcs": "git",
-    "revision": "f8b53aa9dd5985c0cdaf4463922a0c2fc336e1b7",
+    "revision": "a0cd26fe9d4d5fb9d12c921e344a0c2e67f7b565",
     "dirty": true,
-    "fingerprints": "docs/verification/2026-09-19-fix/source-fingerprints.json"
+    "fingerprints": "docs/verification/2026-09-20-r02/source-fingerprints.json"
   },
+  "classification": "latest-verified",
   "entries": [
     {
       "id": "primary",
       "kind": "url",
-      "platform": "local web",
+      "platform": "local web/macOS",
       "target": "http://127.0.0.1:8888/",
       "verification_status": "passed",
-      "verified_at": "2026-09-19T20:52:02.031910+08:00",
-      "evidence": "docs/verification/2026-09-19-fix/live-entry.json"
+      "verified_at": "2026-09-20T06:55:49.779379+00:00",
+      "evidence": "docs/verification/2026-09-20-r02/live-entry.json"
+    },
+    {
+      "id": "cli",
+      "kind": "cli",
+      "platform": "Python3/macOS",
+      "target": "python3 scripts/dsh_stock_cli.py status",
+      "verification_status": "passed",
+      "verified_at": "2026-09-20T06:55:49.779379+00:00",
+      "evidence": "docs/verification/2026-09-20-r02/cli-status.txt"
     }
   ],
   "stable_fallback": {
-    "version": "v4.3.0",
-    "target": "http://127.0.0.1:8890/",
-    "note": "保留旧行为与已知问题，仅作回退；在/tmp中的原文件和DB副本"
-  },
-  "status_receipt": {
-    "status": "running",
-    "service": "DSH Stock Web Server",
     "version": "v4.4.0",
-    "pid": 40878,
-    "port": 8888,
-    "uptime_seconds": 176,
-    "stock_count": 4601,
-    "csi50_count": 50,
-    "csi100_count": 100,
-    "db_path": "/Users/linqiyu/Documents/DSH/DSH股票/data/stock_database.db",
-    "snapshot_date": "2026-09-19",
-    "current_time": "2026-09-19 20:52:02"
+    "target": "data/backups/r02-v4.4.0",
+    "note": "独立可运行回退，仅供审计旧行为；包含旧数据问题，不作为当前产品",
+    "evidence": "docs/baselines/2026-09-20/rollback.json"
   }
 }

@@ -42,3 +42,6 @@ temp/
 # SQLite journal/wal
 *.db-shm
 *.db-wal
+
+# Local recoverable release baselines (not production data)
+/data/backups/

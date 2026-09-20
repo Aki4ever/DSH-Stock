@@ -1,0 +1,74 @@
+test_adapter_resilience_on_network_failure (test_multi_source_data.TestMultiSourceDataAdapters)
+测试当网络完全断开时各适配器的容灾降级鲁棒性 ... ok
+test_announcement_adapter (test_multi_source_data.TestMultiSourceDataAdapters)
+测试巨潮官方公告接口与PDF直链 ... ok
+test_block_trade_adapter (test_multi_source_data.TestMultiSourceDataAdapters)
+测试大宗交易获取与折溢价计算 ... ok
+test_dividend_adapter (test_multi_source_data.TestMultiSourceDataAdapters)
+测试历年分红方案与实施进度获取 ... ok
+test_kline_adapter (test_multi_source_data.TestMultiSourceDataAdapters)
+测试历史日K线获取与字段对齐 ... ok
+test_safe_session_headers_and_limit (test_multi_source_data.TestMultiSourceDataAdapters)
+测试防反爬会话机制：UA轮换、Headers合法性与频控保护 ... ok
+test_shareholder_adapter (test_multi_source_data.TestMultiSourceDataAdapters)
+测试十大股东与股东户数历史趋势获取 ... ok
+test_stock_data_hub_facade (test_multi_source_data.TestMultiSourceDataAdapters)
+测试统一门面 StockDataHub ... ok
+test_extrema_anchor_to_actual_prices_after_inclusion (test_r02_integrity.ChanlunTests) ... ok
+test_five_outputs_flat_series_and_ma_warmup (test_r02_integrity.ChanlunTests) ... ok
+test_gap_requires_confirmation (test_r02_integrity.ChanlunTests) ... ok
+test_invalid_input_rejected (test_r02_integrity.ChanlunTests) ... ok
+test_no_false_turns_on_monotonic_prices (test_r02_integrity.ChanlunTests) ... ok
+test_pivot_and_divergence_have_independent_evidence (test_r02_integrity.ChanlunTests) ... ok
+test_segment_requires_feature_reversal_not_fixed_three_pens (test_r02_integrity.ChanlunTests) ... ok
+test_cold_database_and_legacy_contamination (test_r02_integrity.DataIntegrityTests) ... ok
+test_completed_refresh_keeps_previously_collected_names (test_r02_integrity.DataIntegrityTests) ... ok
+test_dashboard_unknown_never_becomes_zero_or_synthetic_range (test_r02_integrity.DataIntegrityTests) ... ok
+test_failed_page_continues_and_repeated_page_never_complete (test_r02_integrity.DataIntegrityTests) ... ok
+test_financial_quarter_subtracts_cumulative_and_missing_is_none (test_r02_integrity.DataIntegrityTests) ... ok
+test_no_name_pool_no_800_stock_cap_and_cross_period_names (test_r02_integrity.DataIntegrityTests) ... ok
+test_partial_company_disclosure_does_not_imply_zero_individuals (test_r02_integrity.DataIntegrityTests) ... ok
+test_quote_field_mapping_missing_values_and_source (test_r02_integrity.DataIntegrityTests) ... ok
+test_cumulative_source_is_converted_without_fabricated_missing_amount (test_r02_integrity.TimelineIntegrityTests) ... ok
+test_cli_subcommands (test_stock_cli.TestStockCliAndReports) ... ok
+test_generate_daily_report (test_stock_cli.TestStockCliAndReports) ... ok
+test_generate_stock_svg (test_stock_cli.TestStockCliAndReports) ... ok
+test_no_generated_data_even_when_legacy_flag_requested (test_stock_data.TestStockDataEngine) ... ok
+test_normalize_code (test_stock_data.TestStockDataEngine)
+测试各市场证券代码自动标准化与分类 ... ok
+test_stock_quote_model (test_stock_data.TestStockDataEngine)
+测试 StockQuote 字段计算与序列化 ... ok
+test_calculate_boll (test_stock_indicators.TestStockIndicators) ... ok
+test_calculate_ema (test_stock_indicators.TestStockIndicators) ... ok
+test_calculate_kdj (test_stock_indicators.TestStockIndicators) ... ok
+test_calculate_ma (test_stock_indicators.TestStockIndicators) ... ok
+test_calculate_macd (test_stock_indicators.TestStockIndicators) ... ok
+test_calculate_rsi (test_stock_indicators.TestStockIndicators) ... ok
+test_evaluate_stock_scoring (test_stock_indicators.TestStockIndicators)
+测试 100 分制综合评分、评级区间与操作指引输出 ... ok
+test_build_portfolio_summary_and_alerts (test_stock_portfolio.TestStockPortfolio) ... ok
+test_load_config (test_stock_portfolio.TestStockPortfolio) ... ok
+test_portfolio_summary_weights (test_stock_portfolio.TestStockPortfolio) ... ok
+test_position_item_pnl (test_stock_portfolio.TestStockPortfolio) ... ok
+test_unverified_positions_and_missing_prices_blocked (test_stock_portfolio.TestStockPortfolio) ... ok
+test_concurrent_first_load_only_fetches_once (test_verified_market_data.CacheTests) ... ok
+test_legacy_pollution_never_rendered_and_symbols_isolated (test_verified_market_data.CacheTests) ... ok
+test_recent_limit_and_unbounded_legacy_reader (test_verified_market_data.CacheTests) ... ok
+test_refresh_failure_keeps_complete_cache_with_stale_label (test_verified_market_data.CacheTests) ... ok
+test_code_normalization (test_verified_market_data.HistoryTests) ... ok
+test_failure_and_future_invalid_prices (test_verified_market_data.HistoryTests) ... ok
+test_malformed_source_is_unavailable (test_verified_market_data.HistoryTests) ... ok
+test_other_security_is_not_accepted (test_verified_market_data.HistoryTests) ... ok
+test_paging_and_more_than_5000_bars (test_verified_market_data.HistoryTests) ... ok
+test_repeated_page_is_partial (test_verified_market_data.HistoryTests) ... ok
+test_short_page_does_not_mean_history_complete (test_verified_market_data.HistoryTests) ... ok
+test_dual_behavior_dedup_and_same_source (test_verified_market_data.HolderTests) ... ok
+test_filter_before_pagination_and_and_combination (test_verified_market_data.HolderTests) ... ok
+test_future_zero_and_outside_window_excluded (test_verified_market_data.HolderTests) ... ok
+test_partial_page_not_reported_complete (test_verified_market_data.HolderTests) ... ok
+test_unknown_is_different_from_no_record (test_verified_market_data.HolderTests) ... ok
+
+----------------------------------------------------------------------
+Ran 58 tests in 6.086s
+
+OK

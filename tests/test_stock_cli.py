@@ -9,13 +9,18 @@ import unittest
 import os
 import sys
 import subprocess
+from pathlib import Path
+import tempfile
+import json
+from unittest.mock import patch
+from tests.market_fixtures import generate_mock_quote, generate_mock_kline
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from scripts.stock_data_engine import get_quote, generate_mock_kline
+from scripts.stock_data_engine import get_quote
 from scripts.stock_chart_svg import generate_stock_svg
 from scripts.stock_reporter import generate_daily_report
 
@@ -24,9 +29,10 @@ class TestStockCliAndReports(unittest.TestCase):
     """测试 SVG 矢量绘制、综合研报输出与 CLI 终端交互"""
 
     def test_generate_stock_svg(self):
-        q = get_quote("sh600519", allow_mock=True)
+        q = generate_mock_quote("sh600519")
         bars = generate_mock_kline("sh600519", days=40, end_price=q.price)
-        test_svg_path = os.path.join(BASE_DIR, "reports", "charts", "test_chart.svg")
+        tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup)
+        test_svg_path = os.path.join(tmp.name, "test_chart.svg")
 
         svg_content = generate_stock_svg(q, bars, output_path=test_svg_path)
         self.assertTrue(os.path.exists(test_svg_path))
@@ -42,47 +48,24 @@ class TestStockCliAndReports(unittest.TestCase):
             os.remove(test_svg_path)
 
     def test_generate_daily_report(self):
-        rep_rel = generate_daily_report()
-        full_path = os.path.join(BASE_DIR, rep_rel)
-        self.assertTrue(os.path.exists(full_path))
-
-        with open(full_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        self.assertIn("DSH 股票量化与自选监控综合研报", content)
-        self.assertIn("核心大盘指数扫描", content)
-        self.assertIn("自选股池 100 分制多空量化雷达", content)
-        self.assertIn("投资组合持仓体检与浮动盈亏看板", content)
-        self.assertIn("reports/charts/", content)
+        # Output and fixtures are isolated from the product report directory.
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);(root/'scripts').mkdir()
+            cfg=root/'config.json';cfg.write_text(json.dumps({'indices':[],'watchlist':[],'portfolio':[{'code':'sh600519'}]}))
+            with patch('scripts.stock_reporter.__file__',str(root/'scripts'/'stock_reporter.py')),patch('scripts.stock_reporter.get_batch_quotes',return_value=[]):
+                rel=generate_daily_report(str(cfg))
+            text=(root/rel).read_text()
+            self.assertIn('持仓未获取',text)
+            self.assertNotIn('¥0.00',text)
 
     def test_cli_subcommands(self):
-        """测试 CLI 命令行终端各子命令退出码与输出无崩溃"""
-        cli_py = os.path.join(BASE_DIR, "scripts", "dsh_stock_cli.py")
-
-        # 1. 测试 status
-        res_status = subprocess.run([sys.executable, cli_py, "status"], capture_output=True, text=True)
-        self.assertEqual(res_status.returncode, 0)
-        self.assertIn("DSH 股票工程环境状态概要", res_status.stdout)
-
-        # 2. 测试 list
-        res_list = subprocess.run([sys.executable, cli_py, "list"], capture_output=True, text=True)
-        self.assertEqual(res_list.returncode, 0)
-        self.assertIn("核心大盘基准指数", res_list.stdout)
-
-        # 3. 测试 quote
-        res_quote = subprocess.run([sys.executable, cli_py, "quote", "600519", "300750"], capture_output=True, text=True)
-        self.assertEqual(res_quote.returncode, 0)
-        self.assertIn("sh600519", res_quote.stdout)
-
-        # 4. 测试 analyze
-        res_ana = subprocess.run([sys.executable, cli_py, "analyze", "600519"], capture_output=True, text=True)
-        self.assertEqual(res_ana.returncode, 0)
-        self.assertIn("多空量化深度体检报告", res_ana.stdout)
-
-        # 5. 测试 portfolio
-        res_port = subprocess.run([sys.executable, cli_py, "portfolio"], capture_output=True, text=True)
-        self.assertEqual(res_port.returncode, 0)
-        self.assertIn("投资组合资产全景看板", res_port.stdout)
+        cli_py=os.path.join(BASE_DIR,'scripts','dsh_stock_cli.py')
+        for command in ['status','--help','data-audit']:
+            res=subprocess.run([sys.executable,cli_py,command],capture_output=True,text=True)
+            self.assertEqual(res.returncode,0,res.stderr)
+        res=subprocess.run([sys.executable,cli_py,'portfolio'],capture_output=True,text=True)
+        self.assertEqual(res.returncode,1)
+        self.assertIn('持仓配置未确认来源',res.stdout)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,21 @@
+{
+  "version": "v4.4.0",
+  "preserved_path": "data/backups/r02-v4.4.0",
+  "verification": {
+    "status": "running",
+    "service": "DSH Stock Web Server",
+    "version": "v4.4.0",
+    "pid": 93212,
+    "port": 18903,
+    "uptime_seconds": 37,
+    "stock_count": 4601,
+    "csi50_count": 50,
+    "csi100_count": 100,
+    "db_path": "/private/tmp/dsh-r02/rollback-v4.4.0/data/stock_database.db",
+    "snapshot_date": "2026-09-20",
+    "current_time": "2026-09-20 14:35:23"
+  },
+  "verified_at": "2026-09-20T06:35:23.637751+00:00",
+  "restore_command": "python3 data/backups/r02-v4.4.0/scripts/stock_web_server.py --host 127.0.0.1 --port 18903",
+  "note": "独立源码及SQLite一致性备份；包含旧版已知数据问题，仅供审计回退；勿覆盖当前数据库"
+}

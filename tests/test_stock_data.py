@@ -6,6 +6,7 @@
 """
 
 import unittest
+from unittest.mock import patch
 import os
 import sys
 
@@ -71,41 +72,12 @@ class TestStockDataEngine(unittest.TestCase):
         self.assertEqual(d["name"], "贵州茅台")
         self.assertEqual(d["price"], 1700.0)
 
-    def test_mock_quote_generation(self):
-        """测试 Mock 离线数据生成稳定性与哈希幂等性"""
-        q1 = generate_mock_quote("sh600519")
-        self.assertEqual(q1.code, "sh600519")
-        self.assertEqual(q1.name, "贵州茅台")
-        self.assertTrue(q1.is_mock)
-        self.assertGreater(q1.price, 0)
-
-        # 验证任意陌生代码的拟真生成
-        q_unknown = generate_mock_quote("sh688999")
-        self.assertEqual(q_unknown.code, "sh688999")
-        self.assertGreater(q_unknown.price, 0)
-
-    def test_get_quote_and_batch(self):
-        """测试单只与批量获取行情（网络畅通或离线回退均保底成功）"""
-        q = get_quote("600519", allow_mock=True)
-        self.assertIsNotNone(q)
-        self.assertGreater(q.price, 0)
-
-        batch = get_batch_quotes(["sh000001", "600519", "300750"], allow_mock=True)
-        self.assertEqual(len(batch), 3)
-        codes = [item.code for item in batch]
-        self.assertIn("sh000001", codes)
-        self.assertIn("sh600519", codes)
-        self.assertIn("sz300750", codes)
-
-    def test_generate_mock_kline(self):
-        """测试拟真连续 K 线序列生成"""
-        bars = generate_mock_kline("sh600519", days=30, end_price=1600.0)
-        self.assertEqual(len(bars), 30)
-        for b in bars:
-            self.assertGreater(b.high, 0)
-            self.assertGreater(b.low, 0)
-            self.assertGreaterEqual(b.high, b.low)
-            self.assertGreaterEqual(b.high, min(b.open, b.close))
+    def test_no_generated_data_even_when_legacy_flag_requested(self):
+        for f,args in [(generate_mock_quote,('sh600519',)),(generate_mock_kline,('sh600519',))]:
+            with self.assertRaises(RuntimeError):f(*args)
+        with patch('scripts.verified_quotes.fetch_quotes',return_value=[]):
+            with self.assertRaises(RuntimeError):get_quote('600519',allow_mock=True)
+            with self.assertRaises(RuntimeError):get_batch_quotes(['600519'])
 
 
 if __name__ == "__main__":

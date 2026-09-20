@@ -27,7 +27,7 @@ def compute_dim_stats(values: List[float], digits: int = 2) -> Dict[str, float]:
     """计算单个维度的最小值、最大值、平均值、中位数"""
     valid = [v for v in values if v is not None and not math.isnan(v)]
     if not valid:
-        return {"min": 0.0, "max": 0.0, "mean": 0.0, "median": 0.0, "count": 0}
+        return {"min": None, "max": None, "mean": None, "median": None, "count": 0}
     
     valid.sort()
     v_min = round(valid[0], digits)
@@ -51,8 +51,11 @@ def compute_market_overview(
     """
     生成全景仪表盘完整统计数据（支持日期区间穿透计算与5档全量覆盖涨跌阶梯）
     """
+    stocks = [s for s in stocks if s.get('price') is not None and s.get('change_pct') is not None]
     if not stocks:
-        return {}
+        return {'status':'unavailable','error':'尚无可验证行情快照','dimensions':{},'summary':{},'charts':{}}
+    if start_date and end_date and start_date != end_date:
+        return {'status':'unavailable','error':'区间统计需要逐日全市场真实行情，当前没有完整覆盖','dimensions':{},'summary':{},'charts':{}}
 
     total_count = len(stocks)
 
@@ -135,25 +138,17 @@ def compute_market_overview(
         p = float(s.get("price") or 0.0)
         pe = float(s.get("pe") or 0.0)
         raw_chg = float(s.get("change_pct") or 0.0)
-        high = float(s.get("high") or p)
-        low = float(s.get("low") or p)
-        prev = float(s.get("prev_close") or p)
+        high = s.get("high")
+        low = s.get("low")
+        prev = s.get("prev_close")
         div = float(s.get("dividend_count") or 0.0)
         years = float(s.get("listing_years") or 0.0)
         t_circ = float(s.get("top10_circ_hold_pct") or 0.0)
         t_hold = float(s.get("top10_hold_pct") or 0.0)
         clean_code = str(s.get("raw_code") or s.get("code") or "000000")
 
-        # 区间模式下的涨跌幅与振幅计算
-        if is_range_mode:
-            # 基于确定性伪随机游走模型计算标的在区间内的时序累计收益率与波幅
-            seed = sum(ord(c) for c in clean_code)
-            drift = ((seed % 19) - 9) * 0.12 * math.sqrt(date_days_diff)
-            chg = round(raw_chg + drift, 2)
-            amp = round(abs(chg) * (1.2 + (seed % 10) / 10.0) + (seed % 5), 2)
-        else:
-            chg = raw_chg
-            amp = round(((high - low) / prev * 100.0), 2) if prev > 0 else abs(chg)
+        chg = raw_chg
+        amp = round((high-low)/prev*100,2) if high is not None and low is not None and prev and prev>0 else None
 
         if cap > 0: market_caps.append(cap); total_market_cap_sum += cap
         if circ > 0: circ_caps.append(circ); total_circ_cap_sum += circ
@@ -161,8 +156,8 @@ def compute_market_overview(
         if pe > 0: pes.append(pe)
         changes.append(chg)
         amplitudes.append(amp)
-        dividends.append(div)
-        listing_years_list.append(years)
+        dividends.append(s.get('dividend_count'))
+        listing_years_list.append(s.get('listing_years'))
         if t_circ > 0: top10_circs.append(t_circ)
         if t_hold > 0: top10_holds.append(t_hold)
 
@@ -202,14 +197,15 @@ def compute_market_overview(
         elif cap >= 300: cap_tiers["large"] += 1
         elif cap >= 100: cap_tiers["mid"] += 1
         elif cap >= 50: cap_tiers["small"] += 1
-        else: cap_tiers["micro"] += 1
+        elif s.get("market_cap") is not None: cap_tiers["micro"] += 1
 
     # 需求2: 十大流通股东持股比例 0~10%, 10%~20%...90%~100% 十档阶梯闭环统计
     # 严格覆盖 [0, 10%], (10%, 20%], (20%, 30%] ... (90%, 100%]
     # 保证每家企业必落入且仅落入一档，企业数量求和严格等于 total_count，占比相加严格 100%
     top10_circ_tiers_10 = [0] * 10
     for s in stocks:
-        val = float(s.get("top10_circ_hold_pct") or 0.0)
+        if s.get("top10_circ_hold_pct") is None: continue
+        val = float(s["top10_circ_hold_pct"])
         if val <= 10.0:
             top10_circ_tiers_10[0] += 1
         elif val <= 20.0:
@@ -252,7 +248,7 @@ def compute_market_overview(
     top10_circ_10_items = []
     for idx in range(10):
         c_val = top10_circ_tiers_10[idx]
-        pct = round((c_val / total_count * 100.0), 2) if total_count > 0 else 0.0
+        pct = round((c_val / sum(top10_circ_tiers_10) * 100.0), 2) if sum(top10_circ_tiers_10) > 0 else None
         top10_circ_10_items.append({
             "index": idx + 1,
             "range_label": tier_ranges[idx][0],
@@ -324,34 +320,18 @@ def compute_market_overview(
             "stats": compute_dim_stats(top10_holds, digits=2),
             "desc": "核心控制人与大股东总持股权益集中度"
         },
-        "individual_pct": {
-            "title": "个人平均占比",
-            "unit": "%",
-            "stats": {
-                "avg": 7.35,
-                "median": 5.42,
-                "max": 35.80,
-                "min": 0.00
-            },
-            "desc": "全市场前十大流通股东中自然人牛散总持股占比"
-        },
-        "institution_pct": {
-            "title": "机构平均占比",
-            "unit": "%",
-            "stats": {
-                "avg": 48.65,
-                "median": 46.80,
-                "max": 88.50,
-                "min": 8.20
-            },
-            "desc": "全市场前十大流通股东中公募/社保/险资/国家队总持股占比"
-        }
+        "individual_pct": {"title":"个人占比", "unit":"%", "stats":compute_dim_stats([s.get('holder_individual_pct') for s in stocks]), "desc":"已采集披露记录"},
+        "institution_pct": {"title":"机构占比", "unit":"%", "stats":compute_dim_stats([s.get('holder_institution_pct') for s in stocks]), "desc":"已采集披露记录"}
+
     }
 
     # 5 档阶梯总数校验（确保无遗漏）
     tiers_5_sum = sum(tiers_5.values())
 
     return {
+        "status": "available",
+        "source": "腾讯证券行情快照；非指定历史日期",
+        "quote_dates": sorted(set(str(s.get("timestamp") or "")[:8] for s in stocks)),
         "date_range": {
             "start_date": s_date,
             "end_date": e_date,
@@ -360,8 +340,8 @@ def compute_market_overview(
         },
         "summary": {
             "total_stocks": total_count,
-            "total_market_cap": round(total_market_cap_sum, 1),
-            "total_circ_cap": round(total_circ_cap_sum, 1),
+            "total_market_cap": round(total_market_cap_sum, 1) if market_caps else None,
+            "total_circ_cap": round(total_circ_cap_sum, 1) if circ_caps else None,
             "up_count": up_count,
             "down_count": down_count,
             "flat_count": flat_count,
@@ -384,9 +364,10 @@ def compute_market_overview(
             },
             "top10_circ_tiers_10": {
                 "items": top10_circ_10_items,
-                "total_count": total_count,
+                "total_count": sum(top10_circ_tiers_10),
+                "missing_count": total_count-sum(top10_circ_tiers_10),
                 "verified_sum": sum(item["company_count"] for item in top10_circ_10_items),
-                "verified_pct": round(sum(item["percentage"] for item in top10_circ_10_items), 1)
+                "verified_pct": round(sum(item["percentage"] or 0 for item in top10_circ_10_items), 1) if sum(top10_circ_tiers_10) else None
             },
             "change_distribution": buckets_7,
             "market_cap_tiers": cap_tiers

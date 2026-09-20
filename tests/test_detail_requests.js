@@ -7,7 +7,7 @@ const el = () => ({value:'', style:{}, classList:{add(){},remove(){},toggle(){}}
 const dom = new Proxy({}, {get(_, key){if(!elements.has(key))elements.set(key,el());return elements.get(key)}});
 const pending = new Map();
 const context = {AbortController, console, dom, appState:{detailRequestId:0,shareholderDays:365}, document:{getElementById:()=>null}, window:{scrollTo(){}},
- switchDetailDimension(){},hideTooltip(){},roundTo:x=>x,renderFinancialTables(){},renderActiveStockChart(){context.rendered=context.appState.activeDetailStock.code},
+ formatReal:v=>v==null?"未获取":String(v),escapeHtml:v=>String(v),switchDetailDimension(){},hideTooltip(){},roundTo:x=>x,renderFinancialTables(){},renderActiveStockChart(){context.rendered=context.appState.activeDetailStock.code},
  fetch: url => url.includes('/finance?') ? Promise.resolve({ok:true,json:async()=>({data:{}})}) : new Promise(resolve=>pending.set(url.match(/stock\/([^?]+)/)[1],resolve))};
 vm.createContext(context);
 const begin=source.indexOf('async function openStockDetail(');

@@ -1,0 +1,10 @@
+{
+  "status": "legacy-quarantined",
+  "tables": {
+    "stock_quotes": 4601,
+    "stock_shareholders": 4605,
+    "verified_source_cache": 9206,
+    "verified_daily_history": 5
+  },
+  "policy": "旧无来源股东、分红、IPO、行情缓存不进入产品；不删除历史库"
+}

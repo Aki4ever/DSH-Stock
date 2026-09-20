@@ -152,7 +152,7 @@ class HolderTests(unittest.TestCase):
         manager.stocks_dict={s['code']:s for s in [stock('sh600519','sh',100),stock('sz000001','sz',90),stock('sh601288','sh',80)]}
         value=snapshot([action(code='601288'),action(code='601288',direction='减持'),action(code='000001')])
         with patch.object(server,'get_actions',return_value=value),patch('scripts.shareholder_engine.Top10ShareholdersEngine.enrich_stock_holder_metrics'):
-            for direction in ('increase','decrease'):
+            for direction in ('increase','decrease','both'):
                 rows,stats=manager.filter_stocks({'shareholder_action':direction,'market':'sh','page_size':1})
                 self.assertEqual(stats['matched_count'],1)
                 self.assertEqual(rows[0]['code'],'sh601288')

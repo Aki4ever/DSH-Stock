@@ -1,0 +1,42 @@
+{
+  "scope": "本次恢复回合，截至当前计量；含缓存输入，非任务最终总量",
+  "started_at": "2026-09-20T05:55:30+00:00",
+  "base": {
+    "timestamp": "2026-09-19T14:38:25.939Z",
+    "totals": {
+      "input_tokens": 6293234,
+      "cached_input_tokens": 5978112,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 43360,
+      "reasoning_output_tokens": 7984,
+      "total_tokens": 6336594
+    }
+  },
+  "latest": {
+    "timestamp": "2026-09-20T07:04:11.001Z",
+    "totals": {
+      "input_tokens": 33399549,
+      "cached_input_tokens": 32501248,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 132254,
+      "reasoning_output_tokens": 34321,
+      "total_tokens": 33531803
+    }
+  },
+  "delta": {
+    "input_tokens": 27106315,
+    "cached_input_tokens": 26523136,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 88894,
+    "reasoning_output_tokens": 26337,
+    "total_tokens": 27195209
+  },
+  "source": "本任务原生rollout token_count累计计数差；最终答复及其后工具不在此次快照",
+  "measured_at": "2026-09-20T07:04:34.931160+00:00",
+  "elapsed_seconds": 4144.93116,
+  "whole_execution_totals": {
+    "elapsed_seconds": null,
+    "tokens": null,
+    "reason": "跨中断执行未提供完整计量；本快照只表示当前恢复回合截至取样的差值"
+  }
+}

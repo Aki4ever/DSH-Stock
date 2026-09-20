@@ -79,46 +79,6 @@ class ManualCrawlerJob:
             if self.status == "running":
                 return False, "已有正在运行的采集任务，请等待完成或先取消当前任务。"
 
-            # 需求3: 检查今日是否在收盘(15:00)后已经成功完成过全量4601只抓取，若已完成则智能免抓防重
-            now = datetime.now()
-            today_str = now.strftime("%Y-%m-%d")
-            latest_audit = get_latest_crawl_fingerprint("全市场A股" if mode == "full" else "核心资产CSI100")
-            
-            # 若今日已全量成功抓取过且当前处于收盘后或数据已是最新的情况
-            if latest_audit and today_str in str(latest_audit.get("crawl_date", "")):
-                # 检查是否记录中处理量 >= 100
-                total_done = int(latest_audit.get("total_items") or 0)
-                if total_done >= (1000 if mode == "full" else 50):
-                    # 触发智能防重熔断，直接免抓
-                    self.job_id = f"crawl_{int(time.time())}"
-                    self.mode = mode
-                    self.status = "completed"
-                    self.progress_pct = 100.0
-                    self.total_count = total_done
-                    self.current_count = total_done
-                    self.updated_count = 0
-                    self.skipped_count = total_done
-                    self.phase_text = f"⚡ 今日 ({today_str}) 数据已全部成功抓取沉淀，指纹一致，智能跳过无需重复采集！"
-                    self.start_time = time.time()
-                    self.end_time = time.time()
-                    
-                    # 记入抓取列表
-                    try:
-                        record_crawl_audit(
-                            task_id=self.job_id,
-                            crawl_date=now.strftime("%Y-%m-%d %H:%M:%S"),
-                            status="成功(指纹一致/免抓)",
-                            fingerprint=latest_audit.get("fingerprint", "fp_cached_today"),
-                            target_scope="全市场A股" if mode == "full" else "核心资产CSI100",
-                            total_items=total_done,
-                            updated_items=0,
-                            skipped_items=total_done,
-                            details=f"智能防重触发：今日已成功采集过 {total_done} 只标的，收市后无需重复抓取"
-                        )
-                    except Exception:
-                        pass
-                    return True, "今日数据已全量抓取完成，数据最新，已自动执行指纹防重跳过！"
-            
             self.job_id = f"crawl_{int(time.time())}"
             self.mode = mode
             self.status = "running"
@@ -167,7 +127,7 @@ class ManualCrawlerJob:
                         crawl_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         status="用户手动取消",
                         fingerprint=cancel_fp,
-                        target_scope="核心资产CSI100" if self.mode == "core" else "全市场A股",
+                        target_scope="已收录前100只" if self.mode == "core" else "已收录A股",
                         total_items=total,
                         updated_items=updated_so_far,
                         skipped_items=self.skipped_count,
@@ -184,72 +144,11 @@ class ManualCrawlerJob:
             with self._lock:
                 self.phase_text = f"正在分批抓取行情数据 [批次 {current_batch_num}/{total_batches}]..."
 
-            url = f"http://qt.gtimg.cn/q={','.join(chunk)}"
-            content = robust_fetch(url, referer="http://gu.qq.com", timeout=4.0, max_retries=2, encoding="gbk")
-
-            scraped_quotes = []
-            if content:
-                for line in content.split(";"):
-                    line = line.strip()
-                    if not line or "=" not in line:
-                        continue
-                    k, val = line.split("=", 1)
-                    norm_c = k.replace("v_", "").strip()
-                    parts = val.strip('";\n').split("~")
-                    if len(parts) >= 46 and norm_c in stock_dict:
-                        item = stock_dict[norm_c]
-                        # 构造准备更新的行情数据包
-                        quote_dict = {
-                            "code": norm_c,
-                            "price": float(parts[3]),
-                            "prev_close": float(parts[4]),
-                            "open": float(parts[5]),
-                            "volume": float(parts[6]),
-                            "high": float(parts[33]) if parts[33] else float(parts[3]),
-                            "low": float(parts[34]) if parts[34] else float(parts[3]),
-                            "turnover": float(parts[37]) * 10000 if parts[37] else 0.0,
-                            "change": float(parts[31]) if parts[31] else round(float(parts[3]) - float(parts[4]), 2),
-                            "change_pct": float(parts[32]) if parts[32] else 0.0,
-                            "turnover_rate": float(parts[38]) if parts[38] else 0.0,
-                            "pe": float(parts[39]) if parts[39] else 0.0,
-                            "market_cap": float(parts[44]) if parts[44] else 0.0,
-                            "circulating_cap": float(parts[45]) if parts[45] else 0.0,
-                            "timestamp": parts[30]
-                        }
-
-                        # 需求1: 校验数据指纹，执行幂等判定拦截
-                        is_changed, _ = check_and_update_fingerprint("quote", norm_c, quote_dict)
-                        if not is_changed:
-                            # 数据未发生任何变化，直接命中指纹幂等缓存，无需写入 SQLite
-                            with self._lock:
-                                self.skipped_count += 1
-                            continue
-
-                        item["name"] = parts[1]
-                        item["price"] = quote_dict["price"]
-                        item["prev_close"] = quote_dict["prev_close"]
-                        item["open"] = quote_dict["open"]
-                        item["volume"] = quote_dict["volume"]
-                        item["high"] = quote_dict["high"]
-                        item["low"] = quote_dict["low"]
-                        item["turnover"] = quote_dict["turnover"]
-                        item["turnover_yi"] = round(item["turnover"] / 100000000.0, 2)
-                        item["change"] = quote_dict["change"]
-                        item["change_pct"] = quote_dict["change_pct"]
-                        item["turnover_rate"] = quote_dict["turnover_rate"]
-                        item["pe"] = quote_dict["pe"]
-                        item["market_cap"] = quote_dict["market_cap"]
-                        item["circulating_cap"] = quote_dict["circulating_cap"]
-                        item["timestamp"] = quote_dict["timestamp"]
-                        item["is_mock"] = False
-                        scraped_quotes.append(dict(item))
-                        updated_so_far += 1
-
-            if scraped_quotes:
-                try:
-                    save_quotes_batch(scraped_quotes)
-                except Exception:
-                    pass
+            from scripts.verified_quotes import fetch_quotes
+            for quote in fetch_quotes(chunk):
+                code=quote['code']
+                if code in stock_dict:stock_dict[code].update(quote)
+                updated_so_far+=1
 
             processed = min(total, i + len(chunk))
             with self._lock:
@@ -262,16 +161,16 @@ class ManualCrawlerJob:
             time.sleep(0.04)
 
         with self._lock:
-            self.status = "completed"
+            self.status = "completed" if updated_so_far == total else "partial"
             self.progress_pct = 100.0
             self.end_time = time.time()
-            self.phase_text = f"✅ 数据采集与数据库持久化全部完成！共更新 {updated_so_far} 只标的最新行情，指纹命中跳过 {self.skipped_count} 条。"
+            self.phase_text = f"本轮结束：已获取 {updated_so_far}/{total} 只真实行情，未获取 {total-updated_so_far} 只。"
 
         # 需求1/2: 生成本次抓取批次特征指纹并写入审计流水
         import hashlib
         fp_raw = f"{self.mode}:{total}:{updated_so_far}:{self.skipped_count}:{datetime.now().strftime('%Y-%m-%d')}"
         batch_fp = hashlib.sha256(fp_raw.encode('utf-8')).hexdigest()[:16]
-        crawl_status_str = "成功(全新更新)" if updated_so_far > 0 else "成功(指纹一致/免抓)"
+        crawl_status_str = "成功(真实行情全量)" if updated_so_far == total else "部分覆盖(来源未获取完整)"
         
         try:
             record_crawl_audit(
@@ -279,7 +178,7 @@ class ManualCrawlerJob:
                 crawl_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 status=crawl_status_str,
                 fingerprint=batch_fp,
-                target_scope="核心资产CSI100" if self.mode == "core" else "全市场A股",
+                target_scope="已收录前100只" if self.mode == "core" else "已收录A股",
                 total_items=total,
                 updated_items=updated_so_far,
                 skipped_items=self.skipped_count,

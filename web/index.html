@@ -15,8 +15,8 @@
       <span class="brand-title">A股多维量化筛选器</span>
       <span id="appVersionBadge" class="version-badge">v2.9.0</span>
       <!-- 需求1: 顶部常显数据快照截取有效期 -->
-      <span id="dataValidityBadge" class="data-validity-badge" title="当前全市场量化行情与财务底册快照截取时间">📅 数据截取: 2026年9月17日</span>
-      <span class="brand-tag">全市场主板+创业板</span>
+      <span id="dataValidityBadge" class="data-validity-badge" title="行情来源的实际日期">📅 行情日期未获取</span>
+      <span class="brand-tag">已收录主板+创业板</span>
     </div>
 
     <!-- 需求2: 顶栏主导航 Tab (股票列表 | 仪表盘 | 宏观环境 | 股东研究 | 指数 | 数据中心) 对齐图1 -->
@@ -81,7 +81,7 @@
     <!-- ==================================================== -->
     <!-- 视图 1: 多维量化筛选中心 (Tab: filter)                -->
     <!-- ==================================================== -->
-    <div id="viewFilterTab" class="tab-view">
+    <div id="viewFilterTab" class="tab-view"><p id="quoteSourceStatus" class="data-source-status">行情来源正在核验…</p>
       <!-- 筛选卡片 -->
       <section class="filter-card">
         <div class="filter-header">
@@ -92,9 +92,9 @@
           <!-- 快捷预设池 -->
           <div class="preset-tags">
             <span class="preset-title">快捷方案:</span>
-            <button class="preset-chip" onclick="applyPreset('all')">全部A股(4601)</button>
-            <button class="preset-chip" onclick="applyPreset('csi50')">🏆 中证50核心龙头</button>
-            <button class="preset-chip" onclick="applyPreset('csi100')">⭐ 中证100翘楚</button>
+            <button class="preset-chip" onclick="applyPreset('all')">全部已收录股票</button>
+            <button class="preset-chip" disabled title="成分股名单尚未核验">🏆 中证50核心龙头</button>
+            <button class="preset-chip" disabled title="成分股名单尚未核验">⭐ 中证100翘楚</button>
             <button class="preset-chip" onclick="applyPreset('chinext_growth')">🚀 创业板成长股</button>
             <button class="preset-chip" onclick="applyPreset('high_dividend')">🎁 高频分红(&gt;15次)</button>
             <button class="preset-chip" onclick="applyPreset('seasoned')">⏳ 穿越牛熊(&gt;15年)</button>
@@ -196,8 +196,8 @@
             </div>
             <div class="segmented-control" id="constituentControl">
               <button type="button" class="seg-btn active" data-val="all">全部 (不限)</button>
-              <button type="button" class="seg-btn" data-val="csi50">中证50</button>
-              <button type="button" class="seg-btn" data-val="csi100">中证100</button>
+              <button type="button" class="seg-btn" data-val="csi50" disabled title="成分股名单尚未核验">中证50</button>
+              <button type="button" class="seg-btn" data-val="csi100" disabled title="成分股名单尚未核验">中证100</button>
             </div>
           </div>
 
@@ -224,6 +224,7 @@
               <button type="button" class="seg-btn active" data-val="all" onclick="setShareholderAction('all')">全部</button>
               <button type="button" class="seg-btn" data-val="increase" onclick="setShareholderAction('increase')">增持</button>
               <button type="button" class="seg-btn" data-val="decrease" onclick="setShareholderAction('decrease')">减持</button>
+              <button type="button" class="seg-btn" data-val="both" onclick="setShareholderAction('both')">同时增减持</button>
             </div>
             <label style="font-size:.8rem">已披露的实际变动 · 公告日期
               <select id="shareholderDays" onchange="appState.shareholderDays=Number(this.value);appState.page=1;executeFilter()">
@@ -389,7 +390,7 @@
           <div class="filter-item">
             <div class="filter-label">
               <div class="label-left">
-                <span>👤 个人占比 (%)</span>
+                <span>👤 十大股东中个人占总股本 (%)</span>
               </div>
               <div class="label-right">
                 <button type="button" class="btn-item-reset" onclick="resetSingleDimension('individual')" title="清空个人占比限制">↺ 清空</button>
@@ -406,7 +407,7 @@
           <div class="filter-item">
             <div class="filter-label">
               <div class="label-left">
-                <span>🏢 机构占比 (%)</span>
+                <span>🏢 十大股东中机构占总股本 (%)</span>
               </div>
               <div class="label-right">
                 <button type="button" class="btn-item-reset" onclick="resetSingleDimension('institution')" title="清空机构占比限制">↺ 清空</button>
@@ -461,24 +462,24 @@
       <section class="stats-banner">
         <div class="stats-count">
           筛选结果：共命中 <strong id="matchedCount">0</strong> 只符合条件的 A 股标的
-          <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;" id="poolCountText">(全市场主板+创业板总计: 4,601 只)</span>
+          <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;" id="poolCountText">(已收录主板+创业板总计: 4,601 只)</span>
         </div>
         <div class="stats-badges">
           <div class="stat-item">
             <span>平均股价:</span>
-            <span id="statAvgPrice" class="stat-val">¥0.00</span>
+            <span id="statAvgPrice" class="stat-val">未获取</span>
           </div>
           <div class="stat-item">
             <span>平均涨跌:</span>
-            <span id="statAvgChange" class="stat-val">0.00%</span>
+            <span id="statAvgChange" class="stat-val">未获取</span>
           </div>
           <div class="stat-item">
             <span>总市值合计:</span>
-            <span id="statTotalCap" class="stat-val">0 亿元</span>
+            <span id="statTotalCap" class="stat-val">未获取</span>
           </div>
           <div class="stat-item">
             <span>流通市值合计:</span>
-            <span id="statTotalCircCap" class="stat-val">0 亿元</span>
+            <span id="statTotalCircCap" class="stat-val">未获取</span>
           </div>
         </div>
       </section>
@@ -711,18 +712,18 @@
     <!-- ==================================================== -->
     <!-- 视图 2: 全市场宏观全景仪表盘 (Tab: dashboard)          -->
     <!-- ==================================================== -->
-    <div id="viewDashboardTab" class="tab-view hidden">
+    <div id="viewDashboardTab" class="tab-view hidden"><p id="dashboardDataStatus" class="data-source-status">正在核验行情来源…</p>
       <div class="macro-dashboard">
 
         <!-- 宏观顶栏总览与日期区间控件 -->
         <div class="macro-summary-card">
           <div class="macro-header-left">
             <h2 style="font-size: 1.35rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
-              <span>📈 全市场 A 股宏观全景仪表盘</span>
-              <span class="version-badge" style="font-size: 0.75rem;">动态时序中枢</span>
+              <span>📈 已收录 A 股行情快照仪表盘</span>
+              <span class="version-badge" style="font-size: 0.75rem;">来源快照统计</span>
             </h2>
             <p style="color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.35rem;">
-              支持选取<strong>开始日期</strong>与<strong>结束日期</strong>动态穿透统计。所有 10 大维度（Min/Max/Mean/Median）与 5 档涨跌幅阶梯全部随时间区间动态计算。
+              基于当前来源可用行情计算分布和统计值。跨日历史统计尚未接入完整快照，选择日期区间时会明确提示未获取。
             </p>
           </div>
 
@@ -736,7 +737,7 @@
             </div>
             <!-- 交易日状态提示 -->
             <div id="dashDateTradingTip" style="font-size: 0.76rem; color: #4ade80; font-weight: 600;">
-              🟢 起止交易日正常开市
+              统计日期以实际来源为准
             </div>
             <!-- 快速区间快捷键 -->
             <div class="date-quick-presets">
@@ -759,7 +760,7 @@
             </div>
             <div style="font-size: 0.82rem; color: var(--text-muted);">
               区间标的校验: <span id="dashTiersSum" style="color: #38bdf8; font-weight: 700;">4,601</span> / 4,601 只 
-              <span id="dashTiersCompleteBadge" class="tag-badge" style="background-color: rgba(34, 197, 94, 0.2); color: #4ade80; margin-left: 0.3rem;">✅ 100% 无遗漏</span>
+              <span id="dashTiersCompleteBadge" class="tag-badge" style="background-color: rgba(34, 197, 94, 0.2); color: #4ade80; margin-left: 0.3rem;">✅ 当前可用报价分档完成</span>
             </div>
           </div>
 
@@ -774,8 +775,8 @@
             <div style="font-weight: 700; font-size: 0.95rem;">🌤️ 全市场涨跌晴雨表 (总计: <span id="dashTotalStocks" style="color: #38bdf8;">--</span> 只)</div>
             <div style="font-size: 0.82rem; color: var(--text-muted);">
               上涨胜率: <span id="dashUpRatio" style="color: #ef4444; font-weight: 700;">--%</span> ｜ 
-              涨停: <span id="dashLimitUp" style="color: #ef4444; font-weight: 700;">--</span> 家 ｜ 
-              跌停: <span id="dashLimitDown" style="color: #10b981; font-weight: 700;">--</span> 家
+              涨≥9.5%: <span id="dashLimitUp" style="color: #ef4444; font-weight: 700;">--</span> 家 ｜
+              跌≤-9.5%: <span id="dashLimitDown" style="color: #10b981; font-weight: 700;">--</span> 家
             </div>
           </div>
 
@@ -875,12 +876,12 @@
             <button type="button" class="scope-nav-btn active" id="btnScopeDomestic" onclick="switchMacroScope('domestic')">
               <span class="tab-icon">🇨🇳</span>
               <span class="tab-title-text">国内核心部委宏观 (财政部/发改委/政府网/金融总局)</span>
-              <span class="tab-badge" id="badgeScopeDomestic">8件政经要闻</span>
+              <span class="tab-badge" id="badgeScopeDomestic">未获取</span>
             </button>
             <button type="button" class="scope-nav-btn" id="btnScopeInternational" onclick="switchMacroScope('international')">
               <span class="tab-icon">🌐</span>
               <span class="tab-title-text">国际外围宏观与大宗商品 (美欧中东亚太)</span>
-              <span class="tab-badge" id="badgeScopeInternational">10件全球大事</span>
+              <span class="tab-badge" id="badgeScopeInternational">未获取</span>
             </button>
           </div>
         </div>
@@ -893,7 +894,7 @@
               <span class="version-badge" style="font-size: 0.75rem;">A股量化冲击评估</span>
             </h2>
             <p style="color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.35rem;" id="worldHeaderScopeDesc">
-              穿透国家四大权威部委官方信源，每条政策均提供 <strong>[-1000, +1000]</strong> 的 A 股量化冲击打分。支持自选起止日期区间，动态加总综合总分与多空偏好。
+              国内宏观新闻与评分尚未接入可核验来源；下方提供来源网站入口。
             </p>
           </div>
           <div class="world-date-control-box">
@@ -913,7 +914,7 @@
               </button>
             </div>
             <div id="worldTradingTip" style="font-size: 0.76rem; color: #4ade80; font-weight: 600;">
-              🟢 评估区间交易日已核验
+              日期范围待核验
             </div>
           </div>
         </div>
@@ -928,9 +929,9 @@
                   国内部委宏观环境对 A 股综合量化总分 (单项 -1000 ~ +1000 动态加总)
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 0.6rem;">
-                  <span id="worldTotalScore" class="score-number price-up">+2,730</span>
+                  <span id="worldTotalScore" class="score-number price-up">未获取</span>
                   <span id="worldSentimentLabel" class="score-sentiment-badge" style="background-color: rgba(239, 68, 68, 0.2); color: #ef4444;">
-                    🔥 强力看多 / 风险偏好极度扩张
+                    未接入真实来源
                   </span>
                 </div>
               </div>
@@ -938,9 +939,9 @@
           </div>
           <div class="score-card-right">
             <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5;">
-              当前区间评估事件数: <strong id="worldEventsCount" style="color: #38bdf8;">8</strong> 件 ｜ 
+              当前区间评估事件数: <strong id="worldEventsCount" style="color: #38bdf8;">未获取</strong> 件 ｜
               涵盖领域: <strong>财经、政治、金融、科技、产业</strong><br>
-              <span style="color: var(--text-muted); font-size: 0.75rem;">* 得分基于财政赤字扩张、货币宽松流动性、重大产业投资加权量化测算</span>
+              <span style="color: var(--text-muted); font-size: 0.75rem;">尚无可核验事件和评分依据，当前不生成宏观分数。</span>
             </div>
           </div>
         </div>
@@ -1062,17 +1063,18 @@
 
         <!-- 需求1: 股东研究页面新增概览信息六宫格看板 -->
         <div class="monitor-metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 1.2rem;">
-          <div class="metric-box">
-            <span class="metric-label">👥 股东总数</span>
-            <span class="metric-value" id="shOverviewTotalHolders" style="color: #f8fafc;">-- 户</span>
+          <p id="shareholderDataStatus" class="data-source-status" style="grid-column:1/-1">来源与采集覆盖正在读取</p>
+<div class="metric-box">
+            <span class="metric-label">👥 已采集股东数</span>
+            <span class="metric-value" id="shOverviewTotalHolders" style="color: #f8fafc;">-- 个姓名</span>
           </div>
           <div class="metric-box">
-            <span class="metric-label">🏢 机构股东总数</span>
-            <span class="metric-value" id="shOverviewInstHolders" style="color: #38bdf8;">-- 户</span>
+            <span class="metric-label">🏢 已采集机构股东数</span>
+            <span class="metric-value" id="shOverviewInstHolders" style="color: #38bdf8;">-- 个姓名</span>
           </div>
           <div class="metric-box">
-            <span class="metric-label">👤 个人股东总数</span>
-            <span class="metric-value" id="shOverviewIndHolders" style="color: #10b981;">-- 户</span>
+            <span class="metric-label">👤 已采集个人股东数</span>
+            <span class="metric-value" id="shOverviewIndHolders" style="color: #10b981;">-- 个姓名</span>
           </div>
           <div class="metric-box">
             <span class="metric-label">💰 股东总金额</span>
@@ -1093,10 +1095,10 @@
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
             <div>
               <h2 style="font-size: 1.25rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.3rem;">
-                👥 全市场十大流通股东深度穿透与资本网络
+                👥 已采集十大股东披露名册
               </h2>
               <p style="font-size: 0.84rem; color: var(--text-secondary);">
-                穿透追踪全市场核心股东、牛散与国家队/机构重仓版图，清晰洞察持股市值与跨企业协同关系。
+                按已采集姓名去重；同名计一人，不同名分别计数。披露仅覆盖来源提供的十大股东。
               </p>
             </div>
             
@@ -1105,7 +1107,7 @@
               <div class="segmented-control" id="shCategoryControl">
                 <button type="button" class="seg-btn active" data-cat="all" onclick="filterShareholderCategory('all')">全部属性</button>
                 <button type="button" class="seg-btn" data-cat="institution" onclick="filterShareholderCategory('institution')">🏢 机构</button>
-                <button type="button" class="seg-btn" data-cat="individual" onclick="filterShareholderCategory('individual')">👤 个人牛散</button>
+                <button type="button" class="seg-btn" data-cat="individual" onclick="filterShareholderCategory('individual')">👤 个人股东</button>
               </div>
 
               <!-- 搜索框 -->
@@ -1121,6 +1123,7 @@
           </div>
         </div>
 
+        <div class="shareholder-pagination"><button class="btn btn-secondary" onclick="changeShareholderPage(-1)">上一页股东</button><span id="shareholderPageInfo">尚未获取</span><button class="btn btn-secondary" onclick="changeShareholderPage(1)">下一页股东</button></div>
         <!-- 股东研究专业数据列表 (图1需求: 股东ID、股东名称、股东属性、占股企业、占股企业数量、占股企业总金额(亿)) -->
         <div class="table-container" style="max-height: 72vh; overflow-y: auto;">
           <table class="stock-table" id="shareholdersTable">
@@ -1141,7 +1144,7 @@
             <tbody id="shareholdersTableBody">
               <tr>
                 <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
-                  正在穿透汇总全市场十大流通股东持仓网络...
+                  正在读取已采集十大股东披露...
                 </td>
               </tr>
             </tbody>
@@ -1215,7 +1218,7 @@
               🚀 一键全量抓取 (4,601 只)
             </button>
             <button id="btnStartCoreCrawl" class="btn btn-crawl-core" onclick="startManualCrawl('core')">
-              ⚡ 核心资产增量抓取 (中证100)
+              ⚡ 抓取已收录前100只
             </button>
             <button id="btnCancelCrawl" class="btn btn-crawl-cancel" onclick="cancelManualCrawl()" disabled>
               ⏹️ 终止当前抓取
@@ -1288,11 +1291,11 @@
             <div style="display: flex; align-items: center; gap: 0.6rem;">
               <span style="font-weight: 700; font-size: 1.05rem; color: #f8fafc;">📋 数据中心抓取记录与新鲜度审计列表</span>
               <span id="crawlerFreshnessBadge" class="brand-tag" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);">
-                🛡️ 指纹防重校验中
+                🛡️ 采集日志追溯
               </span>
             </div>
             <div style="display: flex; align-items: center; gap: 0.6rem;">
-              <span style="font-size: 0.8rem; color: var(--text-secondary);">若指纹一致则智能跳过不重复抓取</span>
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">同日也会核验真实来源；批次标识用于追溯</span>
               <button class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem;" onclick="loadCrawlerAuditList()">
                 🔄 刷新抓取列表
               </button>
@@ -1306,7 +1309,7 @@
                   <th style="width: 160px;">抓取信息ID</th>
                   <th style="width: 170px;">抓取日期</th>
                   <th style="width: 160px;">抓取状态</th>
-                  <th style="width: 190px;">抓取指纹 (Fingerprint)</th>
+                  <th style="width: 190px;">采集批次标识</th>
                   <th>抓取范围与摘要说明</th>
                 </tr>
               </thead>
@@ -1338,8 +1341,8 @@
         <div class="modal-title-group header-center">
           <span id="indexModalName" class="modal-stock-name">上证指数</span>
           <span id="indexModalCode" class="modal-stock-code">sh000001</span>
-          <span id="indexModalPriceBadge" class="price-up" style="font-size: 1.3rem; margin-left: 0.4rem;">0.00</span>
-          <span id="indexModalChangeBadge" class="price-up" style="font-size: 0.95rem;">+0.00 (+0.00%)</span>
+          <span id="indexModalPriceBadge" class="price-up" style="font-size: 1.3rem; margin-left: 0.4rem;">未获取</span>
+          <span id="indexModalChangeBadge" class="price-up" style="font-size: 0.95rem;">未获取</span>
         </div>
         <div class="header-right">
           <span class="brand-tag" style="font-size: 0.75rem;">基准大盘官方源</span>
@@ -1443,11 +1446,11 @@
           <span id="modalMarketTag" class="tag-badge">市场</span>
           <span id="modalBoardTag" class="tag-badge">板块</span>
           <span id="modalConstituentTag" class="tag-badge" style="display:none;">成分股</span>
-          <span id="modalPriceBadge" class="price-up" style="font-size: 1.3rem; margin-left: 0.4rem;">0.00</span>
-          <span id="modalChangeBadge" class="price-up" style="font-size: 0.95rem;">+0.00 (+0.00%)</span>
+          <span id="modalPriceBadge" class="price-up" style="font-size: 1.3rem; margin-left: 0.4rem;">未获取</span>
+          <span id="modalChangeBadge" class="price-up" style="font-size: 0.95rem;">未获取</span>
         </div>
         <div class="header-right">
-          <span id="chartDataSourceBadge" class="brand-tag" style="font-size: 0.75rem;">官方实时行情源</span>
+          <span id="chartDataSourceBadge" class="brand-tag" style="font-size: 0.75rem;">行情来源待核验</span>
         </div>
       </div>
 
@@ -1527,6 +1530,7 @@
           <p id="historyCoverage" role="status" style="color:var(--text-secondary);font-size:.8rem;line-height:1.6"></p>
 
         <!-- 动态矢量图表容器 -->
+        <div id="chanlunLegend" class="chanlun-legend" hidden></div>
         <div id="modalChartWrapper" class="chart-wrapper">
           <div id="chartTooltipBox" class="chart-tooltip-box">
             <div class="chart-tooltip-row"><span class="chart-tooltip-label">时间</span><span id="ttDate" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>
@@ -1826,7 +1830,7 @@
           <p style="color: var(--text-secondary); font-size: 0.82rem; margin-top: 0.35rem;">
             披露报告期: <span id="holderModalReportDate" style="color: #cbd5e1; font-weight: 600;">2024-06-30</span> ｜ 
             十大流通股东合计持股: <strong id="holderModalTotalPct" style="color: #38bdf8;">--%</strong> ｜ 
-            查看视图: <span id="holderModalFilterLabel" class="brand-tag" style="background: rgba(16, 185, 129, 0.2); color: #4ade80; font-size: 0.72rem;">全量前十大流通股东</span>
+            查看视图: <span id="holderModalFilterLabel" class="brand-tag" style="background: rgba(16, 185, 129, 0.2); color: #4ade80; font-size: 0.72rem;">全量前十大股东</span>
           </p>
         </div>
         <button class="modal-close" onclick="closeTop10HoldersModal()" style="font-size: 1.6rem; color: #94a3b8; cursor: pointer; background: transparent; border: none;">&times;</button>
@@ -1864,7 +1868,7 @@
             <span id="peerModalStockBadge" class="brand-tag" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-size: 0.82rem;">工商银行 (601398)</span>
           </h3>
           <p style="color: var(--text-secondary); font-size: 0.82rem; margin-top: 0.35rem;">
-            以下上市公司与当前标的拥有重合的前十大流通股东（如香港中央结算/汇金公司/全国社保等主力长线资金共同重仓持股）
+            以下上市公司与当前标的拥有重合的前十大股东（如香港中央结算/汇金公司/全国社保等主力长线资金共同重仓持股）
           </p>
         </div>
         <button class="modal-close" onclick="closePeerCompaniesModal()" style="font-size: 1.6rem; color: #94a3b8; cursor: pointer; background: transparent; border: none;">&times;</button>

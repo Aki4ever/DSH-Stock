@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="880" viewBox="0 0 1200 880" role="img"><title>05  线段：特征序列无缺口的例子</title><desc>假定下图每一笔都已按笔规则独立确认；折点数字是价格。</desc>
+<style>text{font-family:"PingFang SC","Heiti SC","STHeiti",sans-serif}</style>
+<rect x="0" y="0" width="1200" height="880" rx="0" fill="#f7f6f0" stroke="none"/>
+<text x="44" y="54" fill="#183642" font-size="32" font-weight="600" text-anchor="start">05  线段：特征序列无缺口的例子</text>
+<text x="44" y="90" fill="#546d76" font-size="18" font-weight="400" text-anchor="start">假定下图每一笔都已按笔规则独立确认；折点数字是价格。</text>
+<text x="44" y="855" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">自制教学示意 · 非真实行情 · 定义与前提见教程及原作者出处</text>
+<rect x="44" y="134" width="725" height="365" rx="14" fill="white" stroke="#ccd9db"/>
+<polyline points="110,415 201,265 292,355 383,205 474,295 565,235 656,385" fill="none" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linejoin="round"/>
+<circle cx="110" cy="415" r="5" fill="#087f8c"/>
+<text x="103" y="400" fill="#183642" font-size="20" font-weight="400" text-anchor="start">5</text>
+<circle cx="201" cy="265" r="5" fill="#087f8c"/>
+<text x="194" y="250" fill="#183642" font-size="20" font-weight="400" text-anchor="start">10</text>
+<circle cx="292" cy="355" r="5" fill="#087f8c"/>
+<text x="285" y="340" fill="#183642" font-size="20" font-weight="400" text-anchor="start">7</text>
+<circle cx="383" cy="205" r="5" fill="#087f8c"/>
+<text x="376" y="190" fill="#183642" font-size="20" font-weight="400" text-anchor="start">12</text>
+<circle cx="474" cy="295" r="5" fill="#087f8c"/>
+<text x="467" y="280" fill="#183642" font-size="20" font-weight="400" text-anchor="start">9</text>
+<circle cx="565" cy="235" r="5" fill="#087f8c"/>
+<text x="558" y="220" fill="#183642" font-size="20" font-weight="400" text-anchor="start">11</text>
+<circle cx="656" cy="385" r="5" fill="#087f8c"/>
+<text x="649" y="370" fill="#183642" font-size="20" font-weight="400" text-anchor="start">6</text>
+<line x1="110" y1="415" x2="383" y2="205" stroke="#087f8c" stroke-width="5" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="383" y1="205" x2="656" y2="385" stroke="#bc5a2e" stroke-width="4" stroke-dasharray="8 7" stroke-linecap="round"/>
+<text x="75" y="472" fill="#183642" font-size="18" font-weight="400" text-anchor="start">实线：前向上线段；橙色虚线：反向段终点仍待确认。</text>
+<rect x="792" y="134" width="364" height="365" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="814" y="169" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">从向下笔抽取区间</text>
+<text x="814" y="205" fill="#183642" font-size="18" font-weight="400" text-anchor="start">10→7  → [7,10]</text>
+<text x="814" y="233" fill="#183642" font-size="18" font-weight="400" text-anchor="start">12→9  → [9,12]</text>
+<text x="814" y="261" fill="#183642" font-size="18" font-weight="400" text-anchor="start">11→6  → [6,11]</text>
+<text x="814" y="289" fill="#183642" font-size="18" font-weight="400" text-anchor="start">前两区间重叠[9,10]</text>
+<text x="814" y="317" fill="#183642" font-size="18" font-weight="400" text-anchor="start">属于无缺口情形。</text>
+<rect x="44" y="525" width="1112" height="268" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="66" y="560" fill="#087f8c" font-size="24" font-weight="600" text-anchor="start">标准特征序列：顶分型</text>
+<line x1="140.0" y1="635.375" x2="140.0" y2="683.75" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="128.0" y1="635.375" x2="152.0" y2="635.375" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="128.0" y1="683.75" x2="152.0" y2="683.75" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="159.0" y="640.375" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">10</text>
+<text x="159.0" y="688.75" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">7</text>
+<text x="140.0" y="745" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">X1</text>
+<line x1="290.0" y1="603.125" x2="290.0" y2="651.5" stroke="#087f8c" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="278.0" y1="603.125" x2="302.0" y2="603.125" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="278.0" y1="651.5" x2="302.0" y2="651.5" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="309.0" y="608.125" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">12</text>
+<text x="309.0" y="656.5" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">9</text>
+<text x="290.0" y="745" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">X2</text>
+<line x1="440.0" y1="619.25" x2="440.0" y2="699.875" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="428.0" y1="619.25" x2="452.0" y2="619.25" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="428.0" y1="699.875" x2="452.0" y2="699.875" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="459.0" y="624.25" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">11</text>
+<text x="459.0" y="704.875" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">6</text>
+<text x="440.0" y="745" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">X3</text>
+<text x="571" y="609" fill="#183642" font-size="21" font-weight="400" text-anchor="start">中间元素高点12、低点9都最高。</text>
+<text x="571" y="652" fill="#183642" font-size="21" font-weight="400" text-anchor="start">前段端点定位在12；要等右侧结构才确认。</text>
+<text x="571" y="695" fill="#bc5a2e" font-size="20" font-weight="400" text-anchor="start">起始三笔重叠[7,10]，不代表三笔时已结束。</text>
+<text x="571" y="742" fill="#546d76" font-size="19" font-weight="400" text-anchor="start">有缺口时还需反向特征分型，不能套用本图。</text></svg>

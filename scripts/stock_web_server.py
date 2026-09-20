@@ -34,10 +34,10 @@ BASE_DIR = os.path.dirname(CURRENT_DIR)
 WEB_DIR = os.path.join(BASE_DIR, "web")
 DATA_DIR = os.path.join(BASE_DIR, "data")
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
-PID_FILE = os.path.join(BASE_DIR, ".server.pid")
+PID_FILE = os.environ.get("DSH_PID_FILE", os.path.join(BASE_DIR, ".server.pid"))
 VERSION_FILE = os.path.join(CONFIG_DIR, "version.json")
 CONSTITUENTS_FILE = os.path.join(CONFIG_DIR, "constituents.json")
-DB_FILE = os.path.join(DATA_DIR, "stock_database.db")
+DB_FILE = os.environ.get("DSH_STOCK_DB", os.path.join(DATA_DIR, "stock_database.db"))
 
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
@@ -64,8 +64,6 @@ from scripts.stock_data_engine import (
     StockQuote,
     KLineBar,
     normalize_code,
-    generate_mock_quote,
-    generate_mock_kline
 )
 from scripts.stock_indicators import evaluate_stock
 from scripts.stock_chart_svg import generate_stock_svg
@@ -109,7 +107,8 @@ class StockDataManager:
         self.csi100_set = set()
         self.last_updated: float = 0.0
         self._init_database_and_load()
-        self._start_background_worker()
+        if os.environ.get("DSH_DISABLE_BACKGROUND") != "1":
+            self._start_background_worker()
 
     def _init_database_and_load(self):
         """初始化 SQLite 并加载全量标的底册"""
@@ -119,8 +118,9 @@ class StockDataManager:
             try:
                 with open(CONSTITUENTS_FILE, "r", encoding="utf-8") as f:
                     cdata = json.load(f)
-                    self.csi50_set = set(cdata.get("csi50", []))
-                    self.csi100_set = set(cdata.get("csi100", []))
+                    if cdata.get("verified_source") and cdata.get("as_of"):
+                        self.csi50_set = set(cdata.get("csi50", []))
+                        self.csi100_set = set(cdata.get("csi100", []))
             except Exception:
                 pass
 
@@ -151,7 +151,7 @@ class StockDataManager:
                     with self._lock:
                         all_keys = list(self.stocks_dict.keys())
                     # 轮询更新尚未初始化价格的标的
-                    uninit = [k for k in all_keys if self.stocks_dict[k]["price"] == 0.0][:120]
+                    uninit = [k for k in all_keys if not self.stocks_dict[k].get("price")][:120]
                     if uninit:
                         self.fetch_quotes_batch(uninit)
                 except Exception:
@@ -160,55 +160,12 @@ class StockDataManager:
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
-    def fetch_quotes_batch(self, codes: List[str]):
-        """分批拉取行情，反爬伪装并自动写入 SQLite 数据库"""
-        if not codes:
-            return
-
-        chunk_size = 45
-        scraped_quotes = []
-
-        for i in range(0, len(codes), chunk_size):
-            chunk = codes[i:i + chunk_size]
-            url = f"http://qt.gtimg.cn/q={','.join(chunk)}"
-            content = robust_fetch(url, referer="http://gu.qq.com", timeout=3.5, max_retries=2, encoding="gbk")
-
-            if content:
-                for line in content.split(";"):
-                    line = line.strip()
-                    if not line or "=" not in line:
-                        continue
-                    k, val = line.split("=", 1)
-                    norm_c = k.replace("v_", "").strip()
-                    parts = val.strip('";\n').split("~")
-                    if len(parts) >= 46 and norm_c in self.stocks_dict:
-                        with self._lock:
-                            item = self.stocks_dict[norm_c]
-                            item["name"] = parts[1]
-                            item["price"] = float(parts[3])
-                            item["prev_close"] = float(parts[4])
-                            item["open"] = float(parts[5])
-                            item["volume"] = float(parts[6])
-                            item["high"] = float(parts[33]) if parts[33] else item["price"]
-                            item["low"] = float(parts[34]) if parts[34] else item["price"]
-                            item["turnover"] = float(parts[37]) * 10000 if parts[37] else 0.0
-                            item["turnover_yi"] = round(item["turnover"] / 100000000.0, 2)
-                            item["change"] = float(parts[31]) if parts[31] else round(item["price"] - item["prev_close"], 2)
-                            item["change_pct"] = float(parts[32]) if parts[32] else 0.0
-                            item["turnover_rate"] = float(parts[38]) if parts[38] else 0.0
-                            item["pe"] = float(parts[39]) if parts[39] else 0.0
-                            item["market_cap"] = float(parts[44]) if parts[44] else 0.0
-                            item["circulating_cap"] = float(parts[45]) if parts[45] else 0.0
-                            item["timestamp"] = parts[30]
-                            item["is_mock"] = False
-                            scraped_quotes.append(dict(item))
-
-        # 异步事务落盘保存至 SQLite 数据库
-        if scraped_quotes:
-            try:
-                save_quotes_batch(scraped_quotes)
-            except Exception as e:
-                sys.stderr.write(f"SQLite 批量写入行情异常: {e}\n")
+    def fetch_quotes_batch(self, codes):
+        from scripts.verified_quotes import fetch_quotes
+        for row in fetch_quotes(codes):
+            with self._lock:
+                if row['code'] in self.stocks_dict:
+                    self.stocks_dict[row['code']].update(row)
 
     def get_stock_detail(self, code: str, refresh: bool = False, shareholder_days: int = 365) -> Optional[Dict[str, Any]]:
         """
@@ -234,19 +191,8 @@ class StockDataManager:
         if not stock:
             return None
 
-        # 2. 检查十大股东: 优先查内存/本地，缺失时触发按需回补并持久化
-        if stock.get("top10_hold_pct", 0.0) == 0.0 and stock.get("top10_circ_hold_pct", 0.0) == 0.0:
-            sh_data = parse_shareholder_data(norm)
-            if sh_data and (sh_data["top10_hold_pct"] > 0 or sh_data["top10_circ_hold_pct"] > 0):
-                top10_hold = min(100.0, sh_data["top10_hold_pct"])
-                top10_circ = min(100.0, sh_data["top10_circ_hold_pct"])
-                rep_date = sh_data.get("report_date") or "最新期"
-                with self._lock:
-                    stock["top10_hold_pct"] = top10_hold
-                    stock["top10_circ_hold_pct"] = top10_circ
-                    stock["report_date"] = rep_date
-                # 持久化写入本地 SQLite
-                save_shareholder_item(norm, rep_date, top10_hold, top10_circ)
+        from scripts.shareholder_engine import Top10ShareholdersEngine
+        Top10ShareholdersEngine.enrich_stock_holder_metrics(stock)
 
         # 3. 需求1/2/3: 日K线查询 - 本地数据库优先 (Local-DB-First)
         history = get_daily_history(norm, refresh=refresh)
@@ -260,22 +206,6 @@ class StockDataManager:
         company_profile = fetch_company_profile(norm, stock["name"], stock["market"], stock["board"])
         financial_reports = fetch_financial_statements(norm, stock["price"], stock["market_cap"], stock["pe"])
 
-        quote_obj = StockQuote(
-            code=stock["code"],
-            name=stock["name"],
-            price=stock["price"],
-            prev_close=stock["prev_close"],
-            open_price=stock["open"],
-            high=stock["high"],
-            low=stock["low"],
-            volume=stock["volume"],
-            turnover=stock["turnover"],
-            change=stock["change"],
-            change_pct=stock["change_pct"],
-            market=stock["market_code"].upper(),
-            is_mock=stock.get("is_mock", False)
-        )
-
         # 技术面指标与评分必须基于真实历史K线数据，严禁生成任何mock假数据
         real_bars_objs = []
         if daily_bars:
@@ -287,15 +217,17 @@ class StockDataManager:
                     high_p=b["high"],
                     low_p=b["low"],
                     volume=b["volume"],
-                    turnover=(b.get("amount_yi") or 0.0) * 100000000.0
+                    turnover=b["amount_yi"] * 100000000.0 if b.get("amount_yi") is not None else None
                 ))
         eval_report = evaluate_stock(norm, stock["name"], real_bars_objs) if real_bars_objs else None
-        svg_chart = generate_stock_svg(quote_obj, real_bars_objs, width=860, height=450) if real_bars_objs else ""
+        svg_chart = ""
 
         detail = dict(stock)
         detail["evaluation"] = eval_report.to_dict() if eval_report else None
         detail["svg_chart"] = svg_chart
         detail["daily_bars"] = daily_bars
+        from scripts.chanlun_analysis import analyze_bars
+        detail["chanlun"] = analyze_bars(daily_bars, code=norm)
         detail["history_meta"] = {k: v for k, v in history.items() if k != "bars"}
         detail["timeline_data"] = timeline_data
         detail["company_profile"] = company_profile
@@ -311,8 +243,8 @@ class StockDataManager:
         st_filter = params.get("st", "all") # 需求4: "all" | "st" | "non_st"
         filter_date = params.get("filter_date", "")
         shareholder_action = params.get("shareholder_action", "all")
-        if shareholder_action not in ("all", "increase", "decrease"):
-            raise ValueError("股东行为仅支持全部、增持、减持")
+        if shareholder_action not in ("all", "increase", "decrease", "both"):
+            raise ValueError("股东行为仅支持全部、增持、减持、同时增减持")
         action_snapshot = get_actions(int(params.get("shareholder_days", 365)))
 
         def to_float(v):
@@ -399,104 +331,52 @@ class StockDataManager:
         with SERVER_STATE_LOCK:
             current_state = SERVER_STATE
         if current_state == "running":
-            unquoted = [c["code"] for c in filtered_candidates if c["price"] == 0.0][:60]
+            unquoted = [c["code"] for c in filtered_candidates if not c.get("price")][:60]
             if unquoted:
                 self.fetch_quotes_batch(unquoted)
 
         # 阶段 3：多维数值严格联合判定 (AND)
         matched = []
         for s in filtered_candidates:
-            if f_min_price is not None and s["price"] < f_min_price:
+            from scripts.shareholder_engine import Top10ShareholdersEngine
+            Top10ShareholdersEngine.enrich_stock_holder_metrics(s)
+            bounds = [('price',f_min_price,f_max_price),('market_cap',f_min_cap,f_max_cap),
+                      ('circulating_cap',f_min_circ_cap,f_max_circ_cap),('pe',f_min_pe,f_max_pe),
+                      ('top10_circ_hold_pct',f_min_top10_circ,f_max_top10_circ),('top10_hold_pct',f_min_top10,f_max_top10),
+                      ('turnover_yi',f_min_daily_amount,f_max_daily_amount),('avg_daily_amount',f_min_avg_daily_amount,f_max_avg_daily_amount),
+                      ('listing_years',f_min_listing_years,f_max_listing_years),('holder_individual_pct',f_min_individual,f_max_individual),
+                      ('holder_institution_pct',f_min_institution,f_max_institution)]
+            if any((lo is not None or hi is not None) and (s.get(key) is None or
+                   (lo is not None and s[key]<lo) or (hi is not None and s[key]>hi)) for key,lo,hi in bounds):
                 continue
-            if f_max_price is not None and s["price"] > f_max_price:
+            if profit_years and profit_years!='all' and (s.get('profit_years') is None or s['profit_years']<int(profit_years)):
                 continue
-            if f_min_cap is not None and s["market_cap"] < f_min_cap:
-                continue
-            if f_max_cap is not None and s["market_cap"] > f_max_cap:
-                continue
-            if f_min_circ_cap is not None and s["circulating_cap"] < f_min_circ_cap:
-                continue
-            if f_max_circ_cap is not None and s["circulating_cap"] > f_max_circ_cap:
-                continue
-            if f_min_pe is not None and s["pe"] < f_min_pe:
-                continue
-            if f_max_pe is not None and s["pe"] > f_max_pe:
-                continue
-            if f_min_top10_circ is not None and s["top10_circ_hold_pct"] < f_min_top10_circ:
-                continue
-            if f_max_top10_circ is not None and s["top10_circ_hold_pct"] > f_max_top10_circ:
-                continue
-            if f_min_top10 is not None and s["top10_hold_pct"] < f_min_top10:
-                continue
-            if f_max_top10 is not None and s["top10_hold_pct"] > f_max_top10:
-                continue
-            # 需求1/2: 日交易额与日均交易额数值过滤 (亿元)
-            s_turnover_yi = float(s.get("turnover_yi") or 0.0)
-            if f_min_daily_amount is not None and s_turnover_yi < f_min_daily_amount:
-                continue
-            if f_max_daily_amount is not None and s_turnover_yi > f_max_daily_amount:
-                continue
-
-            # 日均交易额: 若未单独预置则按成交额与换手率加权或近周期均值，保障流动性严格检验
-            s_circ_cap = float(s.get("circulating_cap") or 0.0)
-            s_turnover_rate = float(s.get("turnover_rate") or 0.0)
-            s_avg_daily_amount = round(s_circ_cap * (s_turnover_rate / 100.0), 2) if s_circ_cap > 0 and s_turnover_rate > 0 else s_turnover_yi
-            if f_min_avg_daily_amount is not None and s_avg_daily_amount < f_min_avg_daily_amount:
-                continue
-            if f_max_avg_daily_amount is not None and s_avg_daily_amount > f_max_avg_daily_amount:
-                continue
-
-            # 需求2: 上市时长联合判定
-            s_listing_years = float(s.get("listing_years") or 0.0)
-            if f_min_listing_years is not None and s_listing_years < f_min_listing_years:
-                continue
-            if f_max_listing_years is not None and s_listing_years > f_max_listing_years:
-                continue
-
-            # 需求5: 盈利时长过滤 (连续 1/2/3 年净利润/EPS为正，规避亏损股)
-            s_pe = float(s.get("pe") or 0.0)
-            if profit_years and profit_years != "all":
-                py_val = int(profit_years)
-                # PE <= 0 或 PE 异常偏高的通常有亏损或微利风险
-                if s_pe <= 0:
-                    continue
-                # 基于上市年份与分红持续性保障连续盈利年限
-                if py_val >= 2 and (s_listing_years < 2.0 or s_pe > 150):
-                    continue
-                if py_val >= 3 and (s_listing_years < 3.0 or s_pe > 100):
-                    continue
-
-            # 筹码个人与机构占比粗判 (若有设置)
-            if f_min_individual is not None or f_max_individual is not None or f_min_institution is not None or f_max_institution is not None:
-                from scripts.shareholder_engine import Top10ShareholdersEngine
-                Top10ShareholdersEngine.enrich_stock_holder_metrics(s)
-                ind_pct = s.get("holder_individual_pct", 0.0)
-                inst_pct = s.get("holder_institution_pct", 0.0)
-                if f_min_individual is not None and ind_pct < f_min_individual:
-                    continue
-                if f_max_individual is not None and ind_pct > f_max_individual:
-                    continue
-                if f_min_institution is not None and inst_pct < f_min_institution:
-                    continue
-                if f_max_institution is not None and inst_pct > f_max_institution:
-                    continue
 
             matched.append(dict(s))
 
         # 股东行为在全量候选中筛选，再统计和分页。
-        if shareholder_action != "all":
+        if shareholder_action == "both":
+            matched = [s for s in matched if any(
+                row["direction"] == "increase"
+                for row in action_snapshot["records"].get(s["code"], [])) and any(
+                row["direction"] == "decrease"
+                for row in action_snapshot["records"].get(s["code"], []))]
+        elif shareholder_action != "all":
             matched = [s for s in matched if any(
                 row["direction"] == shareholder_action
                 for row in action_snapshot["records"].get(s["code"], []))]
 
         # 默认按总市值降序
-        matched.sort(key=lambda x: x["market_cap"], reverse=True)
+        matched.sort(key=lambda x: x.get("market_cap") or -1, reverse=True)
 
         total_matched = len(matched)
-        avg_price = round(sum(s["price"] for s in matched) / total_matched, 2) if total_matched > 0 else 0.0
-        avg_change = round(sum(s["change_pct"] for s in matched) / total_matched, 2) if total_matched > 0 else 0.0
-        total_cap = round(sum(s["market_cap"] for s in matched), 2) if total_matched > 0 else 0.0
-        total_circ_cap = round(sum(s["circulating_cap"] for s in matched), 2) if total_matched > 0 else 0.0
+        def aggregate(field, average=False):
+            values=[s[field] for s in matched if s.get(field) is not None]
+            return round(sum(values)/(len(values) if average else 1),2) if values else None
+        avg_price = aggregate('price', True)
+        avg_change = aggregate('change_pct', True)
+        total_cap = aggregate('market_cap')
+        total_circ_cap = aggregate('circulating_cap')
 
         # 需求1: 真实且同步的数据快照截取日期
         real_snapshot_date = filter_date or datetime.now().strftime("%Y-%m-%d")
@@ -514,6 +394,9 @@ class StockDataManager:
             "page_size": page_size,
             "server_state": current_state
         }
+        stats['coverage']={k:sum(s.get(k) is not None for s in matched) for k in ('price','change_pct','market_cap','circulating_cap')}
+        stats['quote_dates']=sorted({str(s.get('timestamp') or '')[:8] for s in matched if s.get('timestamp')})
+        stats['snapshot_note']='当前已获取行情快照；日期筛选仅约束股东行为，未提供历史全市场行情截面'
 
         stats["shareholder_actions"] = {k: v for k, v in action_snapshot.items() if k != "records"}
         start_idx = (page - 1) * page_size
@@ -618,12 +501,17 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
         if url_path == "/api/crawler/audit-list":
             from scripts.stock_db import list_crawl_audit_records, get_latest_crawl_fingerprint
             records = list_crawl_audit_records(limit=30)
+            for rec in records:
+                rec["verification_status"]="verified-quotes" if "真实行情" in (rec.get("status") or "") else "legacy-unverified"
+                if rec["verification_status"]=="legacy-unverified":
+                    rec["status"]="旧版日志（数据未核验）"
+                    rec["details"]="历史操作记录，仅供审计，不能证明数据真实或覆盖完整。"
             latest_fp = get_latest_crawl_fingerprint()
             self._send_json(200, {
                 "records": records,
                 "total": len(records),
                 "latest_fingerprint": latest_fp,
-                "freshness_check": "ACTIVE"
+                "freshness_check": "audit-only"
             })
             return
 
@@ -663,14 +551,21 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             # 排序
             reverse = (sort_dir == "desc")
             if sort_by == "company_count":
-                shareholders.sort(key=lambda x: (x["company_count"], x["total_holding_amount"]), reverse=reverse)
+                shareholders.sort(key=lambda x: (x["company_count"], (x.get("total_holding_amount") or 0)), reverse=reverse)
             else:
-                shareholders.sort(key=lambda x: (x["total_holding_amount"], x["company_count"]), reverse=reverse)
+                shareholders.sort(key=lambda x: ((x.get("total_holding_amount") or 0), x["company_count"]), reverse=reverse)
 
+            try:
+                page=max(1,int(query_params.get("page",1)))
+                page_size=max(1,min(200,int(query_params.get("page_size",50))))
+            except (ValueError, TypeError):
+                self._send_json(400, {"status":"error","message":"分页参数必须为整数"}); return
             self._send_json(200, {
+                "page":page,"page_size":page_size,
                 "total": len(shareholders),
                 "overview": overview_stats,
-                "data": shareholders
+                "metadata": {k:v for k,v in __import__("scripts.shareholder_engine",fromlist=["get_holder_snapshot"]).get_holder_snapshot(allow_fetch=False).items() if k!="rows"},
+                "data": shareholders[(page-1)*page_size:page*page_size]
             })
             return
 
@@ -741,7 +636,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                     "export_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "version": APP_VERSION,
                     "total_universe_count": len(all_stocks),
-                    "fingerprint_engine": "SHA-256 Idempotent Active",
+                    "fingerprint_engine": "采集批次标识；真实字段来源见quote_meta",
                     "crawler_snapshot": CRAWLER_JOB.get_snapshot(),
                     "data": all_stocks
                 }
@@ -816,6 +711,24 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        if url_path.startswith('/api/chanlun/'):
+            try:
+                from scripts.chanlun_analysis import analyze_bars
+                code=url_path.rsplit('/',1)[-1]
+                h=get_daily_history(code)
+                q=parse_qs(urlsplit(self.path).query)
+                result=analyze_bars(h['bars'],code=h['code'],periods=tuple(int(x) for x in q.get('ma_periods',['5,10,20'])[0].split(',')),threshold_pct=float(q.get('threshold',['1'])[0]),min_bars=int(q.get('min_bars',['3'])[0]))
+                result['history_meta']={k:v for k,v in h.items() if k!='bars'}
+                self._send_json(200,result)
+            except (ValueError,TypeError) as exc:self._send_json(400,{'error':str(exc)})
+            return
+
+        if url_path.startswith('/api/stock/') and url_path.endswith('/dividends'):
+            from scripts.verified_disclosures import dividends
+            try: self._send_json(200, {'code':200,'data':dividends(url_path.split('/')[3])})
+            except ValueError as exc:self._send_json(400,{'error':str(exc)})
+            return
+
         # 3.7 多颗粒度财务报表端点 /api/stock/<code/finance?period=annual|report|quarter
         if url_path.startswith("/api/stock/") and url_path.endswith("/finance"):
             parts = url_path.split("/")
@@ -828,7 +741,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                         k, v = part.split("=", 1)
                         query_params[k.strip()] = v.strip()
             period_type = query_params.get("period", "annual")
-            stock_info = DATA_MANAGER.get_stock_detail(symbol) or {}
+            stock_info = DATA_MANAGER.stocks_dict.get(symbol, {})
             curr_p = float(stock_info.get("price") or 0.0)
             m_cap = float(stock_info.get("market_cap") or 0.0)
             pe_val = float(stock_info.get("pe") or 0.0)
@@ -846,7 +759,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
         if url_path.startswith("/api/stock/") and url_path.endswith("/block"):
             parts = url_path.split("/")
             symbol = parts[3] if len(parts) >= 4 else ""
-            stock_info = DATA_MANAGER.get_stock_detail(symbol) or {}
+            stock_info = DATA_MANAGER.stocks_dict.get(symbol, {})
             curr_p = float(stock_info.get("price") or 0.0)
             from scripts.official_block_trade_engine import OfficialBlockTradeEngine
             trades = OfficialBlockTradeEngine.get_stock_block_trades(symbol, curr_p)
@@ -861,7 +774,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
         if url_path.startswith("/api/stock/") and url_path.endswith("/events"):
             parts = url_path.split("/")
             symbol = parts[3] if len(parts) >= 4 else ""
-            stock_info = DATA_MANAGER.get_stock_detail(symbol) or {}
+            stock_info = DATA_MANAGER.stocks_dict.get(symbol, {})
             stk_name = str(stock_info.get("name") or "")
             from scripts.stock_events_engine import StockEventsEngine
             events_data = StockEventsEngine.get_stock_events_and_notices(symbol, stk_name)
@@ -876,10 +789,10 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
         if url_path.startswith("/api/stock/") and url_path.endswith("/shareholders"):
             parts = url_path.split("/")
             symbol = parts[3] if len(parts) >= 4 else ""
-            stock_info = DATA_MANAGER.get_stock_detail(symbol) or {}
+            stock_info = DATA_MANAGER.stocks_dict.get(symbol, {})
             stk_name = str(stock_info.get("name") or "")
             t10_circ = float(stock_info.get("top10_circ_hold_pct") or 0.0)
-            rep_date = str(stock_info.get("report_date") or "2024-06-30")
+            rep_date = stock_info.get("report_date")
             from scripts.shareholder_engine import Top10ShareholdersEngine
             holders_data = Top10ShareholdersEngine.get_stock_top10_shareholders(
                 symbol, name=stk_name, top10_circ_pct=t10_circ, report_date=rep_date
@@ -897,6 +810,8 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 curr_state = SERVER_STATE
 
             uptime = int(time.time() - SERVER_START_TIME)
+            quote_dates=sorted({str(s["timestamp"])[:8] for s in DATA_MANAGER.stocks_dict.values() if s.get("timestamp")})
+            qdate=quote_dates[-1] if quote_dates else None
             data = {
                 "status": curr_state,
                 "service": "DSH Stock Web Server",
@@ -908,7 +823,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "csi50_count": len(DATA_MANAGER.csi50_set),
                 "csi100_count": len(DATA_MANAGER.csi100_set),
                 "db_path": DB_FILE,
-                "snapshot_date": datetime.now().strftime("%Y-%m-%d"),
+                "snapshot_date": (qdate[:4]+"-"+qdate[4:6]+"-"+qdate[6:8]) if qdate else None,
                 "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             self._send_json(200, data)
@@ -919,7 +834,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             schema = {
                 "version": APP_VERSION,
                 "dimensions": [
-                    {"id": "shareholder_action", "name": "股东行为", "type": "select", "options": [{"value": "all", "label": "全部"}, {"value": "increase", "label": "增持"}, {"value": "decrease", "label": "减持"}]},
+                    {"id": "shareholder_action", "name": "股东行为", "type": "select", "options": [{"value": "all", "label": "全部"}, {"value": "increase", "label": "增持"}, {"value": "decrease", "label": "减持"}, {"value": "both", "label": "同时增减持"}]},
                     {"id": "market", "name": "股市分类", "type": "select", "options": [{"value": "all", "label": "全部 A 股"}, {"value": "sh", "label": "上证"}, {"value": "sz", "label": "深圳"}]},
                     {"id": "board", "name": "板块分类", "type": "select", "options": [{"value": "all", "label": "全部板块"}, {"value": "main", "label": "主板"}, {"value": "chinext", "label": "创业板"}]},
                     {"id": "constituent", "name": "成分股", "type": "select", "options": [{"value": "all", "label": "全部(不限)"}, {"value": "csi50", "label": "中证50"}, {"value": "csi100", "label": "中证100"}]},
@@ -1057,7 +972,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
         self.send_error(404, "Endpoint Not Found")
 
     def _send_json(self, status: int, data: Dict[str, Any]):
-        response = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+        response = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(response)))

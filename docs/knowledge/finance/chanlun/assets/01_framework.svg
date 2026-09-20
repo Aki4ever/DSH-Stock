@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img"><title>01  缠论的学习框架</title><desc>先整理形态，再辨认结构，最后比较力度与位置。</desc>
+<style>text{font-family:"PingFang SC","Heiti SC","STHeiti",sans-serif}</style>
+<rect x="0" y="0" width="1200" height="680" rx="0" fill="#f7f6f0" stroke="none"/>
+<text x="44" y="54" fill="#183642" font-size="32" font-weight="600" text-anchor="start">01  缠论的学习框架</text>
+<text x="44" y="90" fill="#546d76" font-size="18" font-weight="400" text-anchor="start">先整理形态，再辨认结构，最后比较力度与位置。</text>
+<text x="44" y="655" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">自制教学示意 · 非真实行情 · 定义与前提见教程及原作者出处</text>
+<rect x="44" y="142" width="200" height="145" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="66" y="177" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">K线</text>
+<text x="66" y="213" fill="#183642" font-size="18" font-weight="400" text-anchor="start">固定采样周期</text>
+<text x="66" y="241" fill="#183642" font-size="18" font-weight="400" text-anchor="start">高低区间</text>
+<text x="250" y="225" fill="#087f8c" font-size="25" font-weight="400" text-anchor="start">→</text>
+<rect x="272" y="142" width="200" height="145" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="294" y="177" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">包含处理</text>
+<text x="294" y="213" fill="#183642" font-size="18" font-weight="400" text-anchor="start">按方向合并</text>
+<text x="294" y="241" fill="#183642" font-size="18" font-weight="400" text-anchor="start">形成分析序列</text>
+<text x="478" y="225" fill="#087f8c" font-size="25" font-weight="400" text-anchor="start">→</text>
+<rect x="500" y="142" width="200" height="145" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="522" y="177" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">分型</text>
+<text x="522" y="213" fill="#183642" font-size="18" font-weight="400" text-anchor="start">三个相邻元素</text>
+<text x="522" y="241" fill="#183642" font-size="18" font-weight="400" text-anchor="start">顶 / 底</text>
+<text x="706" y="225" fill="#087f8c" font-size="25" font-weight="400" text-anchor="start">→</text>
+<rect x="728" y="142" width="200" height="145" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="750" y="177" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">笔</text>
+<text x="750" y="213" fill="#183642" font-size="18" font-weight="400" text-anchor="start">合格顶底连接</text>
+<text x="750" y="241" fill="#183642" font-size="18" font-weight="400" text-anchor="start">固定笔规则</text>
+<text x="934" y="225" fill="#087f8c" font-size="25" font-weight="400" text-anchor="start">→</text>
+<rect x="956" y="142" width="200" height="145" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="978" y="177" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">线段</text>
+<text x="978" y="213" fill="#183642" font-size="18" font-weight="400" text-anchor="start">至少三笔起步</text>
+<text x="978" y="241" fill="#183642" font-size="18" font-weight="400" text-anchor="start">检查结束条件</text>
+<rect x="44" y="341" width="528" height="154" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="66" y="376" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">递归结构层</text>
+<text x="66" y="412" fill="#183642" font-size="18" font-weight="400" text-anchor="start">确定基础单位 → 最小中枢 → 更高级结构</text>
+<text x="66" y="440" fill="#183642" font-size="18" font-weight="400" text-anchor="start">同级中枢的数量与关系 → 盘整 / 上涨 / 下跌</text>
+<rect x="600" y="341" width="556" height="154" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="622" y="376" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">分析层</text>
+<text x="622" y="412" fill="#183642" font-size="18" font-weight="400" text-anchor="start">先确认级别、比较段与完成状态</text>
+<text x="622" y="440" fill="#183642" font-size="18" font-weight="400" text-anchor="start">研究力度与背驰 → 核对一 / 二 / 三类买卖点</text>
+<text x="52" y="555" fill="#bc5a2e" font-size="23" font-weight="400" text-anchor="start">关联不等于一一对应：一笔 ≠ 任意次级别走势；K线周期 ≠ 结构级别。</text>
+<text x="52" y="594" fill="#183642" font-size="21" font-weight="400" text-anchor="start">每一步都记录：采用什么规则、哪些已确认、还缺什么证据。</text></svg>

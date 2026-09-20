@@ -6,6 +6,8 @@
 """
 
 import unittest
+from unittest.mock import patch
+from tests.market_fixtures import generate_mock_quote
 import os
 import sys
 
@@ -72,7 +74,9 @@ class TestStockPortfolio(unittest.TestCase):
         self.assertGreater(len(cfg["watchlist"]), 0)
 
     def test_build_portfolio_summary_and_alerts(self):
-        summary, alerts = build_portfolio_summary(allow_mock=True)
+        cfg=load_config();cfg['portfolio_verified']=True
+        with patch('scripts.stock_portfolio.load_config',return_value=cfg),patch('scripts.stock_portfolio.get_batch_quotes',return_value=[generate_mock_quote(p['code']) for p in cfg['portfolio']]):
+            summary, alerts = build_portfolio_summary()
         self.assertGreater(summary.total_market_value, 0)
         self.assertGreater(len(summary.positions), 0)
         # 确认预警返回列表对象类型正确
@@ -80,6 +84,11 @@ class TestStockPortfolio(unittest.TestCase):
             self.assertIsInstance(a, AlertMessage)
             self.assertIn(a.level, ["INFO", "WARNING", "DANGER", "SUCCESS"])
 
+    def test_unverified_positions_and_missing_prices_blocked(self):
+        with self.assertRaises(RuntimeError):build_portfolio_summary()
+        cfg=load_config();cfg['portfolio_verified']=True
+        with patch('scripts.stock_portfolio.load_config',return_value=cfg),patch('scripts.stock_portfolio.get_batch_quotes',return_value=[]):
+            with self.assertRaises(RuntimeError):build_portfolio_summary()
 
 if __name__ == "__main__":
     unittest.main()

@@ -33,116 +33,39 @@ def fetch_real_daily_kline(code: str, limit=None) -> List[Dict[str, Any]]:
 
 
 def fetch_real_timeline(code: str) -> Dict[str, Any]:
-    """
-    通过多通道冗余获取当天真实分时明细 (100% 真实数据，绝不伪造)
-    返回: pre_close, items: [{time, price, avg_price, volume(手), amount_yi(亿元), change_pct}]
-    """
-    clean_code = code.lower().replace("sh", "").replace("sz", "").replace("bj", "").strip()
-    prefix = "sh" if code.lower().startswith("sh") or clean_code.startswith(("60", "68")) else "sz"
-    symbol_full = f"{prefix}{clean_code}"
-
-    # =========================================================================
-    # 通道 1 (主通道): 腾讯证券高频真实分时 (分笔细致，成交额真实)
-    # =========================================================================
+    """腾讯来源实际分时；缺字段保留空值，失败不以5分钟K线冒充分时。"""
+    from datetime import date
+    from scripts.market_history import canonical_code
+    from scripts.verified_sources import request_json, meta, number
+    symbol = canonical_code(code)
+    url = "https://web.ifzq.gtimg.cn/appstock/app/minute/query"
     try:
-        tx_url = f"http://web.ifzq.gtimg.cn/appstock/app/minute/query?code={symbol_full}"
-        tx_req = urllib.request.Request(tx_url, headers={
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            "Referer": "https://gu.qq.com/"
-        })
-        with urllib.request.urlopen(tx_req, timeout=4.0) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            m_data = data.get("data", {}).get(symbol_full, {})
-            m_list = m_data.get("data", {}).get("data", [])
-            qt_arr = m_data.get("qt", {}).get(symbol_full, [])
-            pre_close = float(qt_arr[4]) if len(qt_arr) > 4 else 0.0
-
-            if m_list and isinstance(m_list, list) and len(m_list) > 0:
-                items = []
-                for raw_str in m_list:
-                    parts = raw_str.split(" ")
-                    if len(parts) >= 4:
-                        raw_t = parts[0]
-                        t_fmt = f"{raw_t[:2]}:{raw_t[2:]}" if len(raw_t) == 4 else raw_t
-                        p = float(parts[1])
-                        vol_hands = float(parts[2])
-                        amt_raw = float(parts[3])
-                        amt_yi = round(amt_raw / 100000000.0, 3)
-
-                        avg_p = round(amt_raw / (vol_hands * 100.0), 2) if vol_hands > 0 else p
-                        chg_pct = round((p - pre_close) / pre_close * 100.0, 2) if pre_close > 0 else 0.0
-
-                        items.append({
-                            "time": t_fmt,
-                            "price": p,
-                            "avg_price": avg_p,
-                            "volume": vol_hands,
-                            "amount_yi": amt_yi,
-                            "change_pct": chg_pct
-                        })
-
-                if items:
-                    return {
-                        "code": code,
-                        "pre_close": pre_close,
-                        "items": items
-                    }
-    except Exception as e:
-        sys.stderr.write(f"通道1(腾讯)分时拉取异常 ({code}): {e}，尝试通道2...\n")
-
-    # =========================================================================
-    # 通道 2 (备选通道): 新浪财经真实分时
-    # =========================================================================
-    try:
-        sina_url = f"https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol={symbol_full}&scale=5&ma=no&datalen=48"
-        sina_req = urllib.request.Request(sina_url, headers={
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            "Referer": "https://finance.sina.com.cn/"
-        })
-        with urllib.request.urlopen(sina_req, timeout=4.0) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if data and isinstance(data, list) and len(data) > 0:
-                first_bar = data[0]
-                pre_close = float(first_bar.get("open", 0.0))
-                items = []
-                cum_amt = 0.0
-                cum_vol = 0.0
-
-                for b in data:
-                    t_str = b.get("day", "")[-8:-3]
-                    p = float(b.get("close", 0.0))
-                    vol_shares = float(b.get("volume", 0.0))
-                    vol_hands = round(vol_shares / 100.0, 1)
-                    amt = float(b.get("amount", 0.0))
-                    amt_yi = round(amt / 100000000.0, 3)
-
-                    cum_amt += amt
-                    cum_vol += vol_shares
-                    avg_p = round(cum_amt / cum_vol, 2) if cum_vol > 0 else p
-                    chg_pct = round((p - pre_close) / pre_close * 100.0, 2) if pre_close > 0 else 0.0
-
-                    items.append({
-                        "time": t_str,
-                        "price": p,
-                        "avg_price": avg_p,
-                        "volume": vol_hands,
-                        "amount_yi": amt_yi,
-                        "change_pct": chg_pct
-                    })
-
-                if items:
-                    return {
-                        "code": code,
-                        "pre_close": pre_close,
-                        "items": items
-                    }
-    except Exception as e:
-        sys.stderr.write(f"通道2(新浪)分时拉取异常 ({code}): {e}\n")
-
-    # 严禁任何伪造生成分时假数据，直接返回空！
-    sys.stderr.write(f"[Real Engine] 标的 {code} 无法获取真实分时，不伪造数据，返回空字典！\n")
-    return {
-        "code": code,
-        "pre_close": 0.0,
-        "items": []
-    }
+        payload = request_json(url, {"code": symbol})
+        raw = payload.get("data", {}).get(symbol, {})
+        minute = raw.get("data") or {}
+        trading_date = str(minute.get("date") or "")
+        if not trading_date or trading_date.replace("-", "") > date.today().strftime("%Y%m%d"):
+            raise ValueError("分时来源日期缺失或在未来")
+        quote = (raw.get("qt") or {}).get(symbol) or []
+        pre_close = number(quote[4]) if len(quote)>4 else None
+        if pre_close is None or pre_close<=0: raise ValueError("昨收字段未提供，分时基准不可核验")
+        items = []
+        last_volume = last_amount = 0
+        for line in minute.get("data") or []:
+            fields = line.split()
+            if len(fields)<3: continue
+            clock, price, volume = fields[0], number(fields[1]), number(fields[2])
+            amount = number(fields[3]) if len(fields)>3 else None
+            if price is None or price<=0 or len(clock)!=4 or not clock.isdigit(): continue
+            if not ("0930" <= clock <= "1130" or "1300" <= clock <= "1500"): continue
+            interval_volume = volume-last_volume if volume is not None and last_volume is not None and volume>=last_volume else None
+            interval_amount = amount-last_amount if amount is not None and last_amount is not None and amount>=last_amount else None
+            items.append({"time":clock[:2]+":"+clock[2:], "price":price, "volume":interval_volume, "cumulative_volume":volume,
+                "amount_yi": interval_amount/1e8 if interval_amount is not None else None, "cumulative_amount_yi":amount/1e8 if amount is not None else None,
+                "avg_price": amount/(volume*100) if amount is not None and volume and volume>0 else None,
+                "change_pct": (price/pre_close-1)*100 if pre_close and pre_close>0 else None})
+            last_volume, last_amount = volume, amount
+        return dict(meta("腾讯证券分时", "available" if items else "unavailable"), code=symbol,
+                    pre_close=pre_close, items=items, date=trading_date, source_url=url, volume_unit="手")
+    except Exception as exc:
+        return dict(meta("腾讯证券分时", "unavailable", str(exc)), code=symbol, pre_close=None, items=[], date=None)

@@ -15,6 +15,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from scripts.data_sources.safe_session import safe_session
+from scripts.verified_sources import number
 
 # 东方财富大宗交易明细公开接口
 EASTMONEY_BLOCK_TRADE_URL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
@@ -61,11 +62,11 @@ class BlockTradeAdapter:
             if trade_date and " " in trade_date:
                 trade_date = trade_date.split(" ")[0]
 
-            close_p = float(item.get("CLOSE_PRICE") or 0.0)
-            deal_p = float(item.get("DEAL_PRICE") or 0.0)
-            premium_r = float(item.get("PREMIUM_RATIO") or 0.0)
+            close_p = number(item.get("CLOSE_PRICE"))
+            deal_p = number(item.get("DEAL_PRICE"))
+            premium_r = number(item.get("PREMIUM_RATIO"))
             # 若接口折溢价未直接给，手动算折溢价率 = (成交价 - 收盘价) / 收盘价 * 100
-            if premium_r == 0.0 and close_p > 0:
+            if premium_r is None and close_p and deal_p is not None:
                 premium_r = round(((deal_p - close_p) / close_p) * 100, 2)
 
             buyer = item.get("BUYER_NAME", "未知席位")
@@ -78,8 +79,8 @@ class BlockTradeAdapter:
                 "close_price": close_p,
                 "deal_price": deal_p,
                 "premium_ratio": premium_r,
-                "volume_hand": round(float(item.get("DEAL_VOLUME") or 0.0) / 100, 2), # 手
-                "amount_wan": round(float(item.get("DEAL_AMT") or 0.0) / 10000, 2),   # 万元
+                "volume_hand": round(number(item["DEAL_VOLUME"]) / 100, 2) if number(item.get("DEAL_VOLUME")) is not None else None, # 手
+                "amount_wan": round(number(item["DEAL_AMT"]) / 10000, 2) if number(item.get("DEAL_AMT")) is not None else None,   # 万元
                 "buyer": buyer,
                 "seller": seller,
                 "is_buyer_org": "机构专用" in buyer,
@@ -122,10 +123,10 @@ class BlockTradeAdapter:
         data_list = (resp.get("result") or {}).get("data") or []
         for item in data_list:
             t_date = (item.get("TRADE_DATE") or "").split(" ")[0]
-            close_p = float(item.get("CLOSE_PRICE") or 0.0)
-            deal_p = float(item.get("DEAL_PRICE") or 0.0)
-            premium_r = float(item.get("PREMIUM_RATIO") or 0.0)
-            if premium_r == 0.0 and close_p > 0:
+            close_p = number(item.get("CLOSE_PRICE"))
+            deal_p = number(item.get("DEAL_PRICE"))
+            premium_r = number(item.get("PREMIUM_RATIO"))
+            if premium_r is None and close_p and deal_p is not None:
                 premium_r = round(((deal_p - close_p) / close_p) * 100, 2)
 
             buyer = item.get("BUYER_NAME", "")
@@ -138,7 +139,7 @@ class BlockTradeAdapter:
                 "close_price": close_p,
                 "deal_price": deal_p,
                 "premium_ratio": premium_r,
-                "amount_wan": round(float(item.get("DEAL_AMT") or 0.0) / 10000, 2),
+                "amount_wan": round(number(item["DEAL_AMT"]) / 10000, 2) if number(item.get("DEAL_AMT")) is not None else None,
                 "buyer": buyer,
                 "seller": seller,
                 "is_buyer_org": "机构专用" in buyer,

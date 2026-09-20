@@ -1,0 +1,13 @@
+{
+  "version": "v4.5.0",
+  "captured_at": "2026-09-20T06:55:50.380135+00:00",
+  "files": {
+    "data/backups/r02-v4.5.0/source.tar.gz": "98947b48c52da31a29a6bbaf68effafd9d832b9f7b7342107aa32fa67c7bdcad",
+    "data/backups/r02-v4.5.0/stock_database.db": "6a224eb7d5cccb3cfb6df0298fe3792308b629122da60abf86e45c691315473b"
+  },
+  "restore": "先解压源码到独立目录，将stock_database.db放入其data/；以不同端口启动，勿直接覆盖工作区",
+  "scope_excluded": [
+    "docs/knowledge/并行任务内容"
+  ],
+  "note": "未提交工作区完整实现快照及SQLite一致性副本"
+}

@@ -1,0 +1,15 @@
+{
+  "job_id": "crawl_1789886489",
+  "mode": "core",
+  "status": "completed",
+  "total_count": 100,
+  "current_count": 100,
+  "progress_pct": 100.0,
+  "phase_text": "本轮结束：已获取 100/100 只真实行情，未获取 0 只。",
+  "elapsed_sec": 0.9,
+  "updated_count": 100,
+  "skipped_count": 0,
+  "idempotent_engine": "SHA-256 Active",
+  "error_message": "",
+  "is_running": false
+}

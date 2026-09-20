@@ -1,0 +1,13 @@
+{
+  "decision": "settle-existing-delivery",
+  "observed": "持久检查点三阶段完成100%，final_delivery尚为空；没有需重发的产品修改或外部操作",
+  "interrupt_cause": "unknown；仅有生命周期interrupt标记，不能推断网络或产品故障",
+  "action": "读回既有交付证据，首次补登记交付并结算；缺失计量保持unknown",
+  "evidence": [
+    "checkpoint present resumed",
+    "docs/verification/2026-09-20-r02/live-entry.json",
+    "docs/verification/2026-09-20-r02/README.md"
+  ],
+  "delivery_parameter_recovery": "首次参数使用@文件路径被JSON解析拒绝，未写入；核对CLI json.loads后改用原始JSON参数，非重复产品操作",
+  "progress_panel": "恢复时实际界面显示未同步；持久checkpoint三阶段100%，未将该面板计为完成读回"
+}

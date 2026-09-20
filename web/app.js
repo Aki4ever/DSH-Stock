@@ -37,6 +37,7 @@ const appState = {
   chartSubplot: 'vol',     // 'vol' (成交量) | 'amt' (成交额)
   chartZoomWindow: 'max',  // '60' | '250' | '750' | 'max'
   chartCustomZoomCount: 0, // 鼠标滚轮动态缩放的蜡烛根数 (0表示使用默认预设)
+  chanlunLayers: {},
   showChanlunDraw: false,  // 需求4: 缠论自动画线与买卖点开关
   drawHLineMode: false,    // 需求1: 是否处于绘制水平压力/支撑线模式
   drawnHorizontalLines: [], // 用户已绘制的水平辅助线列表 [{ price, y, id }]
@@ -549,7 +550,7 @@ function updateDataValidityDateBadge(dateStr) {
       formatted = `${p[0]}年${parseInt(p[1], 10)}月${parseInt(p[2], 10)}日`;
     }
   }
-  dom.dataValidityBadge.textContent = `📅 数据截取: ${formatted}`;
+  dom.dataValidityBadge.textContent = `📅 行情日期: ${formatted}`;
 }
 
 /**
@@ -970,19 +971,21 @@ async function executeFilter() {
     appState.totalMatched = stats.matched_count || 0;
 
     // 需求1: 真实且同步的数据快照截取日期更新
-    if (stats.filter_date || stats.snapshot_date) {
-      updateDataValidityDateBadge(stats.filter_date || stats.snapshot_date);
+    if ((stats.quote_dates||[]).length) {
+      const qd=stats.quote_dates.at(-1); updateDataValidityDateBadge(qd.slice(0,4)+'-'+qd.slice(4,6)+'-'+qd.slice(6,8));
     }
+    const quoteNote=document.getElementById('quoteSourceStatus');
+    if(quoteNote)quoteNote.textContent=`腾讯证券行情 · 来源日期 ${(stats.quote_dates||[]).join('、')||'未获取'} · ${stats.snapshot_note||''}`;
 
     dom.matchedCount.textContent = (stats.matched_count || 0).toLocaleString();
-    dom.statAvgPrice.textContent = `¥${(stats.avg_price || 0).toFixed(2)}`;
+    dom.statAvgPrice.textContent = formatReal(stats.avg_price,2,"¥");
 
-    const avgChange = stats.avg_change_pct || 0;
-    dom.statAvgChange.textContent = `${avgChange >= 0 ? '+' : ''}${avgChange.toFixed(2)}%`;
+    const avgChange = stats.avg_change_pct;
+    dom.statAvgChange.textContent = avgChange==null ? "未获取" : `${avgChange >= 0 ? '+' : ''}${avgChange.toFixed(2)}%`;
     dom.statAvgChange.className = `stat-val ${avgChange > 0 ? 'price-up' : avgChange < 0 ? 'price-down' : 'price-flat'}`;
 
-    dom.statTotalCap.textContent = `${(stats.total_market_cap || 0).toLocaleString()} 亿元`;
-    dom.statTotalCircCap.textContent = `${(stats.total_circ_cap || 0).toLocaleString()} 亿元`;
+    dom.statTotalCap.textContent = formatReal(stats.total_market_cap,2)+" 亿元";
+    dom.statTotalCircCap.textContent = formatReal(stats.total_circ_cap,2)+" 亿元";
 
     renderStockTable();
     updatePaginationUI();
@@ -1081,8 +1084,8 @@ function renderStockTable() {
     const tr = document.createElement('tr');
     tr.addEventListener('click', () => openStockDetail(stock.code));
 
-    const change = stock.change || 0;
-    const changePct = stock.change_pct || 0;
+    const change = stock.change;
+    const changePct = stock.change_pct;
     const priceClass = change > 0 ? 'price-up' : change < 0 ? 'price-down' : 'price-flat';
     const sign = change > 0 ? '+' : '';
 
@@ -1090,7 +1093,8 @@ function renderStockTable() {
     const boardBadgeClass = stock.board_code === 'chinext' ? 'tag-board-chinext' : 'tag-board-main';
 
     let constituentBadge = '<span style="color: var(--text-muted);">-</span>';
-    if (stock.is_csi50) {
+    if(stock.constituent_status==='unverified') { constituentBadge='<span class="missing-data">未核验</span>'; }
+    else if (stock.is_csi50) {
       constituentBadge = '<span class="tag-badge tag-csi50">中证50</span>';
     } else if (stock.is_csi100) {
       constituentBadge = '<span class="tag-badge tag-csi100">中证100</span>';
@@ -1112,17 +1116,9 @@ function renderStockTable() {
     // 股东持股真实累加占比 (杜绝 100%)
     let top10HoldVal = Number(stock.top10_hold_pct || 0);
     let top10CircVal = Number(stock.top10_circ_hold_pct || 0);
-    if (top10HoldVal >= 90.0 || top10HoldVal <= 10.0) {
-      const seed = (stock.raw_code || '000000').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-      top10HoldVal = roundTo(46.0 + (seed % 28), 2);
-    }
-    if (top10CircVal > top10HoldVal || top10CircVal <= 10.0 || top10CircVal >= 89.0) {
-      top10CircVal = roundTo(top10HoldVal * 0.86, 2);
-    }
-
-    const top10Circ = `${top10CircVal.toFixed(2)}%`;
-    const top10Hold = `${top10HoldVal.toFixed(2)}%`;
-    const reportDate = stock.report_date || '2026-06-30';
+    const top10Circ = `${stock.top10_circ_hold_pct == null ? "未获取" : top10CircVal.toFixed(2)+"%"}`;
+    const top10Hold = `${stock.top10_hold_pct == null ? "未获取" : top10HoldVal.toFixed(2)+"%"}`;
+    const reportDate = stock.report_date || '未获取';
 
     // 需求4: 股东异动纯数字呈现 (方便升降序排序)，点击数字弹出穿透弹窗
     const newCount = Number(stock.holder_new_count !== undefined ? stock.holder_new_count : 0);
@@ -1148,7 +1144,7 @@ function renderStockTable() {
     const divFreqStr = `<span style="color: #fbbf24; font-weight: 700; font-family: monospace;">${divFreq}次/年</span>`;
 
     // 需求5: 上市日期 (格式化到具体日：xxxx年xx月xx日)
-    let ipoDateStr = stock.ipo_date || '2006-10-27';
+    let ipoDateStr = stock.ipo_date || '未获取';
     if (ipoDateStr.includes('-')) {
       const parts = ipoDateStr.split('-');
       if (parts.length === 3) {
@@ -1175,11 +1171,11 @@ function renderStockTable() {
       market: () => `<td><span class="tag-badge ${marketBadgeClass}">${stock.market}</span></td>`,
       board: () => `<td><span class="tag-badge ${boardBadgeClass}">${stock.board}</span></td>`,
       constituent: () => `<td>${constituentBadge}</td>`,
-      price: () => `<td><span class="${priceClass}">¥${stock.price > 0 ? stock.price.toFixed(2) : '--'}</span></td>`,
+      price: () => `<td><span class="${priceClass}">¥${stock.price > 0 ? formatReal(stock.price, 2) : '--'}</span></td>`,
       change_pct: () => `<td><span class="${priceClass}">${stock.price > 0 ? sign + changePct.toFixed(2) + '%' : '--'}</span></td>`,
-      market_cap: () => `<td><strong>${stock.market_cap > 0 ? stock.market_cap.toLocaleString() : '--'}</strong> 亿</td>`,
-      circulating_cap: () => `<td style="color: var(--text-secondary);">${stock.circulating_cap > 0 ? stock.circulating_cap.toLocaleString() : '--'} 亿</td>`,
-      pe: () => `<td style="color: var(--text-secondary);">${stock.pe ? stock.pe.toFixed(1) : '--'}</td>`,
+      market_cap: () => `<td><strong>${stock.market_cap > 0 ? formatReal(stock.market_cap) : '--'}</strong> 亿</td>`,
+      circulating_cap: () => `<td style="color: var(--text-secondary);">${stock.circulating_cap > 0 ? formatReal(stock.circulating_cap) : '--'} 亿</td>`,
+      pe: () => `<td style="color: var(--text-secondary);">${stock.pe ? formatReal(stock.pe, 1) : '--'}</td>`,
       dividend_count: () => `<td><span style="color: #f59e0b; font-weight: 600;">${dividendCount}</span></td>`,
       dividend_total_amount: () => `<td><span style="color: #fbbf24; font-weight: 700; font-family: monospace;">${divTotalStr}</span></td>`,
       div_to_cap_pct: () => `<td>${divToCapStr}</td>`,
@@ -1217,7 +1213,7 @@ function renderStockTable() {
     };
 
     const orderedCols = appState.columnOrder || Object.keys(colRenderers);
-    tr.innerHTML = orderedCols.map(col => colRenderers[col] ? colRenderers[col]() : '').join('');
+    tr.innerHTML = orderedCols.map(col => !['action','constituent','increase_holders','decrease_holders'].includes(col) && stock[col] == null ? '<td class=missing-data>未获取</td>' : colRenderers[col] ? colRenderers[col]() : '').join('');
     tbody.appendChild(tr);
   });
 
@@ -1584,34 +1580,15 @@ async function openTop10HoldersModal(code, name, circPct, reportDate, filterType
     }
   } catch (err) {
     console.error('穿透股东失败:', err);
-    let fallbackHolders = generateClientFallbackHolders(name, circPct);
-    if (filterType === 'new') {
-      fallbackHolders = fallbackHolders.filter(h => h.change_type === 'new');
-    } else if (filterType === 'change') {
-      fallbackHolders = fallbackHolders.filter(h => h.change_type === 'up' || h.change_type === 'down');
-    } else if (filterType === 'exit') {
-      fallbackHolders = generateExitHolders(name);
-    }
-    renderTop10HoldersTable(fallbackHolders, filterType);
+    renderTop10HoldersTable([], filterType);
+    if (dom.holderModalTableBody) dom.holderModalTableBody.innerHTML = '<tr><td colspan=6>真实股东数据未获取，请稍后重试</td></tr>';
   }
 }
 
 /**
  * 生成退出股东追溯数据
  */
-function generateExitHolders(name) {
-  return [
-    {
-      rank: '-',
-      name: '招商银行股份有限公司－上证红利交易型开放式指数基金',
-      hold_pct: 0.00,
-      change_pct: -0.42,
-      change_label: '已退出前十大',
-      change_type: 'down',
-      relation: '上期持股 0.42%，本期减持或退出前十大流通股东'
-    }
-  ];
-}
+
 
 /**
  * 需求3: 打开同名流通股东跨企业网络穿透详情弹窗
@@ -1659,18 +1636,10 @@ function renderPeerCompaniesTable(peers, currentStockName) {
     return;
   }
 
-  const sampleRelations = [
-    { holder: '香港中央结算有限公司 (北向资金)', type: '境外战略外资QFII', desc: '陆股通前三大核心重仓底仓' },
-    { holder: '中央汇金投资有限责任公司', type: '国家队主权稳健基金', desc: '战略国有独资控股维稳' },
-    { holder: '全国社保基金一零一组合', type: '长期社保耐心资本', desc: '稳健价值长线底仓' },
-    { holder: '中国工商银行－华泰柏瑞沪深300ETF', type: '核心公募宽基ETF', desc: '指数核心成份权重股' },
-    { holder: '中国人寿保险股份有限公司', type: '长期保险资管资金', desc: '高股息防御性资产配置' }
-  ];
-
   dom.peerModalTableBody.innerHTML = '';
   peers.forEach((peerName, idx) => {
     const tr = document.createElement('tr');
-    const rel = sampleRelations[idx % sampleRelations.length];
+    const rel = {holder:'未提供',type:'未提供'};
     tr.innerHTML = `
       <td style="font-family: monospace; font-weight: 700; color: #94a3b8;">${idx + 1}</td>
       <td>
@@ -1755,11 +1724,11 @@ function renderTop10HoldersTable(holders, filterType = 'all') {
   if (!dom.holderModalTableBody) return;
   if (!holders || holders.length === 0) {
     const tipText = filterType === 'new' 
-      ? '该标的在本次报告期内无新进前十大流通股东，持股结构高度稳定'
+      ? '尚未获取新进股东的完整比较数据'
       : filterType === 'change'
-      ? '该标的在本次报告期内无增持或减持异动，主力筹码锁定'
+      ? '尚未获取完整股东变动记录'
       : filterType === 'exit'
-      ? '该标的在本次报告期内无股东退出前十大行列'
+      ? '尚未获取退出股东的完整比较数据'
       : '暂未查询到该标的前十大流通股东披露明细';
     dom.holderModalTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">${tipText}</td></tr>`;
     return;
@@ -1794,7 +1763,7 @@ function renderTop10HoldersTable(holders, filterType = 'all') {
       </td>
       <td>
         <span class="brand-tag" style="background: rgba(56, 189, 248, 0.15); color: #93c5fd; font-size: 0.75rem;">
-          ${h.relation || '主要机构投资者'}
+          ${h.relation || '类型未提供'}
         </span>
       </td>
     `;
@@ -1802,22 +1771,7 @@ function renderTop10HoldersTable(holders, filterType = 'all') {
   });
 }
 
-function generateClientFallbackHolders(name, circPct) {
-  const total = circPct > 10 ? circPct : 68.5;
-  const list = [
-    { rank: 1, name: `${name}控股集团有限责任公司`, hold_pct: roundTo(total * 0.45, 2), change_pct: 0.00, change_label: '持平', change_type: 'flat', relation: '实际控制人 / 第一大股东' },
-    { rank: 2, name: '香港中央结算有限公司', hold_pct: roundTo(total * 0.14, 2), change_pct: 0.35, change_label: '+0.35% (增持)', change_type: 'up', relation: '境外法人 (北向陆股通资金)' },
-    { rank: 3, name: '中央汇金投资有限责任公司', hold_pct: roundTo(total * 0.11, 2), change_pct: roundTo(total * 0.11, 2), change_label: `新进 (+${roundTo(total * 0.11, 2)}%)`, change_type: 'new', relation: '国家队主权基金 (国有独资)' },
-    { rank: 4, name: '中国证券金融股份有限公司', hold_pct: roundTo(total * 0.08, 2), change_pct: -0.15, change_label: '-0.15% (减持)', change_type: 'down', relation: '国家队平准维稳资金' },
-    { rank: 5, name: '全国社保基金一零一组合', hold_pct: roundTo(total * 0.06, 2), change_pct: 0.20, change_label: '+0.20% (增持)', change_type: 'up', relation: '长期社保基金 (长线耐心机构)' },
-    { rank: 6, name: '基本养老保险基金八零二组合', hold_pct: roundTo(total * 0.05, 2), change_pct: roundTo(total * 0.05, 2), change_label: `新进 (+${roundTo(total * 0.05, 2)}%)`, change_type: 'new', relation: '国家养老战略资金' },
-    { rank: 7, name: '中国人寿保险－传统保险产品', hold_pct: roundTo(total * 0.04, 2), change_pct: 0.00, change_label: '持平', change_type: 'flat', relation: '长期险资底仓资金' },
-    { rank: 8, name: '易方达优质精选混合型基金', hold_pct: roundTo(total * 0.03, 2), change_pct: -0.10, change_label: '-0.10% (减持)', change_type: 'down', relation: '公募主动权益重仓' },
-    { rank: 9, name: '招商银行股份有限公司－上证红利ETF', hold_pct: roundTo(total * 0.02, 2), change_pct: 0.00, change_label: '持平', change_type: 'flat', relation: '公募被动指数核心ETF' },
-    { rank: 10, name: '中信证券股份有限公司自营席位', hold_pct: roundTo(total * 0.02, 2), change_pct: 0.00, change_label: '持平', change_type: 'flat', relation: '头部券商自营做市商' }
-  ];
-  return list;
-}
+
 
 // ====================================================
 // 全市场宏观全景仪表盘 (Macro Market Dashboard v1.6.0)
@@ -1844,6 +1798,8 @@ async function loadDashboardOverview() {
     const json = await res.json();
     const data = json.data;
     appState.dashboardData = data;
+    const note=document.getElementById("dashboardDataStatus");
+    if(note)note.textContent=data.status==='unavailable' ? data.error : `${data.source} · 行情日期 ${(data.quote_dates||[]).join("、")}`;
 
     renderMacroDashboardUI(data);
   } catch (err) {
@@ -1856,6 +1812,12 @@ async function loadDashboardOverview() {
  */
 function renderMacroDashboardUI(data) {
   if (!data) return;
+  if(data.status==='unavailable') {
+    for(const key of ['dashTiersGrid','macroDimGrid','top10CircTiersTableBody','top10CircChartContainer','changeDistChart','capTiersChart']) if(dom[key])dom[key].innerHTML='';
+    for(const key of ['dashTotalStocks','dashUpRatio','dashLimitUp','dashLimitDown','dashTiersSum','top10CircTotalCountText','breadthBarUp','breadthBarFlat','breadthBarDown'])if(dom[key])dom[key].textContent='未获取';
+    if(dom.dashTiersCompleteBadge)dom.dashTiersCompleteBadge.style.display='none';
+    return;
+  }
 
   const sum = data.summary || {};
   const total = sum.total_stocks || 1;
@@ -1973,9 +1935,15 @@ function renderMacroDashboardUI(data) {
 function renderTop10CircTiersDashboard(tierData, totalCount) {
   if (!dom.top10CircTiersTableBody || !tierData) return;
 
+  if (!tierData.total_count) {
+    dom.top10CircTiersTableBody.innerHTML='<tr><td colspan="5">未获取此项真实披露，暂无分布统计</td></tr>';
+    if(dom.top10CircChartContainer)dom.top10CircChartContainer.innerHTML='';
+    if(dom.top10CircTotalCountText)dom.top10CircTotalCountText.textContent='0';
+    return;
+  }
   const items = tierData.items || [];
   if (dom.top10CircTotalCountText) {
-    dom.top10CircTotalCountText.textContent = (tierData.total_count || totalCount || 4601).toLocaleString();
+    dom.top10CircTotalCountText.textContent = formatReal(tierData.total_count,0);
   }
 
   // 1. 渲染左侧明细表格
@@ -2180,12 +2148,21 @@ async function loadWorldMacroIntelligence() {
     const json = await res.json();
     const data = json.data || {};
     appState.worldMacroData = data;
+    if (data.status === 'unavailable') {
+      if(dom.worldCommodityGrid) dom.worldCommodityGrid.textContent=data.error;
+      if(dom.worldEventsStream) dom.worldEventsStream.textContent=data.error;
+      if(dom.worldTotalScore) dom.worldTotalScore.textContent='未获取';
+      if(dom.worldSentimentLabel) dom.worldSentimentLabel.textContent='数据未接入';
+      for(const key of ['worldEventsCount','statScoreLatest','statScoreMax','statScoreMin','statScoreAvg','badgeScopeDomestic','badgeScopeInternational'])if(dom[key])dom[key].textContent='未获取';
+      if(dom.worldScoreChartSvgContainer)dom.worldScoreChartSvgContainer.textContent='真实宏观时序未接入';
+      return;
+    }
 
     // 渲染得分看板
     const agg = data.aggregate_score || {};
-    const totalScore = agg.total_score || 0;
+    const totalScore = agg.total_score;
     if (dom.worldTotalScore) {
-      dom.worldTotalScore.textContent = `${totalScore >= 0 ? '+' : ''}${totalScore.toLocaleString()}`;
+      dom.worldTotalScore.textContent = totalScore == null ? '未获取' : `${totalScore >= 0 ? '+' : ''}${totalScore.toLocaleString()}`;
       dom.worldTotalScore.className = `score-number ${totalScore >= 0 ? 'price-up' : 'price-down'}`;
     }
     if (dom.worldScoreIcon) dom.worldScoreIcon.textContent = agg.sentiment_icon || '⚖️';
@@ -2338,7 +2315,7 @@ function renderWorldCommodities(items) {
     card.className = 'commodity-card';
     card.innerHTML = `
       <div class="commodity-header">
-        <span class="commodity-name">${c.name}</span>
+        <span class="commodity-name">${escapeHtml(c.name)}</span>
         <span class="commodity-tag">${c.category}</span>
       </div>
       <div class="commodity-price-row">
@@ -2393,8 +2370,8 @@ function switchMacroScope(scope) {
   }
   if (dom.worldHeaderScopeDesc) {
     dom.worldHeaderScopeDesc.innerHTML = (scope === 'domestic')
-      ? '穿透国家四大权威部委官方信源（财政部/发改委/中国政府网/金融监管总局），每条政策均提供 <strong>[-1000, +1000]</strong> 的 A 股量化冲击打分。'
-      : '穿透全球官方信源与大宗汇率行情（美联储/欧洲央行/中东地缘/大宗商品），每条大事均提供 <strong>[-1000, +1000]</strong> 的 A 股量化冲击打分。';
+      ? '国内宏观新闻与评分尚未接入可核验来源；下方提供来源网站入口。'
+      : '国际宏观新闻、大宗行情与评分尚未接入可核验来源。';
   }
   if (dom.worldScoreCardSubLabel) {
     dom.worldScoreCardSubLabel.textContent = (scope === 'domestic')
@@ -2420,6 +2397,11 @@ function switchMacroScope(scope) {
 
   // 重新渲染事件流、总分卡与图2时序走势图
   const data = appState.worldMacroData || {};
+  if(data.status!=='available') {
+    if(dom.worldHeaderScopeDesc)dom.worldHeaderScopeDesc.textContent='尚未接入可验证宏观数据来源';
+    if(dom.worldEventsStream)dom.worldEventsStream.textContent='宏观新闻未获取';
+    return;
+  }
   const agg = data.aggregate_score || {};
   
   if (scope === 'domestic') {
@@ -2432,7 +2414,7 @@ function switchMacroScope(scope) {
       dom.worldEventsCount.textContent = agg.domestic_count || (data.domestic_events || []).length;
     }
     if (dom.badgeScopeDomestic) {
-      dom.badgeScopeDomestic.textContent = `${agg.domestic_count || 8}件政经要闻`;
+      dom.badgeScopeDomestic.textContent = `${agg.domestic_count ?? '未获取'}件政经要闻`;
     }
     if (dom.worldTimelineChartTitle) {
       dom.worldTimelineChartTitle.textContent = '🇨🇳 国内核心部委宏观对 A 股影响评分历史走势图谱';
@@ -2453,7 +2435,7 @@ function switchMacroScope(scope) {
       dom.worldEventsCount.textContent = agg.international_count || (data.international_events || []).length;
     }
     if (dom.badgeScopeInternational) {
-      dom.badgeScopeInternational.textContent = `${agg.international_count || 10}件全球大事`;
+      dom.badgeScopeInternational.textContent = `${agg.international_count ?? '未获取'}件全球大事`;
     }
     if (dom.worldTimelineChartTitle) {
       dom.worldTimelineChartTitle.textContent = '🌐 国际外围宏观对 A 股影响评分历史走势图谱';
@@ -2637,6 +2619,9 @@ function updateCrawlerDashboardUI(snap) {
     dom.crawlerCompleteMsg.textContent = `恭喜！已顺利完成 ${snap.updated_count || 0} 只标的最新行情采集与 SQLite 事务持久化${skipTip}，耗时 ${(snap.elapsed_sec || 0).toFixed(1)} 秒。`;
     // 采集完成后刷新抓取审计列表
     loadCrawlerAuditList();
+  } else if (snap.status === 'partial') {
+    dom.crawlerStatusText.textContent=`部分覆盖：已获取 ${snap.updated_count}/${snap.total_count} 只行情，缺失部分可重新采集`;
+    dom.crawlerCompleteBanner.style.display='none';
   } else if (snap.status === 'cancelled') {
     dom.crawlerPulseDot.style.backgroundColor = '#ef4444';
     dom.crawlerPulseDot.style.boxShadow = 'none';
@@ -2691,7 +2676,7 @@ async function loadCrawlerAuditList() {
             </span>
           </td>
           <td>
-            <span class="fingerprint-badge" title="数据内容指纹: ${fpShort}">
+            <span class="fingerprint-badge" title="采集批次标识: ${fpShort}">
               fp:${fpShort}
             </span>
           </td>
@@ -2777,7 +2762,7 @@ function updateServerStatusUI(status, latency = 0, serverData = null) {
     dom.serverPingText.textContent = `延迟: ${latency}ms`;
     if (serverData && serverData.stock_count) {
       dom.serverStockCountText.textContent = `全量标的: ${serverData.stock_count.toLocaleString()}`;
-      dom.poolCountText.textContent = `(全市场主板+创业板总计: ${serverData.stock_count.toLocaleString()} 只)`;
+      dom.poolCountText.textContent = `(已收录主板+创业板总计: ${serverData.stock_count.toLocaleString()} 只)`;
     }
     dom.btnToggleServer.innerHTML = '🛑 暂停服务';
     dom.btnToggleServer.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
@@ -2977,38 +2962,17 @@ function switchDetailDimension(dimKey) {
  * 需求5: 加载个股上市以来现金分红历史全景
  */
 async function loadStockDividendHistory(code) {
-  if (!dom.finTableBodyDividend) return;
-  dom.finTableBodyDividend.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">正在调取该标的上市以来现金分红实施记录...</td></tr>';
-  
-  const stock = appState.activeDetailStock;
-  const count = stock ? (stock.dividend_count || 0) : 0;
-  const totalAmt = stock ? (stock.dividend_total_amount || 0) : 0;
-
-  if (count === 0 && totalAmt === 0) {
-    dom.finTableBodyDividend.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">该标的自上市以来尚未实施现金分红派息方案</td></tr>';
-    return;
+  if(!dom.finTableBodyDividend)return;
+  dom.finTableBodyDividend.innerHTML='<tr><td colspan="6">正在获取真实分红披露…</td></tr>';
+  try {
+    const res=await fetch(`/api/stock/${encodeURIComponent(code)}/dividends`);
+    if(!res.ok)throw new Error('分红披露请求失败');
+    const {data}=await res.json();
+    if(appState.activeDetailStock?.code!==code)return;
+    dom.finTableBodyDividend.innerHTML=(data.rows||[]).map(r=>`<tr><td>${escapeHtml(r.report_period||'未提供')}</td><td>${escapeHtml(r.plan_detail||'未提供')}</td><td>来源披露</td><td>${escapeHtml(r.ex_dividend_date||'未提供')}</td><td>${escapeHtml(r.record_date||'未提供')}</td><td>${escapeHtml(r.progress||'未提供')}</td></tr>`).join('')||'<tr><td colspan="6">未获取分红披露，不能据此判断从未分红</td></tr>';
+  } catch(e) {
+    if(appState.activeDetailStock?.code===code)dom.finTableBodyDividend.innerHTML='<tr><td colspan="6">分红披露获取失败</td></tr>';
   }
-
-  // 渲染分红方案行
-  const rows = [];
-  const curYear = 2025;
-  const planYears = Math.min(count, 5);
-  for (let y = 0; y < planYears; y++) {
-    const year = curYear - y;
-    const cashPerShare = (totalAmt / Math.max(1, count * 2.5)).toFixed(2);
-    const yearTotal = (totalAmt / Math.max(1, planYears)).toFixed(2);
-    rows.push(`
-      <tr>
-        <td><strong>${year}年度</strong></td>
-        <td><span style="color: #38bdf8; font-weight: 600;">10派${cashPerShare}元(含税)</span></td>
-        <td>现金分红</td>
-        <td>${year}-06-18</td>
-        <td>${year}-06-17</td>
-        <td><span style="color: #4ade80;">实施完毕</span> (约${yearTotal}亿)</td>
-      </tr>
-    `);
-  }
-  dom.finTableBodyDividend.innerHTML = rows.join('');
 }
 
 /**
@@ -3077,6 +3041,8 @@ function calculateDistributionSummary(arr) {
  */
 function calculateAutoSupportResistanceLevels(klines, currentPrice, targetCount = 1) {
   if (!klines || klines.length === 0 || targetCount <= 0) return [];
+  // Ranking by turnover requires every actual turnover; never infer it from volume × close.
+  if (klines.some(k => k.amount_yi == null && k.amount == null)) return [];
 
   const highs = klines.map(d => Number(d.high !== undefined ? d.high : d.price));
   const lows = klines.map(d => Number(d.low !== undefined ? d.low : d.price));
@@ -3114,13 +3080,11 @@ function calculateAutoSupportResistanceLevels(klines, currentPrice, targetCount 
       if (l <= p && p <= h) {
         crossedDayIndices.push(dayIdx);
         let amt = 0;
-        if (item.amount_yi !== undefined) {
+        if (item.amount_yi != null) {
           amt = Number(item.amount_yi);
-        } else if (item.amount !== undefined) {
+        } else if (item.amount != null) {
           amt = Number(item.amount) / 100000000.0;
-        } else if (item.volume !== undefined) {
-          const c = Number(item.close || item.price);
-          amt = (Number(item.volume) * 100 * c) / 100000000.0;
+
         }
         currentCrossedAmt += amt;
       }
@@ -3231,7 +3195,7 @@ function recomputeAutoLines() {
       high: it.price,
       low: it.price,
       price: it.price,
-      amount_yi: it.amount_yi || 0
+      amount_yi: it.amount_yi ?? null
     }));
   } else {
     klines = (stock.daily_bars && stock.daily_bars.length > 0) ? stock.daily_bars : [];
@@ -3369,29 +3333,29 @@ async function loadStockBlockTrades(code) {
     const trades = json.data || [];
     renderBlockTradesTable(trades);
   } catch (err) {
-    dom.finTableBodyBlock.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">暂未查询到该标的近期大宗交易公开成交记录</td></tr>';
+    dom.finTableBodyBlock.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">真实大宗交易获取失败，请稍后重试</td></tr>';
   }
 }
 
 function renderBlockTradesTable(trades) {
   if (!dom.finTableBodyBlock) return;
   if (!trades || trades.length === 0) {
-    dom.finTableBodyBlock.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">近期无官方大宗交易成交异动</td></tr>';
+    dom.finTableBodyBlock.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">尚未获取真实大宗交易记录，不能据此判断无交易</td></tr>';
     return;
   }
   dom.finTableBodyBlock.innerHTML = '';
   trades.forEach(t => {
-    const prem = Number(t.premium_ratio || 0);
+    const prem = t.premium_ratio;
     const premColor = prem > 0 ? '#ef4444' : prem < 0 ? '#10b981' : '#94a3b8';
     const premSign = prem > 0 ? '+' : '';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${t.trade_date || '--'}</td>
-      <td style="font-weight: 700; color: #ffffff;">¥${(t.deal_price || 0).toFixed(2)}</td>
-      <td style="font-weight: 700; color: ${premColor};">${premSign}${prem.toFixed(2)}%</td>
-      <td>${(t.volume_hand || 0).toLocaleString()}</td>
-      <td style="color: #38bdf8; font-weight: 600;">${(t.amount_wan || 0).toLocaleString()}</td>
+      <td style="font-weight: 700; color: #ffffff;">¥${formatReal(t.deal_price,2)}</td>
+      <td style="font-weight: 700; color: ${premColor};">${premSign}${formatReal(prem,2)}%</td>
+      <td>${formatReal(t.volume_hand,2)}</td>
+      <td style="color: #38bdf8; font-weight: 600;">${formatReal(t.amount_wan,2)}</td>
       <td><span class="${t.is_buyer_org ? 'tag-badge tag-csi50' : ''}">${t.buyer || '--'}</span></td>
       <td><span class="${t.is_seller_org ? 'tag-badge tag-market-sz' : ''}">${t.seller || '--'}</span></td>
     `;
@@ -3413,8 +3377,8 @@ async function loadStockEvents(code) {
     const data = json.data || {};
     renderStockEventsUI(data);
   } catch (err) {
-    dom.eventsMilestoneList.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">近期暂无重大备忘事件</div>';
-    dom.eventsNoticeList.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">近期暂无披露公告</div>';
+    dom.eventsMilestoneList.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">大事日程未获取</div>';
+    dom.eventsNoticeList.innerHTML = '<div style="color: var(--text-muted); padding: 1rem;">公告未获取</div>';
   }
 }
 
@@ -3537,43 +3501,37 @@ async function openStockDetail(code, refresh = false) {
       dom.modalConstituentTag.style.display = 'none';
     }
 
-    const change = stock.change || 0;
-    const changePct = stock.change_pct || 0;
+    const change = stock.change;
+    const changePct = stock.change_pct;
     const priceClass = change > 0 ? 'price-up' : change < 0 ? 'price-down' : 'price-flat';
     const sign = change > 0 ? '+' : '';
 
-    dom.modalPriceBadge.textContent = `¥${stock.price.toFixed(2)}`;
+    const quoteSource=document.getElementById('chartDataSourceBadge');
+    if(quoteSource)quoteSource.textContent=`${stock.quote_meta?.source||'来源未获取'} · ${stock.timestamp||'未获取'} · ${stock.quote_meta?.status==='stale'?'缓存，待刷新':'来源快照'}`;
+    dom.modalPriceBadge.textContent = `¥${formatReal(stock.price, 2)}`;
     dom.modalPriceBadge.className = priceClass;
-    dom.modalChangeBadge.textContent = `${sign}${change.toFixed(2)} (${sign}${changePct.toFixed(2)}%)`;
+    dom.modalChangeBadge.textContent = change==null||changePct==null ? "未获取" : `${sign}${change.toFixed(2)} (${sign}${changePct.toFixed(2)}%)`;
     dom.modalChangeBadge.className = priceClass;
 
-    dom.modalOpenPrice.textContent = `¥${stock.open.toFixed(2)}`;
-    dom.modalPrevClose.textContent = `¥${stock.prev_close.toFixed(2)}`;
-    dom.modalHighPrice.textContent = `¥${stock.high.toFixed(2)}`;
-    dom.modalLowPrice.textContent = `¥${stock.low.toFixed(2)}`;
-    dom.modalMarketCap.textContent = `${stock.market_cap.toLocaleString()} 亿`;
-    dom.modalCircCap.textContent = `${stock.circulating_cap.toLocaleString()} 亿`;
-    dom.modalPe.textContent = stock.pe ? stock.pe.toFixed(2) : '--';
+    dom.modalOpenPrice.textContent = `¥${formatReal(stock.open, 2)}`;
+    dom.modalPrevClose.textContent = `¥${formatReal(stock.prev_close, 2)}`;
+    dom.modalHighPrice.textContent = `¥${formatReal(stock.high, 2)}`;
+    dom.modalLowPrice.textContent = `¥${formatReal(stock.low, 2)}`;
+    dom.modalMarketCap.textContent = `${formatReal(stock.market_cap)} 亿`;
+    dom.modalCircCap.textContent = `${formatReal(stock.circulating_cap)} 亿`;
+    dom.modalPe.textContent = stock.pe ? formatReal(stock.pe, 2) : '--';
 
-    dom.modalDividendCount.textContent = `${stock.dividend_count !== undefined ? stock.dividend_count : '0'} 次`;
-    dom.modalListingYears.textContent = `${stock.listing_years !== undefined ? Number(stock.listing_years).toFixed(1) : '0.0'} 年`;
+    dom.modalDividendCount.textContent = `${stock.dividend_count ?? '未获取'} 次`;
+    dom.modalListingYears.textContent = `${formatReal(stock.listing_years,1)} 年`;
 
-    dom.modalTurnoverRate.textContent = stock.turnover_rate ? `${stock.turnover_rate.toFixed(2)}%` : '--%';
-    dom.modalTurnover.textContent = `${stock.turnover_yi ? stock.turnover_yi.toFixed(2) : '--'} 亿`;
+    dom.modalTurnoverRate.textContent = stock.turnover_rate ? `${formatReal(stock.turnover_rate, 2)}%` : '--%';
+    dom.modalTurnover.textContent = `${stock.turnover_yi ? formatReal(stock.turnover_yi, 2) : '--'} 亿`;
 
     // 股东筹码 100% 具备且严格累加 (无 100% 异常)
     let top10HoldVal = Number(stock.top10_hold_pct || 0);
     let top10CircVal = Number(stock.top10_circ_hold_pct || 0);
-    if (top10HoldVal >= 90.0 || top10HoldVal <= 10.0) {
-      const seed = (stock.raw_code || '000000').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-      top10HoldVal = roundTo(48.0 + (seed % 28), 2);
-    }
-    if (top10CircVal > top10HoldVal || top10CircVal <= 10.0 || top10CircVal >= 89.0) {
-      top10CircVal = roundTo(top10HoldVal * 0.86, 2);
-    }
-    dom.modalReportDate.textContent = stock.report_date || '2026-06-30 (中报期)';
-    dom.modalTop10Circ.textContent = `${top10CircVal.toFixed(2)}%`;
-    dom.modalTop10Hold.textContent = `${top10HoldVal.toFixed(2)}%`;
+    dom.modalTop10Circ.textContent = `${stock.top10_circ_hold_pct == null ? "未获取" : top10CircVal.toFixed(2)+"%"}`;
+    dom.modalTop10Hold.textContent = `${stock.top10_hold_pct == null ? "未获取" : top10HoldVal.toFixed(2)+"%"}`;
 
     if (stock.evaluation) {
       const ev = stock.evaluation;
@@ -3586,12 +3544,12 @@ async function openStockDetail(code, refresh = false) {
 
     // 填充公司基本资料
     const prof = stock.company_profile || {};
-    dom.modalProfileIndustryTag.textContent = prof.industry || '先进制造';
-    dom.modalProfileScope.innerHTML = `<strong>主营业务：</strong>${prof.business_scope || '主营业务涵盖行业核心产品与综合解决方案。'}`;
-    dom.modalProfileLegal.textContent = prof.legal_repr || '张伟';
-    dom.modalProfileCapital.textContent = prof.reg_capital || '10.00 亿元';
+    dom.modalProfileIndustryTag.textContent = prof.industry || '未获取';
+    dom.modalProfileScope.innerHTML = `<strong>主营业务：</strong>${escapeHtml(prof.business_scope || '未获取')}`;
+    dom.modalProfileLegal.textContent = prof.legal_repr || '未获取';
+    dom.modalProfileCapital.textContent = prof.reg_capital || '未获取';
     dom.modalProfileExchange.textContent = prof.listing_exchange || `${stock.market}${stock.board}`;
-    dom.modalProfileAddress.textContent = prof.office_addr || '中国高新技术产业园区金融大厦';
+    dom.modalProfileAddress.textContent = prof.office_addr || '未获取';
 
     // 填充多颗粒度财务报表
     try {
@@ -3649,7 +3607,11 @@ async function switchFinanceGranularity(granKey) {
  */
 function renderFinancialTables(fin) {
   if (!fin) return;
-  const cols = fin.columns || ['2025', '2024', '2023', '2022', '2021'];
+  const cols = fin.columns || [];
+  if (!cols.length) {
+    ['finTableBodyMain','finTableBodyBalance','finTableBodyIncome','finTableBodyCash'].forEach(k => { if(dom[k]) dom[k].innerHTML='<tr><td>真实财报未获取</td></tr>'; });
+    return;
+  }
   const colTypeLabel = fin.col_type_label || '科目 \\ 年度';
 
   // 构建统一的表头 HTML
@@ -3680,7 +3642,7 @@ function renderFinancialTables(fin) {
       const vals = row.values || [];
       tr.innerHTML = `
         <td><strong>${row.item || row.name}</strong></td>
-        ${vals.map((v, i) => `<td><span style="font-weight: 600; color: ${i === 0 ? '#38bdf8' : '#cbd5e1'};">${v}</span></td>`).join('')}
+        ${vals.map((v, i) => `<td><span style="font-weight: 600; color: ${i === 0 ? '#38bdf8' : '#cbd5e1'};">${v == null ? "未提供" : escapeHtml(String(v))}</span></td>`).join('')}
       `;
       dom.finTableBodyMain.appendChild(tr);
     });
@@ -3694,7 +3656,7 @@ function renderFinancialTables(fin) {
       const vals = row.values || [];
       tr.innerHTML = `
         <td>${row.item}</td>
-        ${vals.map((v, i) => `<td><span style="font-weight: 500; color: ${i === 0 ? '#f8fafc' : '#94a3b8'};">${v}</span></td>`).join('')}
+        ${vals.map((v, i) => `<td><span style="font-weight: 500; color: ${i === 0 ? '#f8fafc' : '#94a3b8'};">${v == null ? "未提供" : escapeHtml(String(v))}</span></td>`).join('')}
       `;
       dom.finTableBodyBalance.appendChild(tr);
     });
@@ -3708,7 +3670,7 @@ function renderFinancialTables(fin) {
       const vals = row.values || [];
       tr.innerHTML = `
         <td>${row.item}</td>
-        ${vals.map((v, i) => `<td><span style="font-weight: 500; color: ${i === 0 ? '#ef4444' : '#94a3b8'};">${v}</span></td>`).join('')}
+        ${vals.map((v, i) => `<td><span style="font-weight: 500; color: ${i === 0 ? '#ef4444' : '#94a3b8'};">${v == null ? "未提供" : escapeHtml(String(v))}</span></td>`).join('')}
       `;
       dom.finTableBodyIncome.appendChild(tr);
     });
@@ -3724,7 +3686,7 @@ function renderFinancialTables(fin) {
         <td>${row.item}</td>
         ${vals.map((v, i) => {
           const isPos = !String(v).startsWith('-');
-          return `<td><span style="font-weight: 500; color: ${isPos ? '#4ade80' : '#f87171'};">${v}</span></td>`;
+          return `<td><span style="font-weight: 500; color: ${isPos ? '#4ade80' : '#f87171'};">${v == null ? "未提供" : escapeHtml(String(v))}</span></td>`;
         }).join('')}
       `;
       dom.finTableBodyCash.appendChild(tr);
@@ -3736,6 +3698,7 @@ function renderFinancialTables(fin) {
  * 核心渲染器：根据当前选中的 period 与 subplot 动态生成高保真矢量 SVG 与鼠标十字光标交互
  */
 function renderActiveStockChart() {
+  renderChanlunLegend(appState.activeDetailStock?.chanlun);
   const stock = appState.activeDetailStock;
   if (!stock) return;
   const dateBar = document.getElementById('klineDateRangeBar');
@@ -3834,7 +3797,7 @@ function renderActiveStockChart() {
       }
     }
 
-    dom.chartSvgContainer.innerHTML = generateDailyKlineSVG(klines, appState.chartSubplot, width, height, mainHeight, subHeight, margin);
+    dom.chartSvgContainer.innerHTML = generateDailyKlineSVG(klines, appState.chartSubplot, width, height, mainHeight, subHeight, margin, stock.chanlun);
     bindChartCrosshair('daily', klines, stock.prev_close || stock.price, width, height, mainHeight, subHeight, margin);
     bindChartZoomAndDrawing('daily', klines, stock.prev_close || stock.price, width, height, mainHeight, subHeight, margin);
   }
@@ -3980,13 +3943,11 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
         if (l <= priceVal && priceVal <= h) {
           crossedDays++;
           let amt = 0;
-          if (item.amount_yi !== undefined) {
+          if (item.amount_yi != null) {
             amt = Number(item.amount_yi);
-          } else if (item.amount !== undefined) {
+          } else if (item.amount != null) {
             amt = Number(item.amount) / 100000000.0;
-          } else if (item.volume !== undefined) {
-            const c = Number(item.close || item.price);
-            amt = (Number(item.volume) * 100 * c) / 100000000.0;
+
           }
           crossedAmountYi += amt;
         }
@@ -3998,7 +3959,7 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
         price: Number(priceVal.toFixed(2)),
         type: priceVal >= preClose ? '压力位' : '支撑位',
         crossedDays: crossedDays,
-        crossedAmountYi: Number(crossedAmountYi.toFixed(2))
+        crossedAmountYi: dataList.some(k => k.amount_yi == null && k.amount == null) ? null : Number(crossedAmountYi.toFixed(2))
       });
 
       // 画完保持模式或更新
@@ -4037,10 +3998,10 @@ function renderTooltip(mode, d, prevD, preClose) {
     highP = d.price;
     lowP = d.price;
     chgPct = d.change_pct != null ? d.change_pct : (((closeP - refClose) / refClose) * 100);
-    ampPct = Math.abs(chgPct);
+    ampPct = null;
     volStr = formatVolume(d.volume);
     amtStr = formatAmountYi(d.amount_yi);
-    turnStr = `${roundTo((d.volume * 100) / 10000000, 2)}%`;
+    turnStr = d.turnover_rate==null ? '未获取' : `${formatReal(d.turnover_rate,2)}%`;
   } else {
     // 日K线 (如 20260728)
     dateStr = (d.date || '—').replace(/-/g, '');
@@ -4135,7 +4096,8 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
       pathPrice += ` L ${x} ${yP}`;
       pathAvg += ` L ${x} ${yA}`;
     }
-    pathArea += ` L ${x} ${yP}`;
+    if (items.some(d => d.avg_price == null)) pathAvg = '';
+  pathArea += ` L ${x} ${yP}`;
   });
   pathArea += ` L ${m.left + (items.length - 1) * stepX} ${m.top + mh} L ${m.left} ${m.top + mh} Z`;
 
@@ -4177,11 +4139,13 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
     `;
   }
 
+  if(subVals.some(v=>v==null)) timelineSummarySvg = `<text x="${m.left + 110}" y="${subTopY + 14}" fill="#94a3b8" font-size="12">当前来源未提供完整量额</text>`;
   let subBars = '';
   items.forEach((d, idx) => {
     const x = m.left + idx * stepX;
     const v = isVol ? d.volume : d.amount_yi;
-    const bH = Math.max(2, subValToH(v));
+    if(v==null)return;
+    const bH = Math.max(0, subValToH(v));
     const bY = subTopY + sh - bH;
     const color = (d.price >= preClose) ? '#ef4444' : '#10b981';
     subBars += `<rect x="${x - 1.5}" y="${bY}" width="3" height="${bH}" fill="${color}" opacity="0.85"/>`;
@@ -4246,7 +4210,7 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
         // 需求1: 自动画线还要著名这个辅助线交汇了几个交易日，显示: 交易日:x
         let amtText = `${line.type}: ¥${line.price.toFixed(2)}`;
         let tagW = 120;
-        if (line.crossedAmountYi !== undefined) {
+        if (line.crossedAmountYi != null) {
           const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
           amtText = `${line.type}: ¥${line.price.toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
           tagW = line.crossedDays !== undefined ? 270 : 190;
@@ -4280,212 +4244,55 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m) {
  * @param {Function} getY 价格Y坐标映射函数
  * @returns {string} SVG 片段包含缠论笔与买卖点标记徽章
  */
-function generateChanlunOverlaySVG(klines, getX, getY) {
-  if (!klines || klines.length < 5) return '';
-
-  // 1. 包含关系预处理
-  const mergedKlines = [];
-  let isUpward = true; // 初始方向
-
-  for (let i = 0; i < klines.length; i++) {
-    const cur = {
-      index: i,
-      high: Number(klines[i].high !== undefined ? klines[i].high : klines[i].price),
-      low: Number(klines[i].low !== undefined ? klines[i].low : klines[i].price),
-      close: Number(klines[i].close !== undefined ? klines[i].close : klines[i].price),
-      rawIndex: i
-    };
-
-    if (mergedKlines.length === 0) {
-      mergedKlines.push(cur);
-      continue;
-    }
-
-    const prev = mergedKlines[mergedKlines.length - 1];
-
-    // 检查包含关系: cur包含prev 或 prev包含cur
-    const isCurContainsPrev = (cur.high >= prev.high && cur.low <= prev.low);
-    const isPrevContainsCur = (prev.high >= cur.high && prev.low <= cur.low);
-
-    if (isCurContainsPrev || isPrevContainsCur) {
-      if (isUpward) {
-        // 向上合并
-        prev.high = Math.max(prev.high, cur.high);
-        prev.low = Math.max(prev.low, cur.low);
-        prev.rawIndex = cur.rawIndex;
-      } else {
-        // 向下合并
-        prev.high = Math.min(prev.high, cur.high);
-        prev.low = Math.min(prev.low, cur.low);
-        prev.rawIndex = cur.rawIndex;
-      }
-    } else {
-      // 无包含，判定新的趋势方向
-      isUpward = (cur.high > prev.high);
-      mergedKlines.push(cur);
+function generateChanlunOverlaySVG(klines, getX, getY, analysis) {
+  if (!analysis || !klines.length) return '';
+  const idx = new Map(klines.map((b,i) => [b.date,i]));
+  const first=klines[0].date, last=klines[klines.length-1].date;
+  const globalIdx = new Map((analysis.dates||klines.map(b=>b.date)).map((d,i)=>[d,i]));
+  const offset = globalIdx.get(first)||0;
+  const x = t => getX(globalIdx.get(t)-offset);
+  const visible = r => r.end_time>=first && r.start_time<=last;
+  const colors={pens:'#c084fc',segments:'#38bdf8',pivots:'#f59e0b',divergences:'#fb7185',ma_entanglements:'#34d399'};
+  let svg='';
+  for(const key of ['pivots','ma_entanglements']) {
+    if(appState.chanlunLayers[key]===false) continue;
+    for(const r of (analysis[key]||[]).filter(visible)) {
+      const left=Math.max(x(first),x(r.start_time)),right=Math.min(x(last),x(r.end_time));
+      const top=getY(key==='pivots'?r.zg:r.high),bottom=getY(key==='pivots'?r.zd:r.low);
+      svg+=`<g class="chanlun-${key}" data-status="${r.status}"><rect x="${left}" y="${top}" width="${Math.max(1,right-left)}" height="${Math.max(1,bottom-top)}" fill="${colors[key]}" fill-opacity="0.10" stroke="${colors[key]}" stroke-dasharray="${r.status==='confirmed'?'none':'5,3'}"/><text x="${left+3}" y="${top+12}" fill="${colors[key]}" font-size="10">${key==='pivots'?'笔中枢':'均线缠绕'}</text><title>${r.start_time} 至 ${r.end_time} · ${r.status==='confirmed'?'已确认':'待确认'}</title></g>`;
     }
   }
-
-  if (mergedKlines.length < 3) return '';
-
-  // 2. 顶底分型识别
-  const rawFractals = [];
-  for (let i = 1; i < mergedKlines.length - 1; i++) {
-    const p = mergedKlines[i - 1];
-    const c = mergedKlines[i];
-    const n = mergedKlines[i + 1];
-
-    if (c.high >= p.high && c.high >= n.high && c.low >= p.low && c.low >= n.low && (c.high > p.high || c.high > n.high)) {
-      rawFractals.push({
-        type: 'top',
-        mergedIndex: i,
-        rawIndex: c.rawIndex,
-        price: c.high
-      });
-    } else if (c.low <= p.low && c.low <= n.low && c.high <= p.high && c.high <= n.high && (c.low < p.low || c.low < n.low)) {
-      rawFractals.push({
-        type: 'bottom',
-        mergedIndex: i,
-        rawIndex: c.rawIndex,
-        price: c.low
-      });
+  for(const key of ['pens','segments']) {
+    if(appState.chanlunLayers[key]===false)continue;
+    for(const r of (analysis[key]||[]).filter(visible)) {
+      svg+=`<line class="chanlun-${key}" x1="${x(r.start_time)}" y1="${getY(r.start_price)}" x2="${x(r.end_time)}" y2="${getY(r.end_price)}" stroke="${colors[key]}" stroke-width="${key==='pens'?1.5:3}" stroke-dasharray="${r.status==='confirmed'?'none':'6,4'}"><title>${key==='pens'?'笔':'线段'} · ${r.status==='confirmed'?'已确认':'待确认'} · ${r.start_time} 至 ${r.end_time}</title></line>`;
     }
   }
-
-  // 3. 成笔严格过滤与交替连线
-  const biPoints = [];
-  for (const f of rawFractals) {
-    if (biPoints.length === 0) {
-      biPoints.push(f);
-      continue;
-    }
-
-    const last = biPoints[biPoints.length - 1];
-    if (last.type === f.type) {
-      // 同类型分型，取极值更优者更新（顶取更高，底取更低）
-      if (last.type === 'top' && f.price > last.price) {
-        biPoints[biPoints.length - 1] = f;
-      } else if (last.type === 'bottom' && f.price < last.price) {
-        biPoints[biPoints.length - 1] = f;
-      }
-    } else {
-      // 异类型分型，成笔距离满足
-      if (Math.abs(f.mergedIndex - last.mergedIndex) >= 1) {
-        biPoints.push(f);
-      }
-    }
+  if(appState.chanlunLayers.divergences!==false) for(const r of analysis.divergences||[]) {
+    if(!idx.has(r.time))continue;
+    svg+=`<g class="chanlun-divergences"><circle cx="${x(r.time)}" cy="${getY(r.price)}" r="5" fill="${colors.divergences}"/><text x="${x(r.time)+6}" y="${getY(r.price)-8}" fill="${colors.divergences}" font-size="11">${r.kind}${r.status==='provisional'?'?':''}</text><title>MACD面积 ${r.previous_area.toFixed(2)} → ${r.current_area.toFixed(2)}</title></g>`;
   }
-
-  if (biPoints.length < 2) return '';
-
-  // 4. 识别三类买卖点 (B1, B2, B3 / S1, S2, S3)
-  const signals = [];
-  for (let i = 1; i < biPoints.length; i++) {
-    const pt = biPoints[i];
-    const prevPt = biPoints[i - 1];
-
-    if (pt.type === 'bottom') {
-      // 底分型 -> 买点判定
-      if (i >= 2) {
-        const prevBottom = biPoints[i - 2];
-        if (prevBottom.type === 'bottom') {
-          if (pt.price < prevBottom.price) {
-            // 创出新低，属于趋势底背驰极值转折 -> 一买 (B1)
-            signals.push({ type: 'B1', pt: pt, text: 'B1 一买' });
-          } else {
-            // 次级回调不创新低 -> 二买 (B2)
-            signals.push({ type: 'B2', pt: pt, text: 'B2 二买' });
-          }
-        }
-      } else {
-        signals.push({ type: 'B1', pt: pt, text: 'B1 一买' });
-      }
-
-      // 三买判定: 若突破前期中枢高点后次级回踩不破中枢高点
-      if (i >= 3 && biPoints[i - 3].type === 'top') {
-        const priorTop = biPoints[i - 3];
-        if (pt.price > priorTop.price) {
-          signals[signals.length - 1] = { type: 'B3', pt: pt, text: 'B3 三买' };
-        }
-      }
-    } else if (pt.type === 'top') {
-      // 顶分型 -> 卖点判定
-      if (i >= 2) {
-        const prevTop = biPoints[i - 2];
-        if (prevTop.type === 'top') {
-          if (pt.price > prevTop.price) {
-            // 创出新高但背驰转折 -> 一卖 (S1)
-            signals.push({ type: 'S1', pt: pt, text: 'S1 一卖' });
-          } else {
-            // 次级反弹不创新高 -> 二卖 (S2)
-            signals.push({ type: 'S2', pt: pt, text: 'S2 二卖' });
-          }
-        }
-      } else {
-        signals.push({ type: 'S1', pt: pt, text: 'S1 一卖' });
-      }
-
-      // 三卖判定
-      if (i >= 3 && biPoints[i - 3].type === 'bottom') {
-        const priorBottom = biPoints[i - 3];
-        if (pt.price < priorBottom.price) {
-          signals[signals.length - 1] = { type: 'S3', pt: pt, text: 'S3 三卖' };
-        }
-      }
-    }
-  }
-
-  // 5. 生成笔折线 SVG
-  let biPathD = '';
-  biPoints.forEach((p, idx) => {
-    const px = getX(p.rawIndex);
-    const py = getY(p.price);
-    if (idx === 0) biPathD += `M ${px} ${py} `;
-    else biPathD += `L ${px} ${py} `;
+  const maColors=['#fbbf24','#fb7185','#60a5fa'];
+  if(appState.chanlunLayers.ma_entanglements!==false) (analysis.parameters?.ma_periods||[]).forEach((period,j)=>{
+    const byDate=globalIdx;
+    const points=klines.map((b,i)=>{const v=analysis.ma?.[String(period)]?.[byDate.get(b.date)];return v==null?null:`${getX(i)},${getY(v)}`;}).filter(Boolean);
+    if(points.length)svg+=`<polyline class="chanlun-ma" points="${points.join(' ')}" fill="none" stroke="${maColors[j%3]}" stroke-width="1"><title>MA${period}</title></polyline>`;
   });
+  return `<g class="chanlun-overlay-layer">${svg}</g>`;
+}
 
-  // 笔端点圆圈
-  const circlesSvg = biPoints.map(p => {
-    const px = getX(p.rawIndex);
-    const py = getY(p.price);
-    const color = p.type === 'top' ? '#ef4444' : '#10b981';
-    return `<circle cx="${px}" cy="${py}" r="3.5" fill="${color}" stroke="#ffffff" stroke-width="1.2"/>`;
-  }).join('');
-
-  // 买卖点悬浮微章 SVG
-  const badgesSvg = signals.map(sig => {
-    const px = getX(sig.pt.rawIndex);
-    const py = getY(sig.pt.price);
-    const isBuy = sig.type.startsWith('B');
-    const badgeY = isBuy ? py + 18 : py - 18;
-    const bgColor = isBuy ? '#059669' : '#dc2626';
-    const tagW = 54;
-    return `
-      <g class="chanlun-signal-badge" transform="translate(${px - tagW / 2}, ${badgeY - 9})">
-        <rect width="${tagW}" height="18" rx="4" fill="${bgColor}" stroke="#ffffff" stroke-width="1" opacity="0.95"/>
-        <text x="${tagW / 2}" y="13" fill="#ffffff" font-size="10" font-weight="bold" text-anchor="middle" font-family="monospace">
-          ${sig.text}
-        </text>
-      </g>
-    `;
-  }).join('');
-
-  return `
-    <g class="chanlun-overlay-layer">
-      <!-- 缠论笔连线 (梦幻紫粗线) -->
-      <path d="${biPathD}" fill="none" class="chanlun-pen-line" stroke="#c084fc" stroke-width="2.2" stroke-dasharray="7,3"/>
-      <!-- 顶底分型极值端点 -->
-      ${circlesSvg}
-      <!-- 缠论三类买卖点标注 -->
-      ${badgesSvg}
-    </g>
-  `;
+function renderChanlunLegend(analysis) {
+  const panel=document.getElementById('chanlunLegend'); if(!panel)return;
+  panel.hidden=!appState.showChanlunDraw;
+  if(!analysis){panel.textContent='缠论数据未获取';return;}
+  const names={pens:'笔',segments:'线段',pivots:'笔中枢',divergences:'背离',ma_entanglements:'均线缠绕'};
+  panel.innerHTML=Object.entries(names).map(([key,label])=>`<label><input type="checkbox" ${appState.chanlunLayers[key]!==false?'checked':''} onchange="appState.chanlunLayers['${key}']=this.checked;renderActiveStockChart()">${label} ${analysis.counts[key]} ${analysis.counts[key]?'':'（未识别）'}</label>`).join(' ') + `<p>基于完整历史；实线已确认，虚线/问号待确认。均线 MA${analysis.parameters.ma_periods.join('/')}，极差≤${analysis.parameters.threshold_pct}%，连续≥${analysis.parameters.min_bars}根。${analysis.status==='insufficient'?'历史不足。':''}</p>`;
 }
 
 /**
  * 60日 K线矢量 SVG 发生器
  */
-function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
+function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=null) {
   if (!klines || klines.length === 0) {
     return '<div style="padding: 2rem; color: var(--text-muted);">暂无K线数据</div>';
   }
@@ -4614,7 +4421,7 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
       <path d="${ma10Path}" fill="none" stroke="#38bdf8" stroke-width="1.3"/>
 
       <!-- 需求4: 缠论笔与买卖点标记图层 (开启时渲染) -->
-      ${appState.showChanlunDraw ? generateChanlunOverlaySVG(klines, (i) => m.left + i * stepX + stepX / 2, priceToY) : ''}
+      <defs><clipPath id="chanlunClip"><rect x="${m.left}" y="${m.top}" width="${innerW}" height="${mh}"/></clipPath></defs><g clip-path="url(#chanlunClip)">${appState.showChanlunDraw ? generateChanlunOverlaySVG(klines, (i) => m.left + i * stepX + stepX / 2, priceToY, analysis) : ''}</g>
 
       <!-- 十字光标虚线 -->
       <line id="crosshairX" x1="0" y1="${m.top}" x2="0" y2="${subTopY + sh}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
@@ -4639,7 +4446,7 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
         // 需求1: 自动画线还要著名这个辅助线交汇了几个交易日，显示: 交易日:x
         let amtText = `${line.type}: ¥${line.price.toFixed(2)}`;
         let tagW = 120;
-        if (line.crossedAmountYi !== undefined) {
+        if (line.crossedAmountYi != null) {
           const daysPart = line.crossedDays !== undefined ? `, 交易日: ${line.crossedDays}天` : '';
           amtText = `${line.type}: ¥${line.price.toFixed(2)} (交汇: ${line.crossedAmountYi}亿${daysPart})`;
           tagW = line.crossedDays !== undefined ? 285 : 205;
@@ -4675,12 +4482,15 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m) {
 let shareholderState = {
   category: 'all',
   keyword: '',
-  sortBy: 'total_holding_amount',
+  page: 1, total: 0, pageSize: 50,
+  requestId: 0,
+  sortBy: 'company_count',
   sortDir: 'desc',
   data: []
 };
 
 async function loadShareholdersOverview() {
+  const requestId=++shareholderState.requestId;
   const tbody = document.getElementById('shareholdersTableBody');
   if (!tbody) return;
 
@@ -4688,7 +4498,7 @@ async function loadShareholdersOverview() {
     <tr>
       <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
         <div class="spinner"></div>
-        <div>正在深度穿透全市场十大流通股东持仓网络与重仓企业...</div>
+        <div>正在读取已采集的十大股东披露与姓名去重结果...</div>
       </td>
     </tr>
   `;
@@ -4698,27 +4508,36 @@ async function loadShareholdersOverview() {
       category: shareholderState.category,
       keyword: shareholderState.keyword,
       sort_by: shareholderState.sortBy,
-      sort_dir: shareholderState.sortDir
+      sort_dir: shareholderState.sortDir, page: shareholderState.page, page_size: shareholderState.pageSize
     });
 
     const res = await fetch(`/api/shareholders/list?${params.toString()}`);
     if (!res.ok) throw new Error('拉取股东列表失败');
     const json = await res.json();
+    if(requestId!==shareholderState.requestId)return;
     shareholderState.data = json.data || [];
+    shareholderState.total=json.total||0;
+    const pageInfo=document.getElementById("shareholderPageInfo");
+    if(pageInfo)pageInfo.textContent=`第 ${shareholderState.page} / ${Math.max(1,Math.ceil(shareholderState.total/shareholderState.pageSize))} 页，共 ${shareholderState.total} 个匹配姓名；概览统计所有已采集姓名`;
+    const info = document.getElementById('shareholderDataStatus');
+    const meta = json.metadata || {};
+    if(info) info.textContent = `${meta.source || '来源未获取'} · ${({available:'已完成本次来源分页',partial:'部分覆盖',stale:'缓存已过期',unavailable:'未获取'})[meta.status]||'未核验'} · 已采集 ${meta.count ?? '未知'} 条 / ${meta.covered_stocks ?? '未知'} 只证券 · ${meta.scope || '非全市场股东总数'} · ${meta.fetched_at || ''}${meta.error ? ' · '+meta.error : ''}`;
+    if(meta.status === 'unavailable') Object.keys(json.overview || {}).forEach(k => json.overview[k] = null);
 
     // 需求1: 渲染概览信息 (股东总数、机构股东总数、个人股东总数、股东总金额、机构股东总金额、个人股东总金额)
     if (json.overview) {
       const ov = json.overview;
-      if (dom.shOverviewTotalHolders) dom.shOverviewTotalHolders.textContent = `${(ov.total_holders_count || 0).toLocaleString()} 户`;
-      if (dom.shOverviewInstHolders) dom.shOverviewInstHolders.textContent = `${(ov.institution_holders_count || 0).toLocaleString()} 户`;
-      if (dom.shOverviewIndHolders) dom.shOverviewIndHolders.textContent = `${(ov.individual_holders_count || 0).toLocaleString()} 户`;
-      if (dom.shOverviewTotalAmount) dom.shOverviewTotalAmount.textContent = `${(ov.total_holding_amount_yi || 0).toLocaleString()} 亿`;
-      if (dom.shOverviewInstAmount) dom.shOverviewInstAmount.textContent = `${(ov.institution_holding_amount_yi || 0).toLocaleString()} 亿`;
-      if (dom.shOverviewIndAmount) dom.shOverviewIndAmount.textContent = `${(ov.individual_holding_amount_yi || 0).toLocaleString()} 亿`;
+      if (dom.shOverviewTotalHolders) dom.shOverviewTotalHolders.textContent = `${ov.total_holders_count == null ? "未获取" : ov.total_holders_count.toLocaleString()} 个姓名`;
+      if (dom.shOverviewInstHolders) dom.shOverviewInstHolders.textContent = `${ov.institution_holders_count == null ? "未获取" : ov.institution_holders_count.toLocaleString()} 个姓名`;
+      if (dom.shOverviewIndHolders) dom.shOverviewIndHolders.textContent = `${ov.individual_holders_count == null ? "未获取" : ov.individual_holders_count.toLocaleString()} 个姓名`;
+      if (dom.shOverviewTotalAmount) dom.shOverviewTotalAmount.textContent = `${ov.total_holding_amount_yi == null ? "未获取" : ov.total_holding_amount_yi.toLocaleString()} 亿`;
+      if (dom.shOverviewInstAmount) dom.shOverviewInstAmount.textContent = `${ov.institution_holding_amount_yi == null ? "未获取" : ov.institution_holding_amount_yi.toLocaleString()} 亿`;
+      if (dom.shOverviewIndAmount) dom.shOverviewIndAmount.textContent = `${ov.individual_holding_amount_yi == null ? "未获取" : ov.individual_holding_amount_yi.toLocaleString()} 亿`;
     }
 
     renderShareholdersTable(shareholderState.data);
   } catch (err) {
+    if(requestId!==shareholderState.requestId)return;
     console.error('加载股东研究异常:', err);
     tbody.innerHTML = `
       <tr>
@@ -4747,22 +4566,22 @@ function renderShareholdersTable(list) {
 
   tbody.innerHTML = list.map(item => {
     const isInd = item.category === 'individual';
-    const catBadge = isInd 
-      ? `<span class="sh-cat-tag sh-cat-individual">👤 个人牛散</span>`
+    const catBadge = item.category==='unknown' ? '<span>类型未提供</span>' : isInd
+      ? `<span class="sh-cat-tag sh-cat-individual">👤 个人股东</span>`
       : `<span class="sh-cat-tag sh-cat-institution">🏢 机构</span>`;
 
     // 占股企业标签组 (点击可直达企业详情)
     const companyPills = (item.companies || []).map(c => `
-      <span class="sh-company-pill" title="点击查看 ${c.name} 行情全景与K线" onclick="openStockDetail('${c.code}')">
-        <strong>${c.name}</strong>
-        <span class="pct">${c.hold_pct}%</span>
+      <span class="sh-company-pill" title="点击查看 ${escapeHtml(c.name)} 行情全景与K线" onclick="openStockDetail('${c.code}')">
+        <strong>${escapeHtml(c.name)}</strong>
+        <span class="pct">${c.hold_pct==null?"未提供":c.hold_pct+"%"}</span>
       </span>
     `).join('');
 
     return `
       <tr>
         <td><span class="shareholder-id-badge">${item.holder_id}</span></td>
-        <td><span class="shareholder-name-cell">${item.holder_name}</span></td>
+        <td><span class="shareholder-name-cell">${escapeHtml(item.holder_name)}</span></td>
         <td>${catBadge}</td>
         <td>
           <div class="sh-companies-container">
@@ -4776,7 +4595,7 @@ function renderShareholdersTable(list) {
         </td>
         <td>
           <strong style="color: #f59e0b; font-family: monospace; font-size: 1.05rem;">
-            ${item.total_holding_amount > 0 ? item.total_holding_amount.toLocaleString() : '0.00'}
+            ${item.total_holding_amount == null ? '未获取' : item.total_holding_amount.toLocaleString()}
           </strong> 亿
         </td>
       </tr>
@@ -4785,6 +4604,7 @@ function renderShareholdersTable(list) {
 }
 
 function filterShareholderCategory(cat) {
+  shareholderState.page=1;
   shareholderState.category = cat;
   if (dom.shCategoryControl) {
     dom.shCategoryControl.querySelectorAll('.seg-btn').forEach(btn => {
@@ -4795,6 +4615,7 @@ function filterShareholderCategory(cat) {
 }
 
 function executeShareholderSearch() {
+  shareholderState.page=1;
   if (dom.shKeywordInput) {
     shareholderState.keyword = dom.shKeywordInput.value.trim();
   }
@@ -4802,6 +4623,7 @@ function executeShareholderSearch() {
 }
 
 function resetShareholderFilters() {
+  shareholderState.page=1;
   shareholderState.category = 'all';
   shareholderState.keyword = '';
   shareholderState.sortBy = 'total_holding_amount';
@@ -4817,6 +4639,7 @@ function resetShareholderFilters() {
 }
 
 function sortShareholderTable(field) {
+  shareholderState.page=1;
   if (shareholderState.sortBy === field) {
     shareholderState.sortDir = shareholderState.sortDir === 'desc' ? 'asc' : 'desc';
   } else {
@@ -4898,22 +4721,22 @@ function renderIndicesTable(list) {
 
     return `
       <tr class="index-row-interactive" onclick="openIndexDetail('${item.code}')">
-        <td><span class="index-code-badge">${item.raw_code}</span></td>
+        <td><span class="index-code-badge">${item.raw_code || item.code?.slice(2) || '未获取'}</span></td>
         <td>
           <span class="index-name-title" title="点击查看 ${item.name} 专属K线与成交额中枢">
             ${item.name}
           </span>
         </td>
-        <td><span class="index-price-val ${colorClass}">${item.price.toFixed(2)}</span></td>
-        <td><span class="index-price-val ${colorClass}">${item.price.toFixed(2)}</span></td>
+        <td><span class="index-price-val ${colorClass}">${formatReal(item.price,2)}</span></td>
+        <td><span class="index-price-val ${colorClass}">${formatReal(item.price,2)}</span></td>
         <td>
           <span class="stock-change-badge ${isUp ? 'badge-up' : 'badge-down'}">
-            ${sign}${item.change_pct.toFixed(2)}%
+            ${sign}${formatReal(item.change_pct,2)}%
           </span>
         </td>
         <td>
           <strong style="color: #f59e0b; font-family: monospace; font-size: 1.05rem;">
-            ${item.turnover_yi.toLocaleString()}
+            ${formatReal(item.turnover_yi,2)}
           </strong> 亿
         </td>
         <td style="text-align: center;">
@@ -4965,16 +4788,16 @@ async function openIndexDetail(code) {
     const colorClass = isUp ? 'price-up' : 'price-down';
     const sign = isUp ? '+' : '';
 
-    dom.indexModalPriceBadge.textContent = indexData.price.toFixed(2);
+    dom.indexModalPriceBadge.textContent = formatReal(indexData.price,2);
     dom.indexModalPriceBadge.className = colorClass;
-    dom.indexModalChangeBadge.textContent = `${sign}${indexData.change.toFixed(2)} (${sign}${indexData.change_pct.toFixed(2)}%)`;
+    dom.indexModalChangeBadge.textContent = `${sign}${formatReal(indexData.change,2)} (${sign}${formatReal(indexData.change_pct,2)}%)`;
     dom.indexModalChangeBadge.className = colorClass;
 
     if (dom.indexModalOpen) dom.indexModalOpen.textContent = indexData.open.toFixed(2);
     if (dom.indexModalPrevClose) dom.indexModalPrevClose.textContent = indexData.prev_close.toFixed(2);
     if (dom.indexModalHigh) dom.indexModalHigh.textContent = indexData.high.toFixed(2);
     if (dom.indexModalLow) dom.indexModalLow.textContent = indexData.low.toFixed(2);
-    if (dom.indexModalTurnover) dom.indexModalTurnover.textContent = `${indexData.turnover_yi.toLocaleString()} 亿`;
+    if (dom.indexModalTurnover) dom.indexModalTurnover.textContent = `${formatReal(indexData.turnover_yi)} 亿`;
 
     // 渲染走势图
     renderActiveIndexChart();
@@ -5106,6 +4929,7 @@ function renderActiveIndexChart() {
     areaD += ` L ${getX(n - 1)} ${mainHeight} Z`;
 
     const subBarsSvg = items.map((it, idx) => {
+      if (it.amount_yi == null) return "";
       const x = getX(idx) - 2;
       const y = getSubY(it.amount_yi);
       const barH = Math.max(1, subTop + subHeight - y);
@@ -5198,7 +5022,7 @@ function renderActiveIndexChart() {
 
     // 需求1: 计算大盘指数K线当前可视周期内成交额的四维分布概要 (平均、最小、最大、中位数)
     const indexAmtStats = calculateDistributionSummary(klines.map(k => k.amount_yi));
-    const indexSummarySvg = `
+    let indexSummarySvg = `
       <g class="sub-summary-group">
         <text x="${margin.left + 160}" y="${subTop + 16}" fill="#f59e0b" font-size="10" font-family="monospace">
           <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#f59e0b">${indexAmtStats.mean.toFixed(2)}亿</tspan>
@@ -5209,6 +5033,7 @@ function renderActiveIndexChart() {
       </g>
     `;
 
+    if (klines.some(k => k.amount_yi == null)) indexSummarySvg = `<text x="${margin.left + 100}" y="${subTop + 14}" fill="#94a3b8" font-size="12">当前来源未提供完整成交额</text>`;
     // 蜡烛与仅成交金额柱
     let candlesSvg = '';
     let subBarsSvg = '';
@@ -5231,9 +5056,9 @@ function renderActiveIndexChart() {
       candlesSvg += `<rect x="${x - candleWidth / 2}" y="${yTop}" width="${candleWidth}" height="${hRect}" fill="${color}" opacity="0.9"/>`;
 
       // 副图柱 (仅成交金额)
-      const ySub = getSubY(k.amount_yi);
+      const ySub = k.amount_yi == null ? subTop + subHeight : getSubY(k.amount_yi);
       const hSub = Math.max(1, subTop + subHeight - ySub);
-      subBarsSvg += `<rect x="${x - candleWidth / 2}" y="${ySub}" width="${candleWidth}" height="${hSub}" fill="${color}" opacity="0.8"/>`;
+      if (k.amount_yi != null) subBarsSvg += `<rect x="${x - candleWidth / 2}" y="${ySub}" width="${candleWidth}" height="${hSub}" fill="${color}" opacity="0.8"/>`;
     });
 
     // 需求1/2: 指数多阶自动画线 (支持 1~4 根独立交易日筹码中枢线)
@@ -5360,3 +5185,9 @@ function closeStockDetailPage() {
 function closeStockDetail() {
   closeStockDetailPage();
 }
+
+function formatReal(value,digits=2) { return value == null || !Number.isFinite(Number(value)) ? '未获取' : Number(value).toLocaleString(undefined,{maximumFractionDigits:digits}); }
+
+function escapeHtml(value) { return escapeActionText(String(value ?? "")); }
+
+function changeShareholderPage(delta) { const page=shareholderState.page+delta; if(page<1||page>Math.ceil(shareholderState.total/shareholderState.pageSize))return;shareholderState.page=page;loadShareholdersOverview(); }

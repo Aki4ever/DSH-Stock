@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1270" viewBox="0 0 1200 1270" role="img"><title>07  背驰与三类买卖点：条件比箭头重要</title><desc>图中省略内部结构，仅帮助记忆位置；没有计算MACD，也未证实背驰。</desc>
+<style>text{font-family:"PingFang SC","Heiti SC","STHeiti",sans-serif}</style>
+<rect x="0" y="0" width="1200" height="1270" rx="0" fill="#f7f6f0" stroke="none"/>
+<text x="44" y="54" fill="#183642" font-size="32" font-weight="600" text-anchor="start">07  背驰与三类买卖点：条件比箭头重要</text>
+<text x="44" y="90" fill="#546d76" font-size="18" font-weight="400" text-anchor="start">图中省略内部结构，仅帮助记忆位置；没有计算MACD，也未证实背驰。</text>
+<text x="44" y="1245" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">自制教学示意 · 非真实行情 · 定义与前提见教程及原作者出处</text>
+<rect x="44" y="130" width="1112" height="340" rx="14" fill="white" stroke="#ccd9db"/>
+<rect x="150" y="254" width="213" height="22" rx="0" fill="#e6f2f1" stroke="none"/>
+<text x="150" y="230" fill="#087f8c" font-size="18" font-weight="400" text-anchor="start">A 同级中枢</text>
+<rect x="403" y="331" width="213" height="22" rx="0" fill="#e6f2f1" stroke="none"/>
+<text x="403" y="307" fill="#087f8c" font-size="18" font-weight="400" text-anchor="start">B 同级中枢</text>
+<polyline points="95,210 158,287 221,243 284,276 347,254 410,364 473,320 536,353 599,331 662,397" fill="none" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linejoin="round"/>
+<text x="126.5" y="276.5" fill="#bc5a2e" font-size="23" font-weight="400" text-anchor="start">a</text>
+<text x="378.5" y="337.0" fill="#bc5a2e" font-size="23" font-weight="400" text-anchor="start">b</text>
+<text x="630.5" y="392.0" fill="#bc5a2e" font-size="23" font-weight="400" text-anchor="start">c</text>
+<text x="740" y="197" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">趋势背驰的结构前提</text>
+<text x="740" y="239" fill="#183642" font-size="18" font-weight="400" text-anchor="start">A、B同级，符合趋势分离条件。</text>
+<text x="740" y="275" fill="#183642" font-size="18" font-weight="400" text-anchor="start">c同向创新极值，比较b与c。</text>
+<text x="740" y="311" fill="#183642" font-size="18" font-weight="400" text-anchor="start">还须核对级别、力度与结束条件。</text>
+<text x="740" y="347" fill="#183642" font-size="18" font-weight="400" text-anchor="start">本图几何形状本身不能证明背驰。</text>
+<text x="72" y="444" fill="#183642" font-size="20" font-weight="400" text-anchor="start">另一种结构 a+B+c：围绕单中枢比较a、c，研究盘整背驰；须与上图趋势区分。</text>
+<rect x="44" y="500" width="360" height="284" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="64" y="537" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">一买 1B</text>
+<polyline points="77.0,611 148.5,651 220.0,631 291.5,691" fill="none" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linejoin="round"/>
+<polyline points="291.5,691 363.0,661" fill="none" stroke="#546d76" stroke-width="3" stroke-dasharray="5 6" stroke-linejoin="round"/>
+<circle cx="291.5" cy="691" r="7" fill="#bc5a2e"/>
+<text x="303.5" y="681" fill="#bc5a2e" font-size="18" font-weight="400" text-anchor="start">8</text>
+<text x="62" y="748" fill="#183642" font-size="17" font-weight="400" text-anchor="start">假设下跌趋势末端背驰已确认。</text>
+<rect x="420" y="500" width="360" height="284" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="440" y="537" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">二买 2B</text>
+<polyline points="453.0,691 548.3333333333334,651 643.6666666666666,681" fill="none" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linejoin="round"/>
+<polyline points="643.6666666666666,681 739.0,641" fill="none" stroke="#546d76" stroke-width="3" stroke-dasharray="5 6" stroke-linejoin="round"/>
+<circle cx="643.6666666666666" cy="681" r="7" fill="#bc5a2e"/>
+<text x="655.6666666666666" y="671" fill="#bc5a2e" font-size="18" font-weight="400" text-anchor="start">9</text>
+<text x="438" y="748" fill="#183642" font-size="17" font-weight="400" text-anchor="start">首次相应回调；补足级别与定位。</text>
+<rect x="796" y="500" width="360" height="284" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="816" y="537" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">三买 3B</text>
+<rect x="816" y="641" width="320" height="20" rx="0" fill="#e6f2f1" stroke="none"/>
+<text x="1091" y="631" fill="#087f8c" font-size="16" font-weight="400" text-anchor="start">ZG</text>
+<polyline points="829.0,651 924.3333333333334,611 1019.6666666666666,631" fill="none" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linejoin="round"/>
+<polyline points="1019.6666666666666,631 1115.0,591" fill="none" stroke="#546d76" stroke-width="3" stroke-dasharray="5 6" stroke-linejoin="round"/>
+<circle cx="1019.6666666666666" cy="631" r="7" fill="#bc5a2e"/>
+<text x="1031.6666666666665" y="621" fill="#bc5a2e" font-size="18" font-weight="400" text-anchor="start">14</text>
+<text x="814" y="748" fill="#183642" font-size="17" font-weight="400" text-anchor="start">首次回试低点高于ZG。</text>
+<rect x="44" y="807" width="360" height="284" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="64" y="844" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">一卖 1S</text>
+<polyline points="77.0,998 148.5,958 220.0,978 291.5,918" fill="none" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linejoin="round"/>
+<polyline points="291.5,918 363.0,948" fill="none" stroke="#546d76" stroke-width="3" stroke-dasharray="5 6" stroke-linejoin="round"/>
+<circle cx="291.5" cy="918" r="7" fill="#bc5a2e"/>
+<text x="303.5" y="908" fill="#bc5a2e" font-size="18" font-weight="400" text-anchor="start">16</text>
+<text x="62" y="1055" fill="#183642" font-size="17" font-weight="400" text-anchor="start">假设上涨趋势末端背驰已确认。</text>
+<rect x="420" y="807" width="360" height="284" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="440" y="844" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">二卖 2S</text>
+<polyline points="453.0,918 548.3333333333334,958 643.6666666666666,928" fill="none" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linejoin="round"/>
+<polyline points="643.6666666666666,928 739.0,968" fill="none" stroke="#546d76" stroke-width="3" stroke-dasharray="5 6" stroke-linejoin="round"/>
+<circle cx="643.6666666666666" cy="928" r="7" fill="#bc5a2e"/>
+<text x="655.6666666666666" y="918" fill="#bc5a2e" font-size="18" font-weight="400" text-anchor="start">15</text>
+<text x="438" y="1055" fill="#183642" font-size="17" font-weight="400" text-anchor="start">首次相应反抽；补足级别与定位。</text>
+<rect x="796" y="807" width="360" height="284" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="816" y="844" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">三卖 3S</text>
+<rect x="816" y="948" width="320" height="20" rx="0" fill="#e6f2f1" stroke="none"/>
+<text x="1091" y="988" fill="#087f8c" font-size="16" font-weight="400" text-anchor="start">ZD</text>
+<polyline points="829.0,958 924.3333333333334,998 1019.6666666666666,978" fill="none" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linejoin="round"/>
+<polyline points="1019.6666666666666,978 1115.0,1018" fill="none" stroke="#546d76" stroke-width="3" stroke-dasharray="5 6" stroke-linejoin="round"/>
+<circle cx="1019.6666666666666" cy="978" r="7" fill="#bc5a2e"/>
+<text x="1031.6666666666665" y="968" fill="#bc5a2e" font-size="18" font-weight="400" text-anchor="start">10</text>
+<text x="814" y="1055" fill="#183642" font-size="17" font-weight="400" text-anchor="start">首次反抽高点低于ZD。</text>
+<text x="44" y="1166" fill="#bc5a2e" font-size="20" font-weight="400" text-anchor="start">橙点仅示意位置；点后虚线是说明用延伸，不是预测，也不是当时已知的后续行情。</text>
+<text x="44" y="1205" fill="#183642" font-size="20" font-weight="400" text-anchor="start">二买不必先有同级一买；二、三类点可能重合；六类点都需各自的完整结构证据。</text></svg>

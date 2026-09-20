@@ -14,7 +14,7 @@ BASE_DIR = os.path.dirname(CURRENT_DIR)
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from scripts.stock_data_engine import generate_mock_kline
+from tests.market_fixtures import generate_mock_kline
 from scripts.stock_indicators import (
     calculate_ma,
     calculate_ema,

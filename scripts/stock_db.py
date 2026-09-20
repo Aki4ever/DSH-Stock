@@ -59,6 +59,10 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stocks_market ON stocks_master(market_code);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stocks_board ON stocks_master(board_code);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stocks_csi ON stocks_master(is_csi50, is_csi100);")
+        columns = {r[1] for r in cursor.execute('PRAGMA table_info(stocks_master)')}
+        for name, kind in [('pinyin_abbr', 'TEXT'), ('dividend_total_amount', 'REAL')]:
+            if name not in columns:
+                cursor.execute(f'ALTER TABLE stocks_master ADD COLUMN {name} {kind}')
 
         # 2. 实时行情与基本面表 (stock_quotes)
         cursor.execute("""
@@ -406,7 +410,8 @@ def load_all_stocks_from_db() -> List[Dict[str, Any]]:
             d["open"] = d["open_p"]
             d["high"] = d["high_p"]
             d["low"] = d["low_p"]
-            result.append(d)
+            from scripts.verified_quotes import clean_legacy_stock
+            result.append(clean_legacy_stock(d))
         return result
 
 

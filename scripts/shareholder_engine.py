@@ -1,472 +1,185 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-DSH A股十大流通股东深度穿透与筹码异动计算引擎 (Top 10 Shareholders Engine)
-版本: v2.7.0
+"""真实披露股东名册；按姓名计数，不从固定候选名单生成。"""
+import hashlib
+import threading
+import time
+import unicodedata
+from datetime import date
+from scripts.market_history import canonical_code
+from scripts.verified_sources import dc_page, meta, number, cache_get, cache_put
 
-功能:
-1. 穿透单只股票的前十大流通股东全景明细列表：
-   - 股东名称 (如香港中央结算有限公司/中央汇金/全国社保基金/大股东等)
-   - 股东持股比例 (%)
-   - 与上期相比持股变动比例 (增持 +X.XX% / 减持 -X.XX% / 不变 0.00% / 新进)
-   - 股东与企业关系及属性 (境外法人QFII/实际控制人/社保基金/国家队/境内自然人/高管)
-2. 计算主列表筹码异动三兄弟指标：
-   - 100% 同源统一计算！彻底杜绝列表数字与弹窗条数不一致问题！
-   - 新进股东数量
-   - 变动股东数量 (增减持异动)
-   - 退出股东数量 (提供明确对应的退出股东清单)
-3. 计算跨企业同名流通股东网络：
-   - 找出与自己前十大流通股东同名的其他知名上市公司标的 (如中国平安、招商银行、贵州茅台、五粮液等)
-4. 计算分红/总市值比率 (累计分红总额 / 最新总市值)
-"""
+SOURCE = '东方财富Choice：十大股东披露 RPT_DMSK_HOLDERS'
+KEY = 'holders:latest:v1'
+_lock = threading.Lock()
+_memo = {}
+_memo_loaded = {}
 
-from typing import Dict, List, Any, Optional
+
+def clean_name(value):
+    return unicodedata.normalize('NFKC', str(value or '')).strip()
+
+
+def fetch_holder_snapshot(*, transport=None, today=None, max_pages=5000, start_page=1, workers=4):
+    """Bounded parallel pages; failed/duplicate pages remain explicit and resumable."""
+    from concurrent.futures import ThreadPoolExecutor
+    today = (today or date.today()).isoformat()
+    filters = f'(IS_MAX_REPORTDATE="1")(SECURITY_TYPE_CODE="058001001")(NOTICE_DATE<=\'{today}\')'
+    rows, seen, pages_seen, errors, completed = [], set(), set(), [], []
+    expected, pages, discarded = None, None, 0
+    def page_data(page):
+        try:
+            return page, dc_page('RPT_DMSK_HOLDERS', page=page, size=50, filters=filters,
+                sort='NOTICE_DATE,SECURITY_CODE,RANK', sort_types='-1,1,1', transport=transport), None
+        except Exception as exc:
+            return page, None, '来源请求失败：' + str(exc)
+    def consume(result):
+        nonlocal discarded
+        page, payload, error = result
+        if error:
+            errors.append({'page':page, 'error':error}); return
+        data=payload.get('data') or []
+        fingerprint=hashlib.sha256(repr(data).encode()).hexdigest()
+        if data and fingerprint in pages_seen:
+            errors.append({'page':page, 'error':'来源重复分页'}); return
+        pages_seen.add(fingerprint);completed.append(page)
+        for raw in data:
+            name=clean_name(raw.get('HOLDER_NAME'))
+            period=str(raw.get('END_DATE') or '')[:10]
+            notice=str(raw.get('NOTICE_DATE') or '')[:10]
+            try: code=canonical_code(raw.get('SECURITY_CODE',''))
+            except ValueError: discarded+=1;continue
+            if not name or not period or period>today or (notice and notice>today):
+                discarded+=1;continue
+            key=(code,period,name)
+            if key in seen:continue
+            seen.add(key)
+            nature=str(raw.get('HOLDER_TYPE_ORG') or raw.get('HOLDER_NATURE') or raw.get('HOLDER_NEWTYPE') or '')
+            cat='individual' if ('个人' in nature or '自然人' in nature) else 'institution' if nature and nature not in ('其他','未知') else 'unknown'
+            rows.append({'code':code,'stock_name':raw.get('SECURITY_NAME_ABBR') or code,'name':name,
+                'category':cat,'nature':nature or None,'period':period,'notice_date':notice or None,
+                'rank':raw.get('RANK'),'hold_num':number(raw.get('HOLD_NUM')),'hold_pct':number(raw.get('HOLD_RATIO')),
+                'change_num':number(raw.get('HOLD_NUM_CHANGE')),
+                'change_label':raw.get('HOLDNUM_CHANGE_NAME') or raw.get('DIRECTION') or '未提供','source':SOURCE})
+    first=page_data(start_page); consume(first)
+    if first[1]:
+        expected=int(first[1].get('count') or 0);pages=int(first[1].get('pages') or 1)
+        last_page=min(pages,start_page+max_pages-1)
+        with ThreadPoolExecutor(max_workers=max(1,min(workers,4))) as pool:
+            for result in pool.map(page_data,range(start_page+1,last_page+1)):consume(result)
+    complete=start_page==1 and pages is not None and len(completed)==pages and not errors
+    error=None if complete else '披露仅部分覆盖；'+('部分分页请求失败' if errors else '达到本轮分页上限')
+    return dict(meta(SOURCE,'available' if complete else 'partial' if rows else 'unavailable',error),
+        rows=rows,complete=complete,count=len(rows),provider_count=expected,provider_pages=pages,
+        pages_completed=completed,failed_pages=errors,discarded_records=discarded,
+        next_page=(max(completed)+1 if completed else start_page),
+        covered_stocks=len({r['code'] for r in rows}),scope='已采集十大股东披露（保留历次采集）；不是全体证券账户',as_of=today)
+
+
+def get_holder_snapshot(*, refresh=False, fetcher=None, allow_fetch=True):
+    with _lock:
+        # Memo is database-specific, so tests and isolated services cannot leak data.
+        from scripts.stock_db import DB_PATH
+        key = (DB_PATH, KEY)
+        cached = _memo.get(key) if time.time()-_memo_loaded.get(key,0)<60 else cache_get(KEY)
+        _memo_loaded[key]=time.time()
+        if cached and not refresh:
+            age = time.time() - cached.get('fetched_epoch', 0)
+            if age < (30 if cached.get('status') == 'unavailable' else 86400):
+                _memo[key] = cached
+                return cached
+            if not allow_fetch:
+                return dict(cached, status='stale', error='缓存已过期，请刷新真实披露')
+        if not allow_fetch:
+            value = dict(meta(SOURCE, 'unavailable', '股东名册尚未采集'), rows=[], complete=False, count=0, covered_stocks=0)
+            _memo[key] = value
+            return value
+        value = (fetcher or fetch_holder_snapshot)()
+        if cached and cached.get('complete') and not value.get('complete'):
+            return dict(cached, status='stale', error=value.get('error'))
+        if cached and cached.get('rows'):
+            merged={(r['code'],r['period'],r['name']):r for r in cached['rows']}
+            merged.update({(r['code'],r['period'],r['name']):r for r in value['rows']})
+            value['rows']=list(merged.values());value['count']=len(merged)
+            value['covered_stocks']=len({r['code'] for r in value['rows']})
+            if not value.get('complete'): value['status']='partial'
+            if not value.get('complete') and cached.get('as_of')==value.get('as_of'):
+                done=sorted(set(cached.get('pages_completed',[])+value.get('pages_completed',[])))
+                value['pages_completed']=done
+                value['failed_pages']=[r for r in cached.get('failed_pages',[])+value.get('failed_pages',[]) if r['page'] not in done]
+                if value.get('provider_pages') and len(done)==value['provider_pages'] and done[0]==1:
+                    value.update(complete=True,status='available',error=None)
+        if value.get('rows') or value.get('complete'):
+            cache_put(KEY, value)
+            _memo[key] = value
+        return value
+
+
+def aggregate_holders(rows):
+    # Every collected distinct name counts once, including older disclosures.
+    # For each name/security pair retain the latest collected position only.
+    holders, seen = {}, set()
+    for r in sorted(rows,key=lambda r:r['period'],reverse=True):
+        name = clean_name(r['name']); key = (r['code'], name)
+        if key in seen or not name:
+            continue
+        seen.add(key)
+        h = holders.setdefault(name, {'holder_id': 'SH-' + hashlib.sha256(name.encode()).hexdigest()[:16],
+             'holder_name': name, 'category': r['category'], 'companies': [], 'total_holding_amount': None})
+        if h['category'] != r['category']:
+            h['category'] = 'unknown'
+        h['companies'].append({'code': r['code'], 'name': r['stock_name'], 'hold_pct': r['hold_pct'],
+                               'hold_num': r['hold_num'], 'period': r['period'], 'holding_amount': None})
+    for h in holders.values():
+        h['company_count'] = len(h['companies']); h['company_names'] = [c['name'] for c in h['companies']]
+        h['category_label'] = {'individual':'个人','institution':'机构','unknown':'类型未提供'}[h['category']]
+    return sorted(holders.values(), key=lambda h: (-h['company_count'], h['holder_name']))
 
 
 class Top10ShareholdersEngine:
-    """前十大流通股东穿透与异动分析引擎 (v2.7.0)"""
-
-    # 常见核心股东机构库与属性映射
-    HOLDER_PROFILES = [
-        {
-            "name": "香港中央结算有限公司",
-            "relation": "境外法人 (北向陆股通资金)",
-            "type": "qfii",
-            "peer_stocks": ["贵州茅台", "中国平安", "宁德时代", "招商银行", "比亚迪", "美的集团"]
-        },
-        {
-            "name": "中央汇金投资有限责任公司",
-            "relation": "国家队主权基金 (国有独资控股)",
-            "type": "state",
-            "peer_stocks": ["中国银行", "农业银行", "建设银行", "工商银行", "新华保险", "中信证券"]
-        },
-        {
-            "name": "中国证券金融股份有限公司",
-            "relation": "国家队维稳主体 (平准基金代表)",
-            "type": "state",
-            "peer_stocks": ["中国石化", "中国石油", "招商银行", "中信证券", "格力电器", "海螺水泥"]
-        },
-        {
-            "name": "全国社保基金一零一组合",
-            "relation": "长期社保资金 (长线耐心机构)",
-            "type": "social",
-            "peer_stocks": ["迈瑞医疗", "恒瑞医药", "伊利股份", "顺丰控股", "紫金矿业"]
-        },
-        {
-            "name": "中国工商银行股份有限公司－华泰柏瑞沪深300ETF",
-            "relation": "公募被动指数基金 (核心流动性)",
-            "type": "fund",
-            "peer_stocks": ["宁德时代", "贵州茅台", "中国平安", "长江电力", "招商银行"]
-        },
-        {
-            "name": "中国人寿保险股份有限公司－传统－普通保险产品",
-            "relation": "长期险资资金 (稳健高股息底仓)",
-            "type": "insurance",
-            "peer_stocks": ["中国银行", "中国石化", "邮储银行", "大秦铁路", "农业银行"]
-        },
-        {
-            "name": "招商银行股份有限公司－上证红利交易型开放式指数证券投资基金",
-            "relation": "公募ETF红利配置基金",
-            "type": "fund",
-            "peer_stocks": ["中国神华", "陕西煤业", "大秦铁路", "交通银行", "山东高速"]
-        },
-        {
-            "name": "易方达蓝筹精选混合型证券投资基金",
-            "relation": "公募主动偏股基金 (明星重仓)",
-            "type": "fund",
-            "peer_stocks": ["五粮液", "腾讯控股", "泸州老窖", "美团", "海康威视"]
-        },
-        {
-            "name": "基本养老保险基金八零二组合",
-            "relation": "国家养老保险基金 (战略耐心资本)",
-            "type": "social",
-            "peer_stocks": ["三一重工", "中兴通讯", "歌尔股份", "立讯精密", "比亚迪"]
-        },
-        {
-            "name": "中信证券股份有限公司",
-            "relation": "大型头部券商自营及做市席位",
-            "type": "broker",
-            "peer_stocks": ["海通证券", "华泰证券", "国泰君安", "东方证券", "中国银河"]
-        }
-    ]
-
-    # 真实自然人与知名牛散股东候选库 (用于丰富个人股东画像)
-    INDIVIDUAL_SHAREHOLDERS = [
-        {"name": "葛卫东", "relation": "知名自然人投资家 / 知名牛散", "type": "individual", "peer_stocks": ["科大讯飞", "兆易创新", "奇安信", "用友网络"]},
-        {"name": "章建平", "relation": "知名自然人游资 / 战略牛散", "type": "individual", "peer_stocks": ["海康威视", "恒生电子", "中科曙光"]},
-        {"name": "陈发树", "relation": "知名自然人企业家 / 战略牛散", "type": "individual", "peer_stocks": ["云南白药", "隆基绿能", "中国中免"]},
-        {"name": "刘元生", "relation": "长线自然人基石股东", "type": "individual", "peer_stocks": ["万科A", "恒瑞医药"]},
-        {"name": "王萍", "relation": "知名自然人牛散", "type": "individual", "peer_stocks": ["三花智控", "拓普集团"]},
-        {"name": "赵建平", "relation": "科技成长股资深牛散", "type": "individual", "peer_stocks": ["韦尔股份", "北方华创"]},
-        {"name": "方威", "relation": "控股方自然人实控人", "type": "individual", "peer_stocks": ["方大炭素", "方大特钢"]},
-        {"name": "李强", "relation": "核心高管自然人持股", "type": "individual", "peer_stocks": ["顺丰控股", "中微公司"]}
-    ]
-
-    # 潜在的退出股东候选库
-    EXIT_CANDIDATES = [
-        {"name": "广发双擎升级混合型证券投资基金", "pct": 0.58, "relation": "上期持股 0.58%，本期退出前十大"},
-        {"name": "中国人寿保险－分红－个人分红", "pct": 0.45, "relation": "上期持股 0.45%，本期减持出前十大"},
-        {"name": "华夏上证50交易型开放式指数基金", "pct": 0.62, "relation": "上期持股 0.62%，本期减持调仓退出"},
-        {"name": "景顺长城新兴成长混合型基金", "pct": 0.39, "relation": "上期持股 0.39%，本期退出前十大"}
-    ]
+    _index_token = None
+    _index = {}
+    @classmethod
+    def get_stock_top10_shareholders(cls, code, name='', top10_circ_pct=None, report_date=None):
+        code = canonical_code(code)
+        snap = get_holder_snapshot(allow_fetch=False)
+        if cls._index_token != id(snap['rows']):
+            cls._index = {}
+            for row in snap['rows']: cls._index.setdefault(row['code'], []).append(row)
+            cls._index_token = id(snap['rows'])
+        rows = cls._index.get(code, [])
+        period = max((r['period'] for r in rows), default=None)
+        rows = [r for r in rows if r['period'] == period]
+        holders = [dict(r, relation=r['nature'] or '未提供', change_pct=None,
+                        change_type={'增持':'up','增加':'up','减持':'down','减少':'down','新进':'new','不变':'flat'}.get(r['change_label'],'unknown')) for r in rows]
+        complete_ranks={int(r['rank']) for r in rows if str(r.get('rank','')).isdigit()} == set(range(1,11))
+        def pct(cat=None):
+            selected = [r for r in rows if cat is None or r['category'] == cat]
+            if not complete_ranks or any(r['hold_pct'] is None for r in rows): return None
+            return round(sum(r['hold_pct'] for r in selected), 4)
+        return dict(meta(SOURCE, snap['status'] if rows else 'unavailable', snap.get('error')),
+                    code=code, name=name, report_date=period, holders=holders, exit_holders=[],
+                    disclosure_complete=complete_ranks, collected_holder_count=len(rows),
+                    total_pct=pct(), individual_pct=pct('individual'), institution_pct=pct('institution'),
+                    changes_summary={'new_count':None,'change_count':None,'exit_count':None},
+                    peer_companies=[], peer_companies_str='未计算', peer_holders=[], peer_holders_str='未计算')
 
     @classmethod
-    def get_stock_top10_shareholders(
-        cls,
-        code: str,
-        name: str = "",
-        top10_circ_pct: float = 0.0,
-        report_date: str = "2026-06-30"
-    ) -> Dict[str, Any]:
-        """穿透计算并返回个股十大流通股东明细与异动统计 (全系统唯一权威计算源)"""
-        clean_code = code.replace("sh", "").replace("sz", "")
-        seed = sum(ord(c) for c in clean_code)
-
-        circ_total = float(top10_circ_pct or 0.0)
-        if circ_total <= 5.0 or circ_total >= 95.0:
-            circ_total = 45.0 + (seed % 28)
-
-        holders = []
-        rem_pct = circ_total
-
-        # 第一大控股股东 (国有大盘股通常为集团/国资机构，部分中小创为自然人创始人)
-        is_tech = clean_code.startswith("300") or clean_code.startswith("688")
-        is_founder_individual = is_tech and (seed % 3 == 0)
-
-        first_pct = round(min(52.0, max(12.0, circ_total * (0.35 + (seed % 15) / 100.0))), 2)
-        rem_pct -= first_pct
-
-        if is_founder_individual:
-            founder_name = cls.INDIVIDUAL_SHAREHOLDERS[seed % len(cls.INDIVIDUAL_SHAREHOLDERS)]["name"]
-            first_holder_name = founder_name
-            first_holder_rel = "第一大股东 / 创始人 / 实际控制人"
-            first_holder_category = "individual"
-        else:
-            first_holder_name = f"{name}控股集团有限公司" if not is_tech else f"{name}科技创新投资管理中心(有限合伙)"
-            first_holder_rel = "第一大股东 / 实际控制人" if not is_tech else "控股股东及员工持股平台"
-            first_holder_category = "institution"
-
-        holders.append({
-            "rank": 1,
-            "name": first_holder_name,
-            "hold_pct": first_pct,
-            "change_pct": 0.00,
-            "change_label": "持平",
-            "change_type": "flat",
-            "relation": first_holder_rel,
-            "holder_type": "controller",
-            "category": first_holder_category,
-            "category_label": "个人" if first_holder_category == "individual" else "机构"
-        })
-
-        # 分配其余 9 位股东
-        sample_profiles = list(cls.HOLDER_PROFILES)
-        offset = seed % len(sample_profiles)
-        ordered_profiles = sample_profiles[offset:] + sample_profiles[:offset]
-
-        peer_companies_set = set()
-
-        for i in range(2, 11):
-            if i == 10:
-                cur_pct = round(max(0.15, rem_pct), 2)
-            else:
-                share_ratio = 0.20 - (i * 0.015)
-                cur_pct = round(max(0.20, rem_pct * share_ratio), 2)
-                rem_pct -= cur_pct
-
-            # 决定该席位是否由自然人/牛散担任 (约 20%~30% 几率出现个人股东，符合 A 股真实结构)
-            is_individual_slot = ((seed * 7 + i * 13) % 10) in (1, 7)
-            if is_individual_slot:
-                ind_cand = cls.INDIVIDUAL_SHAREHOLDERS[(seed + i) % len(cls.INDIVIDUAL_SHAREHOLDERS)]
-                h_name = ind_cand["name"]
-                h_rel = ind_cand["relation"]
-                h_type = ind_cand["type"]
-                h_cat = "individual"
-                for p_stock in ind_cand.get("peer_stocks", []):
-                    if p_stock != name:
-                        peer_companies_set.add(p_stock)
-            else:
-                profile = ordered_profiles[(i - 2) % len(ordered_profiles)]
-                h_name = profile["name"]
-                h_rel = profile["relation"]
-                h_type = profile["type"]
-                h_cat = "institution"
-                for p_stock in profile.get("peer_stocks", []):
-                    if p_stock != name:
-                        peer_companies_set.add(p_stock)
-
-            # 严格确定性计算变动类型
-            change_hash = (seed + i * 17) % 10
-            if change_hash in (0, 1):
-                chg_val = cur_pct
-                chg_label = f"新进 (+{cur_pct:.2f}%)"
-                chg_type = "new"
-            elif change_hash in (2, 3):
-                chg_val = round((seed % 8 + 1) * 0.12, 2)
-                chg_label = f"+{chg_val:.2f}% (增持)"
-                chg_type = "up"
-            elif change_hash in (4, 5):
-                chg_val = round(-((seed % 6 + 1) * 0.10), 2)
-                chg_label = f"{chg_val:.2f}% (减持)"
-                chg_type = "down"
-            else:
-                chg_val = 0.00
-                chg_label = "持平"
-                chg_type = "flat"
-
-            holders.append({
-                "rank": i,
-                "name": h_name,
-                "hold_pct": cur_pct,
-                "change_pct": chg_val,
-                "change_label": chg_label,
-                "change_type": chg_type,
-                "relation": h_rel,
-                "holder_type": h_type,
-                "category": h_cat,
-                "category_label": "个人" if h_cat == "individual" else "机构"
-            })
-
-        # 准确统计：新进(new)与变动(up/down)严格统计 holders 数组
-        actual_new_count = sum(1 for h in holders if h["change_type"] == "new")
-        actual_change_count = sum(1 for h in holders if h["change_type"] in ("up", "down"))
-
-        # 退出股东数量与列表严格对应
-        raw_exit_num = (seed % 3)  # 0~2 家退出
-        exit_holders = []
-        for e_idx in range(raw_exit_num):
-            cand = cls.EXIT_CANDIDATES[(seed + e_idx) % len(cls.EXIT_CANDIDATES)]
-            exit_holders.append({
-                "rank": "-",
-                "name": cand["name"],
-                "hold_pct": 0.00,
-                "change_pct": -cand["pct"],
-                "change_label": f"-{cand['pct']:.2f}% (退出)",
-                "change_type": "down",
-                "relation": cand["relation"],
-                "holder_type": "exit"
-            })
-        actual_exit_count = len(exit_holders)
-
-        actual_total_pct = round(sum(h["hold_pct"] for h in holders), 2)
-
-        # 需求2/3: 分别求和个人股东与机构股东持股占比
-        individual_total_pct = round(sum(h["hold_pct"] for h in holders if h.get("category") == "individual"), 2)
-        institution_total_pct = round(sum(h["hold_pct"] for h in holders if h.get("category") != "individual"), 2)
-
-        # 提取同名流通股东关联企业 (取前 4~5 家代表企业)
-        peer_list = sorted(list(peer_companies_set))
-        if not peer_list:
-            peer_list = ["招商银行", "贵州茅台", "中国平安"]
-
-        # 需求4: 提取具有跨股重合特点的同名流通股东机构名称 (去重取代表机构)
-        peer_holder_names = [h["name"] for h in holders[1:5]]
-
-        return {
-            "code": code,
-            "name": name,
-            "report_date": report_date,
-            "total_circ_pct": actual_total_pct,
-            "individual_pct": individual_total_pct,
-            "institution_pct": institution_total_pct,
-            "holders": holders,
-            "exit_holders": exit_holders,
-            "peer_companies": peer_list[:5],
-            "peer_companies_str": "、".join(peer_list[:4]),
-            "peer_holders": peer_holder_names,
-            "peer_holders_str": "、".join(peer_holder_names[:3]),
-            "changes_summary": {
-                "new_count": actual_new_count,
-                "change_count": actual_change_count,
-                "exit_count": actual_exit_count,
-                "new_desc": f"{actual_new_count}家新进" if actual_new_count > 0 else "无新进",
-                "change_desc": f"{actual_change_count}家变动" if actual_change_count > 0 else "持平",
-                "exit_desc": f"{actual_exit_count}家退出" if actual_exit_count > 0 else "无退出"
-            }
-        }
-
-    @classmethod
-    def enrich_stock_holder_metrics(cls, stock: Dict[str, Any]) -> Dict[str, Any]:
-        """为主列表中的单只股票丰富'分红/总市值'、'异动三兄弟数字'与'同名流通股东企业'"""
-        m_cap = float(stock.get("market_cap") or 0.0)
-        div_total = float(stock.get("dividend_total_amount") or 0.0)
-
-        # 1. 分红/总市值 (%) = (累计分红总额(亿) / 最新总市值(亿)) * 100
-        if m_cap > 0 and div_total > 0:
-            div_to_cap_pct = round((div_total / m_cap) * 100.0, 2)
-        else:
-            div_to_cap_pct = 0.0
-        stock["div_to_cap_pct"] = div_to_cap_pct
-
-        # 2. 调用同一个权威方法生成股东数据，彻底保障 100% 一致性！
-        code = stock.get("code") or ("sh" + stock.get("raw_code", "000000"))
-        name = stock.get("name") or ""
-        t10_circ = float(stock.get("top10_circ_hold_pct") or 0.0)
-        rep_date = str(stock.get("report_date") or "2026-06-30")
-
-        detail = cls.get_stock_top10_shareholders(code, name=name, top10_circ_pct=t10_circ, report_date=rep_date)
-
-        # 纯数字，方便表头升序/降序排序
-        stock["holder_new_count"] = detail["changes_summary"]["new_count"]
-        stock["holder_change_count"] = detail["changes_summary"]["change_count"]
-        stock["holder_exit_count"] = detail["changes_summary"]["exit_count"]
-
-        # 同名流通股东企业与同名流通股东名称
-        stock["peer_companies"] = detail["peer_companies"]
-        stock["peer_companies_str"] = detail["peer_companies_str"]
-        stock["peer_holders"] = detail["peer_holders"]
-        stock["peer_holders_str"] = detail["peer_holders_str"]
-
-        # 需求2/3: 个人占比与机构占比 (精准求和并守恒)
-        stock["holder_individual_pct"] = detail["individual_pct"]
-        stock["holder_institution_pct"] = detail["institution_pct"]
-
-        # 需求6: 商誉 (亿) 与 需求7: 商誉/总市值 (%)
-        clean_code = code.replace("sh", "").replace("sz", "")
-        seed = sum(ord(c) for c in clean_code)
-        # 约 40% 的企业账面有一定商誉 (符合 A 股商誉分布概貌)
-        has_goodwill = (seed % 10) in (1, 3, 5, 8)
-        if has_goodwill and m_cap > 0:
-            # 商誉通常为几十亿至几百亿，占总市值 0.5% ~ 15% 不等
-            ratio = ((seed % 12) + 1) * 0.8 / 100.0
-            goodwill_val = round(m_cap * ratio, 2)
-            goodwill_to_cap = round((goodwill_val / m_cap) * 100.0, 2)
-        else:
-            goodwill_val = 0.00
-            goodwill_to_cap = 0.00
-        stock["goodwill"] = goodwill_val
-        stock["goodwill_to_cap_pct"] = goodwill_to_cap
-
-        # 需求4: 分红次数/年限 (年均分红频次，保留1位小数)
-        listing_yrs = float(stock.get("listing_years") or 0.0)
-        div_cnt = int(stock.get("dividend_count") or 0)
-        stock["div_freq"] = round(div_cnt / listing_yrs, 1) if listing_yrs > 0 else 0.0
-
-        # 需求5: 上市日期处理 (若原格式为 2006-10-27，保留标准便于前端格式化为 2006年10月27日)
-        if not stock.get("ipo_date"):
-            stock["ipo_date"] = "2006-10-27" if "601398" in code else "2001-08-27"
-
+    def enrich_stock_holder_metrics(cls, stock):
+        d = cls.get_stock_top10_shareholders(stock['code'])
+        stock.update(holder_individual_pct=d['individual_pct'], holder_institution_pct=d['institution_pct'],
+                     holder_new_count=None, holder_change_count=None, holder_exit_count=None,
+                     peer_companies=[], peer_companies_str='未计算', peer_holders=[], peer_holders_str='未计算',
+                     goodwill=None, goodwill_to_cap_pct=None, div_freq=None, div_to_cap_pct=None)
+        stock['top10_hold_pct'] = d['total_pct']; stock['report_date'] = d['report_date']
         return stock
 
-    _CACHED_MARKET_SHAREHOLDERS = None
-    _CACHED_TIME = 0
+    @classmethod
+    def aggregate_market_shareholders(cls, all_stocks):
+        return aggregate_holders(get_holder_snapshot(allow_fetch=False)['rows'])
 
     @classmethod
-    def aggregate_market_shareholders(cls, all_stocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        需求2: 聚合全市场流通股东数据生成「股东研究全景列表」(带轻量内存缓存，提升并发响应至毫秒级)
-        表头包括: 股东ID、股东名称、股东属性(个人/机构)、占股企业、占股企业数量、占股企业总金额(亿)
-        """
-        import hashlib
-        import time
-
-        now = time.time()
-        if cls._CACHED_MARKET_SHAREHOLDERS is not None and (now - cls._CACHED_TIME) < 60:
-            return cls._CACHED_MARKET_SHAREHOLDERS
-
-        holder_map = {}
-
-        # 优先穿透前 800 只核心高市值及高关注度标的，避免 4,601 只单线程循环阻塞
-        sample_stocks = sorted(all_stocks, key=lambda s: float(s.get("market_cap") or 0.0), reverse=True)[:800]
-
-        for stock in sample_stocks:
-            stock_code = stock.get("code") or ("sh" + stock.get("raw_code", "000000"))
-            stock_name = stock.get("name") or "未知标的"
-            m_cap = float(stock.get("market_cap") or 0.0)
-            t10_circ = float(stock.get("top10_circ_hold_pct") or 0.0)
-            rep_date = str(stock.get("report_date") or "2026-06-30")
-
-            detail = cls.get_stock_top10_shareholders(stock_code, name=stock_name, top10_circ_pct=t10_circ, report_date=rep_date)
-            for h in detail.get("holders", []):
-                h_name = h.get("name", "").strip()
-                if not h_name or "其他股东" in h_name:
-                    continue
-                category = h.get("category", "institution")
-                hold_pct = float(h.get("hold_pct") or 0.0)
-                # 计算该股东在该企业中的持股市值 (亿) = 总市值 * 持股比例%
-                holding_amount = round(m_cap * (hold_pct / 100.0), 2)
-
-                if h_name not in holder_map:
-                    # 生成唯一股东ID: SH-XXXX
-                    h_hash = hashlib.md5(h_name.encode('utf-8')).hexdigest()[:5].upper()
-                    holder_map[h_name] = {
-                        "holder_id": f"SH-{h_hash}",
-                        "holder_name": h_name,
-                        "category": category, # "individual" | "institution"
-                        "category_label": "个人" if category == "individual" else "机构",
-                        "companies": [],
-                        "company_count": 0,
-                        "total_holding_amount": 0.0
-                    }
-
-                entry = holder_map[h_name]
-                if stock_name not in [c["name"] for c in entry["companies"]]:
-                    entry["companies"].append({
-                        "code": stock_code,
-                        "name": stock_name,
-                        "hold_pct": hold_pct,
-                        "holding_amount": holding_amount
-                    })
-                entry["total_holding_amount"] = round(entry["total_holding_amount"] + holding_amount, 2)
-
-        # 整理输出并计算数量
-        result = list(holder_map.values())
-        for item in result:
-            item["company_count"] = len(item["companies"])
-            # 按持股市值降序排列其重仓公司
-            item["companies"].sort(key=lambda x: x["holding_amount"], reverse=True)
-            # 方便展示的公司名列表
-            item["company_names"] = [c["name"] for c in item["companies"]]
-
-        # 默认按占股企业总金额降序排布
-        result.sort(key=lambda x: (x["total_holding_amount"], x["company_count"]), reverse=True)
-        cls._CACHED_MARKET_SHAREHOLDERS = result
-        cls._CACHED_TIME = now
-        return result
-
-    @classmethod
-    def get_shareholders_overview(cls, shareholders_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        需求1: 计算股东研究页面 6 大概览信息:
-        1. 股东总数
-        2. 机构股东总数
-        3. 个人股东总数
-        4. 股东总金额(亿)
-        5. 机构股东总金额(亿)
-        6. 个人股东总金额(亿)
-        """
-        total_count = len(shareholders_list)
-        institution_count = 0
-        individual_count = 0
-        total_amount = 0.0
-        institution_amount = 0.0
-        individual_amount = 0.0
-
-        for h in shareholders_list:
-            amt = float(h.get("total_holding_amount") or 0.0)
-            cat = h.get("category", "institution")
-            total_amount += amt
-            if cat == "individual":
-                individual_count += 1
-                individual_amount += amt
-            else:
-                institution_count += 1
-                institution_amount += amt
-
-        return {
-            "total_holders_count": total_count,
-            "institution_holders_count": institution_count,
-            "individual_holders_count": individual_count,
-            "total_holding_amount_yi": round(total_amount, 2),
-            "institution_holding_amount_yi": round(institution_amount, 2),
-            "individual_holding_amount_yi": round(individual_amount, 2)
-        }
-
-
-if __name__ == "__main__":
-    icbc = Top10ShareholdersEngine.get_stock_top10_shareholders("sh601398", "工商银行", 57.79)
-    print("ICBC summary:", icbc["changes_summary"])
-    print("New holders count in list:", sum(1 for h in icbc["holders"] if h["change_type"] == "new"))
-    print("Change holders count in list:", sum(1 for h in icbc["holders"] if h["change_type"] in ("up", "down")))
-    print("Exit holders count in list:", len(icbc["exit_holders"]))
-    print("Peer companies:", icbc["peer_companies_str"])
+    def get_shareholders_overview(cls, shareholders_list):
+        return {'total_holders_count':len(shareholders_list),
+                'individual_holders_count':sum(h['category']=='individual' for h in shareholders_list),
+                'institution_holders_count':sum(h['category']=='institution' for h in shareholders_list),
+                'unknown_holders_count':sum(h['category']=='unknown' for h in shareholders_list),
+                'total_holding_amount_yi':None, 'individual_holding_amount_yi':None, 'institution_holding_amount_yi':None}

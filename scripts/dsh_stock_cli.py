@@ -18,7 +18,7 @@ BASE_DIR = os.path.dirname(CURRENT_DIR)
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from scripts.stock_data_engine import get_quote, get_batch_quotes, generate_mock_kline, normalize_code
+from scripts.stock_data_engine import get_quote, get_batch_quotes, get_real_kline, normalize_code
 from scripts.stock_indicators import evaluate_stock
 from scripts.stock_portfolio import build_portfolio_summary, load_config
 from scripts.stock_chart_svg import generate_stock_svg
@@ -38,6 +38,9 @@ C_WHITE = "\033[37m"
 C_GRAY = "\033[90m"
 
 
+def fmt(value, spec=".2f"):
+    return format(value, spec) if value is not None else "未提供"
+
 def print_banner():
     """打印 DSH 股票终端标头"""
     print(f"{C_CYAN}{C_BOLD}======================================================================{C_RESET}")
@@ -52,7 +55,7 @@ def cmd_quote(codes: List[str]):
         print(f"{C_YELLOW}⚠️ 请提供股票代码，例如: python3 scripts/dsh_stock_cli.py quote 600519 300750{C_RESET}")
         return 1
 
-    quotes = get_batch_quotes(codes, allow_mock=True)
+    quotes = get_batch_quotes(codes, allow_mock=False)
     print(f"\n{C_BOLD}🔍 实时行情查询结果 (共 {len(quotes)} 只标的):{C_RESET}\n")
     print(f"{'代码':<10} {'名称':<10} {'最新价':<10} {'涨跌额':<10} {'涨跌幅':<10} {'最高':<10} {'最低':<10} {'成交额(亿)':<12} {'更新时间'}")
     print("-" * 88)
@@ -78,7 +81,7 @@ def cmd_list():
     raw_watchlist = cfg.get("watchlist", [])
 
     all_codes = [idx["code"] for idx in raw_indices] + [w["code"] for w in raw_watchlist]
-    quotes = get_batch_quotes(all_codes, allow_mock=True)
+    quotes = get_batch_quotes(all_codes, allow_mock=False)
     q_map = {q.code: q for q in quotes}
 
     print(f"\n{C_CYAN}{C_BOLD}🏛️ 核心大盘基准指数:{C_RESET}")
@@ -112,8 +115,8 @@ def cmd_analyze(code: str):
         print(f"{C_RED}❌ 必须指定要分析的股票代码，例如: python3 scripts/dsh_stock_cli.py analyze 600519{C_RESET}")
         return 1
 
-    q = get_quote(code, allow_mock=True)
-    bars = generate_mock_kline(q.code, days=60, end_price=q.price)
+    q = get_quote(code, allow_mock=False)
+    bars = get_real_kline(q.code, days=60, end_price=q.price)
     report = evaluate_stock(q.code, q.name, bars)
 
     print(f"\n{C_BOLD}📊 【{report.name} ({report.code})】多空量化深度体检报告{C_RESET}")
@@ -144,7 +147,10 @@ def cmd_analyze(code: str):
 
 def cmd_portfolio():
     """查看投资组合持仓与浮动盈亏"""
-    summary, alerts = build_portfolio_summary(allow_mock=True)
+    try:
+        summary, alerts = build_portfolio_summary(allow_mock=False)
+    except RuntimeError as exc:
+        print("未获取：" + str(exc)); return 1
     pnl_c = C_RED if summary.total_floating_pnl >= 0 else C_GREEN
     pnl_sign = "+" if summary.total_floating_pnl >= 0 else ""
     day_c = C_RED if summary.today_floating_pnl >= 0 else C_GREEN
@@ -188,8 +194,8 @@ def cmd_chart(code: str, output: str = ""):
         print(f"{C_RED}❌ 必须指定股票代码，例如: python3 scripts/dsh_stock_cli.py chart 600519{C_RESET}")
         return 1
 
-    q = get_quote(code, allow_mock=True)
-    bars = generate_mock_kline(q.code, days=60, end_price=q.price)
+    q = get_quote(code, allow_mock=False)
+    bars = get_real_kline(q.code, days=60, end_price=q.price)
 
     if not output:
         output = f"reports/charts/chart_{q.code}.svg"
@@ -215,15 +221,15 @@ def cmd_holder(code: str):
     print("-" * 88)
     for h in top10.get("holders", []):
         change_col = C_RED if "增" in h['change'] else (C_GREEN if "减" in h['change'] else C_GRAY)
-        print(f"{h['rank']:<6} {h['hold_ratio']:<10.2f} {h['hold_num_wan']:<14.2f} {change_col}{h['change']:<10}{C_RESET} {h['share_type']:<12} {h['name']}")
+        print(f"{h['rank']:<6} {fmt(h['hold_ratio'], '<10.2f')} {fmt(h['hold_num_wan'], '<14.2f')} {change_col}{h['change']:<10}{C_RESET} {h['share_type']:<12} {h['name']}")
 
     if history:
         print(f"\n{C_BOLD}📊 历史股东户数变动与筹码集中度:{C_RESET}\n")
         print(f"{'报告截止日':<14} {'总户数':<12} {'较上期变动%':<12} {'户均持股(股)':<14} {'筹码集中度'}")
         print("-" * 65)
         for h in history:
-            chg_col = C_GREEN if h['change_ratio'] < 0 else C_RED # 户数减少代表筹码趋向集中（绿或红色提示）
-            print(f"{h['period']:<14} {h['holder_num']:<12} {chg_col}{h['change_ratio']:>+.2f}%{C_RESET}       {h['avg_hold_num']:<14.0f} {h['focus_level']}")
+            chg_col = C_GREEN if (h['change_ratio'] or 0) < 0 else C_RED # 户数减少代表筹码趋向集中（绿或红色提示）
+            print(f"{h['period']:<14} {fmt(h['holder_num'], '<12')} {chg_col}{fmt(h['change_ratio'], '>+.2f')}%{C_RESET}       {fmt(h['avg_hold_num'], '<14.0f')} {h['focus_level']}")
     print("")
     return 0
 
@@ -245,7 +251,7 @@ def cmd_dividend(code: str):
         status_col = C_GREEN if d['progress'] == "实施分配" else C_YELLOW
         reg_d = d['record_date'] or "--"
         ex_d = d['ex_dividend_date'] or "--"
-        print(f"{d['report_period']:<14} {status_col}{d['progress']:<10}{C_RESET} {d['cash_ratio']:<16.2f} {reg_d:<14} {ex_d:<14} {d['plan_detail']}")
+        print(f"{d['report_period']:<14} {status_col}{d['progress']:<10}{C_RESET} {fmt(d['cash_ratio'], '<16.2f')} {reg_d:<14} {ex_d:<14} {d['plan_detail']}")
     print("")
     return 0
 
@@ -257,7 +263,7 @@ def cmd_notice(code: str, keyword: str = ""):
     print(f"\n{C_CYAN}⏳ 正在对接巨潮资讯网检索 [{clean_code}]{kw_desc} 官方公告...{C_RESET}")
     notices = StockDataHub.get_announcements(clean_code, keyword=keyword, days=180, limit=10)
     if not notices:
-        print(f"{C_YELLOW}⚠️ 未检索到 [{clean_code}] 的相关官方公告{C_RESET}")
+        print(f"{C_YELLOW}⚠️ 未检索到 [{clean_code}] 的相关公告（可能无披露或来源请求失败）{C_RESET}")
         return 0
 
     name = notices[0].get("sec_name", clean_code)
@@ -277,17 +283,17 @@ def cmd_blocktrade(code: str = ""):
     print(f"\n{C_CYAN}⏳ 正在拉取 {target_desc} 大宗交易成交明细与席位动向...{C_RESET}")
     trades = StockDataHub.get_block_trades(code=clean_code, limit=12)
     if not trades:
-        print(f"{C_YELLOW}⚠️ 近期无大宗交易成交记录{C_RESET}")
+        print(f"{C_YELLOW}⚠️ 未获取大宗交易记录（可能无披露或来源请求失败）{C_RESET}")
         return 0
 
     print(f"\n{C_BOLD}📦 大宗交易成交明细 (按折溢价与成交席位透视):{C_RESET}\n")
     print(f"{'交易日期':<12} {'代码':<8} {'名称':<8} {'成交价':<10} {'收盘价':<10} {'折溢价率%':<10} {'成交额(万)':<12} {'买方营业部/机构':<24} {'卖方营业部/机构'}")
     print("-" * 115)
     for t in trades:
-        prem_col = C_RED if t['premium_ratio'] > 0 else (C_GREEN if t['premium_ratio'] < 0 else C_GRAY)
+        prem_col = C_RED if (t['premium_ratio'] or 0) > 0 else (C_GREEN if (t['premium_ratio'] or 0) < 0 else C_GRAY)
         buyer_str = f"{C_MAGENTA}【机构】{C_RESET}" if t['is_buyer_org'] else t['buyer'][:14]
         seller_str = f"{C_MAGENTA}【机构】{C_RESET}" if t['is_seller_org'] else t['seller'][:14]
-        print(f"{t['trade_date']:<12} {t['code']:<8} {t['name']:<8} {t['deal_price']:<10.2f} {t['close_price']:<10.2f} {prem_col}{t['premium_ratio']:>+.2f}%{C_RESET}     {t['amount_wan']:<12.1f} {buyer_str:<32} {seller_str}")
+        print(f"{t['trade_date']:<12} {t['code']:<8} {t['name']:<8} {fmt(t['deal_price'], '<10.2f')} {fmt(t['close_price'], '<10.2f')} {prem_col}{fmt(t['premium_ratio'], '>+.2f')}%{C_RESET}     {fmt(t['amount_wan'], '<12.1f')} {buyer_str:<32} {seller_str}")
     print("")
     return 0
 
@@ -306,10 +312,10 @@ def cmd_status():
     cfg = load_config()
     print(f"\n{C_CYAN}{C_BOLD}📌 DSH 股票工程环境状态概要:{C_RESET}")
     print(f"  • 项目名称: {cfg.get('system', {}).get('project_name')}")
-    print(f"  • 系统版本: {cfg.get('system', {}).get('version')}")
+    print("  • 系统版本: " + json.load(open(os.path.join(BASE_DIR, 'config/version.json')))['version'])
     print(f"  • 大盘指数基准: {len(cfg.get('indices', []))} 只")
     print(f"  • 监控自选股: {len(cfg.get('watchlist', []))} 只")
-    print(f"  • 当前活跃持仓: {len(cfg.get('portfolio', []))} 只")
+    print("  • 持仓状态: " + (str(len(cfg.get("portfolio", [])))+" 只已核实" if cfg.get("portfolio_verified") is True else "未核实，样例配置不计入实际持仓"))
     print(f"  • 预警参数: 止盈={cfg.get('alert_rules', {}).get('take_profit_ratio')*100:.0f}% ｜ 止损={cfg.get('alert_rules', {}).get('stop_loss_ratio')*100:.0f}%")
     print(f"  • 工作目录: {BASE_DIR}")
     return 0
@@ -331,6 +337,20 @@ def main():
     p_actions.add_argument("--days", type=int, choices=(90, 365), default=365)
     p_actions.add_argument("--refresh", action="store_true")
     p_actions.add_argument("--json", action="store_true", help="结构化输出（默认）")
+
+    p_holders = subparsers.add_parser('holders', help='真实股东名册、去重计数与覆盖状态')
+    p_holders.add_argument('--refresh', action='store_true')
+    p_holders.add_argument('--max-pages', type=int, default=250)
+    p_holders.add_argument('--start-page', type=int, default=1)
+    p_holders.add_argument('--include-rows', action='store_true')
+    p_holders.add_argument('--json', action='store_true')
+    p_chanlun = subparsers.add_parser('chanlun', help='同源输出笔、线段、中枢、背离、均线缠绕')
+    p_chanlun.add_argument('code')
+    p_chanlun.add_argument('--ma-periods', default='5,10,20')
+    p_chanlun.add_argument('--threshold', type=float, default=1.0)
+    p_chanlun.add_argument('--min-bars', type=int, default=3)
+    p_chanlun.add_argument('--json', action='store_true')
+    subparsers.add_parser('data-audit', help='只读检查历史污染隔离和真实缓存覆盖')
 
     # quote 子命令
     p_quote = subparsers.add_parser("quote", help="查询单只或多只股票实时行情")
@@ -381,6 +401,28 @@ def main():
         parser.print_help()
         return 0
 
+    if args.command == 'holders':
+        from scripts.shareholder_engine import get_holder_snapshot,fetch_holder_snapshot,aggregate_holders,Top10ShareholdersEngine
+        if not 1 <= args.max_pages <= 5000: parser.error('max-pages范围1..5000')
+        result=get_holder_snapshot(refresh=args.refresh,fetcher=lambda:fetch_holder_snapshot(max_pages=args.max_pages,start_page=max(1,args.start_page)))
+        out={k:v for k,v in result.items() if k!='rows'}
+        out['overview']=Top10ShareholdersEngine.get_shareholders_overview(aggregate_holders(result['rows']))
+        if args.include_rows:out['rows']=result['rows']
+        print(json.dumps(out,ensure_ascii=False,indent=2));return 0 if result['complete'] else 1
+    if args.command == 'chanlun':
+        from scripts.history_service import get_daily_history
+        from scripts.chanlun_analysis import analyze_bars
+        h=get_daily_history(args.code)
+        out=analyze_bars(h['bars'],code=h['code'],periods=tuple(int(p) for p in args.ma_periods.split(',')),threshold_pct=args.threshold,min_bars=args.min_bars)
+        out['history_meta']={k:v for k,v in h.items() if k!='bars'}
+        print(json.dumps(out,ensure_ascii=False,indent=2));return 0 if h['status']=='available' else 1
+    if args.command == 'data-audit':
+        from scripts.stock_db import get_db_connection
+        with get_db_connection() as conn:
+            tables={r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            counts={t:conn.execute('SELECT count(*) FROM '+t).fetchone()[0] for t in ['stock_quotes','stock_shareholders','verified_source_cache','verified_daily_history'] if t in tables}
+        print(json.dumps({'status':'legacy-quarantined','tables':counts,'policy':'旧无来源股东、分红、IPO、行情缓存不进入产品；不删除历史库'},ensure_ascii=False,indent=2));return 0
+
     if args.command in ("history", "holder-actions"):
         try:
             if args.command == "history":
@@ -424,4 +466,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except (RuntimeError, ValueError, OSError) as exc:
+        print("未获取：" + str(exc), file=sys.stderr)
+        sys.exit(1)

@@ -1,0 +1,26 @@
+test_extrema_anchor_to_actual_prices_after_inclusion (tests.test_r02_integrity.ChanlunTests) ... ok
+test_five_outputs_flat_series_and_ma_warmup (tests.test_r02_integrity.ChanlunTests) ... ok
+test_gap_requires_confirmation (tests.test_r02_integrity.ChanlunTests) ... ok
+test_invalid_input_rejected (tests.test_r02_integrity.ChanlunTests) ... ok
+test_no_false_turns_on_monotonic_prices (tests.test_r02_integrity.ChanlunTests) ... ok
+test_pivot_and_divergence_have_independent_evidence (tests.test_r02_integrity.ChanlunTests) ... ok
+test_segment_requires_feature_reversal_not_fixed_three_pens (tests.test_r02_integrity.ChanlunTests) ... ok
+test_cold_database_and_legacy_contamination (tests.test_r02_integrity.DataIntegrityTests) ... ok
+test_completed_refresh_keeps_previously_collected_names (tests.test_r02_integrity.DataIntegrityTests) ... ok
+test_dashboard_unknown_never_becomes_zero_or_synthetic_range (tests.test_r02_integrity.DataIntegrityTests) ... ok
+test_failed_page_continues_and_repeated_page_never_complete (tests.test_r02_integrity.DataIntegrityTests) ... ok
+test_financial_quarter_subtracts_cumulative_and_missing_is_none (tests.test_r02_integrity.DataIntegrityTests) ... ok
+test_no_name_pool_no_800_stock_cap_and_cross_period_names (tests.test_r02_integrity.DataIntegrityTests) ... ok
+test_partial_company_disclosure_does_not_imply_zero_individuals (tests.test_r02_integrity.DataIntegrityTests) ... ok
+test_quote_field_mapping_missing_values_and_source (tests.test_r02_integrity.DataIntegrityTests) ... ok
+test_cumulative_source_is_converted_without_fabricated_missing_amount (tests.test_r02_integrity.TimelineIntegrityTests) ... ok
+test_no_generated_data_even_when_legacy_flag_requested (tests.test_stock_data.TestStockDataEngine) ... ok
+test_normalize_code (tests.test_stock_data.TestStockDataEngine)
+测试各市场证券代码自动标准化与分类 ... ok
+test_stock_quote_model (tests.test_stock_data.TestStockDataEngine)
+测试 StockQuote 字段计算与序列化 ... ok
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.076s
+
+OK

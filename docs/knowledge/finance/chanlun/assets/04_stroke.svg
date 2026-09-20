@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img"><title>04  严格成笔：数清完整分型组</title><desc>先完成包含处理；此例端点极值与区间关系也满足成笔要求。</desc>
+<style>text{font-family:"PingFang SC","Heiti SC","STHeiti",sans-serif}</style>
+<rect x="0" y="0" width="1200" height="800" rx="0" fill="#f7f6f0" stroke="none"/>
+<text x="44" y="54" fill="#183642" font-size="32" font-weight="600" text-anchor="start">04  严格成笔：数清完整分型组</text>
+<text x="44" y="90" fill="#546d76" font-size="18" font-weight="400" text-anchor="start">先完成包含处理；此例端点极值与区间关系也满足成笔要求。</text>
+<text x="44" y="775" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">自制教学示意 · 非真实行情 · 定义与前提见教程及原作者出处</text>
+<rect x="44" y="130" width="1112" height="403" rx="14" fill="white" stroke="#ccd9db"/>
+<line x1="165.0" y1="259.6666666666667" x2="165.0" y2="336.33333333333337" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="153.0" y1="259.6666666666667" x2="177.0" y2="259.6666666666667" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="153.0" y1="336.33333333333337" x2="177.0" y2="336.33333333333337" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="184.0" y="264.6666666666667" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">10</text>
+<text x="184.0" y="341.33333333333337" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">7</text>
+<text x="165.0" y="442" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">K1</text>
+<line x1="305.0" y1="310.77777777777777" x2="305.0" y2="387.44444444444446" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="293.0" y1="310.77777777777777" x2="317.0" y2="310.77777777777777" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="293.0" y1="387.44444444444446" x2="317.0" y2="387.44444444444446" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="324.0" y="315.77777777777777" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">8</text>
+<text x="324.0" y="392.44444444444446" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">5</text>
+<text x="305.0" y="442" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">K2</text>
+<line x1="445.0" y1="285.22222222222223" x2="445.0" y2="361.8888888888889" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="433.0" y1="285.22222222222223" x2="457.0" y2="285.22222222222223" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="433.0" y1="361.8888888888889" x2="457.0" y2="361.8888888888889" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="464.0" y="290.22222222222223" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">9</text>
+<text x="464.0" y="366.8888888888889" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">6</text>
+<text x="445.0" y="442" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">K3</text>
+<line x1="585.0" y1="259.6666666666667" x2="585.0" y2="336.33333333333337" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="573.0" y1="259.6666666666667" x2="597.0" y2="259.6666666666667" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="573.0" y1="336.33333333333337" x2="597.0" y2="336.33333333333337" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="604.0" y="264.6666666666667" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">10</text>
+<text x="604.0" y="341.33333333333337" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">7</text>
+<text x="585.0" y="442" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">K4</text>
+<line x1="725.0" y1="234.11111111111111" x2="725.0" y2="310.77777777777777" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="713.0" y1="234.11111111111111" x2="737.0" y2="234.11111111111111" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="713.0" y1="310.77777777777777" x2="737.0" y2="310.77777777777777" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="744.0" y="239.11111111111111" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">11</text>
+<text x="744.0" y="315.77777777777777" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">8</text>
+<text x="725.0" y="442" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">K5</text>
+<line x1="865.0" y1="208.55555555555557" x2="865.0" y2="285.22222222222223" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="853.0" y1="208.55555555555557" x2="877.0" y2="208.55555555555557" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="853.0" y1="285.22222222222223" x2="877.0" y2="285.22222222222223" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="884.0" y="213.55555555555557" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">12</text>
+<text x="884.0" y="290.22222222222223" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">9</text>
+<text x="865.0" y="442" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">K6</text>
+<line x1="1005.0" y1="234.11111111111111" x2="1005.0" y2="310.77777777777777" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="993.0" y1="234.11111111111111" x2="1017.0" y2="234.11111111111111" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="993.0" y1="310.77777777777777" x2="1017.0" y2="310.77777777777777" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="1024.0" y="239.11111111111111" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">11</text>
+<text x="1024.0" y="315.77777777777777" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">8</text>
+<text x="1005.0" y="442" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">K7</text>
+<line x1="305.0" y1="387.44444444444446" x2="865.0" y2="208.55555555555557" stroke="#087f8c" stroke-width="4" stroke-dasharray="" stroke-linecap="round"/>
+<text x="285.0" y="417.44444444444446" fill="#087f8c" font-size="20" font-weight="400" text-anchor="start">底5</text>
+<text x="841.0" y="190.55555555555557" fill="#087f8c" font-size="20" font-weight="400" text-anchor="start">顶12</text>
+<line x1="105" y1="478" x2="495" y2="478" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="300.0" y="510" fill="#087f8c" font-size="20" font-weight="400" text-anchor="middle">底分型组 K1—K3</text>
+<line x1="665" y1="478" x2="1055" y2="478" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="860.0" y="510" fill="#087f8c" font-size="20" font-weight="400" text-anchor="middle">顶分型组 K5—K7</text>
+<text x="585" y="479" fill="#bc5a2e" font-size="20" font-weight="400" text-anchor="middle">K4独立</text>
+<rect x="44" y="561" width="540" height="149" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="66" y="596" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">正例：K2 → K6</text>
+<text x="66" y="632" fill="#183642" font-size="18" font-weight="400" text-anchor="start">两中心之间含5根；完整两组展示需7根。</text>
+<text x="66" y="660" fill="#183642" font-size="18" font-weight="400" text-anchor="start">K1—K3 与 K5—K7 之间有K4。</text>
+<rect x="612" y="561" width="544" height="149" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="634" y="596" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">两种不足</text>
+<text x="634" y="632" fill="#183642" font-size="18" font-weight="400" text-anchor="start">底组K1—K3 / 顶组K4—K6：缺独立间隔根。</text>
+<text x="634" y="660" fill="#183642" font-size="18" font-weight="400" text-anchor="start">底组K1—K3 / 顶组K3—K5：共用K3。</text>
+<text x="44" y="752" fill="#bc5a2e" font-size="19" font-weight="400" text-anchor="start">“至少五根”必须说明计数对象；不能直接数原始K线，不能遗漏分型的左右元素。</text></svg>

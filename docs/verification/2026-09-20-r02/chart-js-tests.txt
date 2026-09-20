@@ -1,0 +1,1 @@
+PASS: five SVG layers, independent toggle, off-window endpoints, clipped spans, no inferred turnover

@@ -1,7 +1,7 @@
 {
-  "version": "v4.4.0",
+  "version": "v4.5.0",
   "app_name": "A股多维量化筛选器",
   "subtitle": "DSH Stock Web",
-  "release_date": "2026-09-19",
-  "description": "K线按证券隔离、全历史分页与可信缓存；新增基于公开披露记录的增持/减持股东列与联合筛选。"
+  "release_date": "2026-09-20",
+  "description": "真实来源与缺失状态统一；姓名去重股东统计、同时增减持筛选；笔、线段、中枢、背离、均线缠绕五类输出和图形。"
 }

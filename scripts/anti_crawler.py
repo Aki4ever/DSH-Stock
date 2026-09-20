@@ -178,16 +178,10 @@ def parse_shareholder_data(stock_code: str) -> Dict[str, Any]:
     if result["top10_circ_hold_pct"] > 100.0:
         result["top10_circ_hold_pct"] = min(100.0, result["top10_hold_pct"] if result["top10_hold_pct"] > 0 else 85.0)
 
-    # 兜底就近原则：若网络或新上市暂未爬取到完整表格，基于行业板块与市值基准生成就近披露期与科学筹码比例
+    # 缺失披露不生成股东比例
     if result["top10_hold_pct"] == 0.0 and result["top10_circ_hold_pct"] == 0.0:
         # 基于股票代码哈希确定性推算真实合理的筹码集中度（通常主板50%~75%，创业板45%~68%）
-        seed = sum(ord(c) for c in clean_code)
-        base_hold = 52.0 + (seed % 32) + round((seed % 10) / 10.0, 2)
-        base_circ = round(base_hold * (0.85 + (seed % 12) / 100.0), 2)
-        result["top10_hold_pct"] = min(95.0, base_hold)
-        result["top10_circ_hold_pct"] = min(result["top10_hold_pct"], base_circ)
-        if not result["report_date"]:
-            result["report_date"] = "2026-06-30"
+        return None
 
     return result
 

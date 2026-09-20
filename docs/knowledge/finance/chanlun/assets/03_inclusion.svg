@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="730" viewBox="0 0 1200 730" role="img"><title>03  包含处理：相同输入，方向不同</title><desc>A=[8,12]包含B=[9,11]；方向取自此前非包含关系。</desc>
+<style>text{font-family:"PingFang SC","Heiti SC","STHeiti",sans-serif}</style>
+<rect x="0" y="0" width="1200" height="730" rx="0" fill="#f7f6f0" stroke="none"/>
+<text x="44" y="54" fill="#183642" font-size="32" font-weight="600" text-anchor="start">03  包含处理：相同输入，方向不同</text>
+<text x="44" y="90" fill="#546d76" font-size="18" font-weight="400" text-anchor="start">A=[8,12]包含B=[9,11]；方向取自此前非包含关系。</text>
+<text x="44" y="705" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">自制教学示意 · 非真实行情 · 定义与前提见教程及原作者出处</text>
+<rect x="44" y="138" width="1112" height="228" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="65" y="176" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">此前方向向上</text>
+<line x1="171.25" y1="226.66666666666666" x2="171.25" y2="301.3333333333333" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="159.25" y1="226.66666666666666" x2="183.25" y2="226.66666666666666" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="159.25" y1="301.3333333333333" x2="183.25" y2="301.3333333333333" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="190.25" y="231.66666666666666" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">12</text>
+<text x="190.25" y="306.3333333333333" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">8</text>
+<text x="171.25" y="349" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">A</text>
+<line x1="313.75" y1="245.33333333333334" x2="313.75" y2="282.6666666666667" stroke="#087f8c" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="301.75" y1="245.33333333333334" x2="325.75" y2="245.33333333333334" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="301.75" y1="282.6666666666667" x2="325.75" y2="282.6666666666667" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="332.75" y="250.33333333333334" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">11</text>
+<text x="332.75" y="287.6666666666667" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">9</text>
+<text x="313.75" y="349" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">B</text>
+<text x="430" y="266" fill="#087f8c" font-size="40" font-weight="400" text-anchor="start">→</text>
+<line x1="567.5" y1="226.66666666666666" x2="567.5" y2="282.6666666666667" stroke="#087f8c" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="555.5" y1="226.66666666666666" x2="579.5" y2="226.66666666666666" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="555.5" y1="282.6666666666667" x2="579.5" y2="282.6666666666667" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="586.5" y="231.66666666666666" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">12</text>
+<text x="586.5" y="287.6666666666667" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">9</text>
+<text x="567.5" y="349" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">合并后</text>
+<text x="690" y="250" fill="#183642" font-size="20" font-weight="400" text-anchor="start">H取max(12,11)=12；L取max(8,9)=9</text>
+<text x="690" y="292" fill="#546d76" font-size="18" font-weight="400" text-anchor="start">按时间顺序处理，不能跨根任意合并。</text>
+<rect x="44" y="393" width="1112" height="228" rx="14" fill="white" stroke="#ccd9db"/>
+<text x="65" y="431" fill="#087f8c" font-size="23" font-weight="600" text-anchor="start">此前方向向下</text>
+<line x1="171.25" y1="481.66666666666663" x2="171.25" y2="556.3333333333334" stroke="#546d76" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="159.25" y1="481.66666666666663" x2="183.25" y2="481.66666666666663" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="159.25" y1="556.3333333333334" x2="183.25" y2="556.3333333333334" stroke="#546d76" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="190.25" y="486.66666666666663" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">12</text>
+<text x="190.25" y="561.3333333333334" fill="#546d76" font-size="17" font-weight="400" text-anchor="start">8</text>
+<text x="171.25" y="604" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">A</text>
+<line x1="313.75" y1="500.33333333333337" x2="313.75" y2="537.6666666666666" stroke="#087f8c" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="301.75" y1="500.33333333333337" x2="325.75" y2="500.33333333333337" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="301.75" y1="537.6666666666666" x2="325.75" y2="537.6666666666666" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="332.75" y="505.33333333333337" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">11</text>
+<text x="332.75" y="542.6666666666666" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">9</text>
+<text x="313.75" y="604" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">B</text>
+<text x="430" y="521" fill="#087f8c" font-size="40" font-weight="400" text-anchor="start">→</text>
+<line x1="567.5" y1="500.33333333333337" x2="567.5" y2="556.3333333333334" stroke="#087f8c" stroke-width="7" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="555.5" y1="500.33333333333337" x2="579.5" y2="500.33333333333337" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<line x1="555.5" y1="556.3333333333334" x2="579.5" y2="556.3333333333334" stroke="#087f8c" stroke-width="3" stroke-dasharray="" stroke-linecap="round"/>
+<text x="586.5" y="505.33333333333337" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">11</text>
+<text x="586.5" y="561.3333333333334" fill="#087f8c" font-size="17" font-weight="400" text-anchor="start">8</text>
+<text x="567.5" y="604" fill="#546d76" font-size="17" font-weight="400" text-anchor="middle">合并后</text>
+<text x="690" y="505" fill="#183642" font-size="20" font-weight="400" text-anchor="start">H取min(12,11)=11；L取min(8,9)=8</text>
+<text x="690" y="547" fill="#546d76" font-size="18" font-weight="400" text-anchor="start">按时间顺序处理，不能跨根任意合并。</text>
+<text x="44" y="666" fill="#bc5a2e" font-size="20" font-weight="400" text-anchor="start">此前方向不足时，向前补数据或标记待定；不能看K线红绿来选择方向。</text></svg>

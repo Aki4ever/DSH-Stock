@@ -8,11 +8,13 @@
 2. 锁定分红全生命周期节点：董事会预案 -> 股东大会通过 -> 实施分配 -> 股权登记日 -> 除权除息日
 """
 
+from datetime import date
 import sys
 import os
 from typing import List, Dict, Any, Optional
 
 from scripts.data_sources.safe_session import safe_session
+from scripts.verified_sources import number
 
 EASTMONEY_DIVIDEND_URL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
 EASTMONEY_REFERER = "https://data.eastmoney.com/yjfp/"
@@ -56,8 +58,9 @@ class DividendAdapter:
             rec_date = (item.get("EQUITY_RECORD_DATE") or "").split(" ")[0]
             ex_date = (item.get("EX_DIVIDEND_DATE") or "").split(" ")[0]
             notice_date = (item.get("NOTICE_DATE") or "").split(" ")[0]
-            plan_profile = item.get("IMPL_PLAN_PROFILE") or item.get("PLAN_EXPLAIN") or "不分配不转增"
-            pretax_cash = float(item.get("PRETAX_BONUS_RMB") or 0.0)
+            if notice_date > date.today().isoformat(): continue
+            plan_profile = item.get("IMPL_PLAN_PROFILE") or item.get("PLAN_EXPLAIN") or "未提供"
+            pretax_cash = number(item.get("PRETAX_BONUS_RMB"))
 
             results.append({
                 "code": clean_code,
@@ -68,7 +71,7 @@ class DividendAdapter:
                 "record_date": rec_date if rec_date != "-" else "",
                 "ex_dividend_date": ex_date if ex_date != "-" else "",
                 "notice_date": notice_date,
-                "progress": item.get("ASSIGN_PROGRESS", "预案"),
+                "progress": item.get("ASSIGN_PROGRESS") or "未提供",
                 "source": "东方财富分红中心"
             })
 

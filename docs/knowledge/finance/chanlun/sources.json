@@ -1,0 +1,193 @@
+{
+  "source_access_date": "2026-09-19",
+  "assembled_date": "2026-09-20",
+  "scope": "author original pages; no full articles included",
+  "html_hash_semantics": "SHA-256 of retrieved HTML bytes",
+  "sources": [
+    {
+      "lesson": 15,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c010007j8.html",
+      "http_status": 200,
+      "sha256": "db66469e6a2fb5a576002e6df87fee413c9d6a47c546250cd0db8f8237b58332",
+      "text_chars": 1772,
+      "title": "教你炒股票15：没有趋势，没有背驰。_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 17,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c010007p1.html",
+      "http_status": 200,
+      "sha256": "7593352673ae687012263860a54c2e99024fa94e3878aaaf2db6d1e124c1c5d8",
+      "text_chars": 3799,
+      "title": "教你炒股票17：走势终完美_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 18,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c010007t8.html",
+      "http_status": 200,
+      "sha256": "96d89d9c4f7349f75a78261b32d5bcb8c34faacf5b2ed085693f0260cfe8c71a",
+      "text_chars": 3041,
+      "title": "教你炒股票18：不被面首的雏男是不完美的。_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 20,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c010007zw.html",
+      "http_status": 200,
+      "sha256": "f900718cb2f42f84b25d5e6f05c594466082ddc1dac1a288362997c13823c341",
+      "text_chars": 2546,
+      "title": "教你炒股票20：缠中说禅走势中枢级别扩张及第三类买卖点_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 21,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c0100082x.html",
+      "http_status": 200,
+      "sha256": "98b287c40371456865a2dea4e885dbeeebc8122ef6891ec321e9e446b8069698",
+      "text_chars": 3138,
+      "title": "教你炒股票21：缠中说禅买卖点分析的完备性_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 24,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c0100087y.html",
+      "http_status": 200,
+      "sha256": "c69b3a799c603cea90d62cfd534be9b33b588edc5414c143cd7036dd1428a0d7",
+      "text_chars": 2749,
+      "title": "教你炒股票24：MACD对背弛的辅助判断_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 25,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c010008ak.html",
+      "http_status": 200,
+      "sha256": "011a91caf8dcbd4ef616d2eb59035fe8f39fbd6949cb8b944baaf50ca0779e54",
+      "text_chars": 2611,
+      "title": "教你炒股票25：吻，MACD、背弛、中枢_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 27,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c010008h4.html",
+      "http_status": 200,
+      "sha256": "99d4ad87eddf94ed740051ee326fe9d1ccf4f9f0af0576db8deb393df30df4f4",
+      "text_chars": 3038,
+      "title": "教你炒股票27： 盘整背驰与历史性底部_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 29,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c010008la.html",
+      "http_status": 200,
+      "sha256": "73d207085a13d3379259faa5d46dce7d55e4cadfd429af825475643e84ad218b",
+      "text_chars": 3798,
+      "title": "教你炒股票29：转折的力度与级别_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 37,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000974.html",
+      "http_status": 200,
+      "sha256": "681847e8fd7b07d2e42339d83117d508a8bfad5869881aedf598b35a28efcbbd",
+      "text_chars": 1535,
+      "title": "教你炒股票37：背驰的再分辨_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 50,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000a5i.html",
+      "http_status": 200,
+      "sha256": "7d37dce514d18dbf1406ca38811c41da897d96e69e51b466f2be6da0b1390b7d",
+      "text_chars": 2646,
+      "title": "教你炒股票50：操作中的一些细节问题_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 53,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000aqw.html",
+      "http_status": 200,
+      "sha256": "e8c236d48601a1c33b6f79a5384b62cb8e7548e6f4bff95be5530e3a0ea7074e",
+      "text_chars": 2717,
+      "title": "教你炒股票53：三类买卖点的再分辨_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 62,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000bf2.html",
+      "http_status": 200,
+      "sha256": "e16a05e800d724889b96b7c3dad32a0507cabf3f059ad936da7c65a54c4fbd07",
+      "text_chars": 1427,
+      "title": "教你炒股票62：分型、笔与线段_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 63,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000bgd.html",
+      "http_status": 200,
+      "sha256": "2fe3c14810cf2587a23e7632f0ad173ee9a8f258f8d15c939e4bd56c4d84aaa2",
+      "text_chars": 2957,
+      "title": "教你炒股票63：替各位理理基本概念_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 65,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000bpo.html",
+      "http_status": 200,
+      "sha256": "456a2f7d6b4d953982a886c8c793b991da358725d39a7293d9d32916e0aa374f",
+      "text_chars": 2564,
+      "title": "教你炒股票65：再说说分型、笔、线段_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 67,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000c16.html",
+      "http_status": 200,
+      "sha256": "19e4df0fcf8e79ecf5c531a7f38fbc096c884d9da2a833a964536e3bd48630d8",
+      "text_chars": 1566,
+      "title": "教你炒股票67：线段的划分标准_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 71,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000c8i.html",
+      "http_status": 200,
+      "sha256": "484b3a964004ba34b4584379bca291e328ea55ddd9223d5e0913beb63de51011",
+      "text_chars": 2235,
+      "title": "教你炒股票71：线段划分标准的再分辨_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 72,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000cbj.html",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "lesson": 77,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000cih.html",
+      "http_status": 200,
+      "sha256": "6269b5b3692fffe921e7d6bae398bdad439b3c93faff850c880cee77c3857549",
+      "text_chars": 4037,
+      "title": "教你炒股票77：一些概念的再分辨\n_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 81,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000cmz.html",
+      "http_status": 200,
+      "sha256": "f6babd3ecf7151803f7e881281f452fbf886bba72422259fabd9b2b89709c9e9",
+      "text_chars": 3527,
+      "title": "教你炒股票81：图例、更正及分型、走势类型的哲学本质_缠中说禅_新浪博客",
+      "article_extracted": true
+    },
+    {
+      "lesson": 83,
+      "url": "https://blog.sina.com.cn/s/blog_486e105c01000cqy.html",
+      "http_status": 200,
+      "sha256": "93cb7a5d6f6d523c9953476f5a02551624647781b88eddedeac2d1a47b1d617a",
+      "text_chars": 1552,
+      "title": "教你炒股票83：笔-线段与线段-最小中枢结构的不同心理意义1_缠中说禅_新浪博客",
+      "article_extracted": true
+    }
+  ]
+}

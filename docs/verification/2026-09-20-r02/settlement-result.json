@@ -1,0 +1,54 @@
+{
+  "active_path": "/Users/linqiyu/.codex/task-checkpoints/active/01a0b9e1-684b-7752-abfa-51e2484c7a43--EXE-914A670F2201.json",
+  "archive_path": "/Users/linqiyu/.codex/task-checkpoints/archive/01a0b9e1-684b-7752-abfa-51e2484c7a43--EXE-914A670F2201.json",
+  "archived": true,
+  "changed": true,
+  "checkpoint_command": "finalize",
+  "command": "checkpoint",
+  "event": {
+    "changed": true,
+    "idempotent": false,
+    "path": "/Users/linqiyu/.codex/task-efficiency/events/984de11d1c7b4080d1c7a26b4b135ea200f2118767ab2b6df442b79a15f9f287.json",
+    "readback_verified": true
+  },
+  "governance": {
+    "next_step": "允许继续归档与交付",
+    "rework_reasons": [],
+    "status": "pass",
+    "systemic_issues": [],
+    "telemetry_gaps": []
+  },
+  "idempotent": false,
+  "ok": true,
+  "quality_status": "not_requested",
+  "readback_verified": true,
+  "safety": {
+    "capability_changed": false,
+    "history_deleted": false,
+    "route_or_gate_changed": false
+  },
+  "structured_timing": null,
+  "task_settlement": {
+    "captured_at": "2026-09-20T07:04:10.929086+00:00",
+    "disconnect_events": [],
+    "disconnect_measurement": "unknown",
+    "disconnect_time_seconds": null,
+    "effective_time_seconds": null,
+    "limits": {
+      "hidden_disconnects_included": false,
+      "input_output_token_split_available": false,
+      "unknown_values_estimated": false
+    },
+    "measurement_scope": "visible-runtime-events-only",
+    "time_source": "unknown",
+    "token_source": "unknown",
+    "token_total": null,
+    "total_time_seconds": null
+  },
+  "tool_call_breakdown": {
+    "duplicate": null,
+    "ordinary": null,
+    "retry": null,
+    "verification": null
+  }
+}

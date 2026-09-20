@@ -10,11 +10,14 @@ import os
 import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from scripts.stock_data_engine import get_quote, get_batch_quotes, generate_mock_kline, StockQuote
+from scripts.stock_data_engine import get_quote, get_batch_quotes, get_real_kline, StockQuote
 from scripts.stock_indicators import evaluate_stock, QuantitativeReport
 from scripts.stock_portfolio import build_portfolio_summary, PortfolioSummary, AlertMessage
 from scripts.stock_chart_svg import generate_stock_svg
 
+
+def real_value(value, spec=".2f"):
+    return format(value, spec) if value is not None else "未提供"
 
 def generate_daily_report(config_path: Optional[str] = None) -> str:
     """生成每日股票全盘综合研报并持久化保存为 Markdown 文件与配套 SVG 图表"""
@@ -31,12 +34,12 @@ def generate_daily_report(config_path: Optional[str] = None) -> str:
     # 1. 获取核心大盘指数行情
     raw_indices = cfg.get("indices", [])
     index_codes = [idx["code"] for idx in raw_indices]
-    index_quotes = get_batch_quotes(index_codes, allow_mock=True)
+    index_quotes = get_batch_quotes(index_codes, allow_mock=False)
 
     # 2. 获取自选股池行情并进行量化评分
     raw_watchlist = cfg.get("watchlist", [])
     watch_codes = [item["code"] for item in raw_watchlist]
-    watch_quotes = get_batch_quotes(watch_codes, allow_mock=True)
+    watch_quotes = get_batch_quotes(watch_codes, allow_mock=False)
     watch_map = {q.code: q for q in watch_quotes}
 
     quant_reports: List[QuantitativeReport] = []
@@ -52,7 +55,10 @@ def generate_daily_report(config_path: Optional[str] = None) -> str:
         if not q:
             continue
 
-        bars = generate_mock_kline(code, days=60, end_price=q.price)
+        try:
+            bars = get_real_kline(code, days=60, end_price=q.price)
+        except RuntimeError:
+            continue
         eval_rep = evaluate_stock(code, name, bars)
         quant_reports.append(eval_rep)
 
@@ -68,7 +74,11 @@ def generate_daily_report(config_path: Optional[str] = None) -> str:
             })
 
     # 3. 投资组合持仓与预警
-    summary, alerts = build_portfolio_summary(config_path, allow_mock=True)
+    portfolio_error = None
+    try:
+        summary, alerts = build_portfolio_summary(config_path, allow_mock=False)
+    except RuntimeError as exc:
+        portfolio_error = str(exc); summary, alerts = PortfolioSummary([]), []
 
     # 4. 组装 Markdown 综合研报
     lines: List[str] = []
@@ -77,8 +87,8 @@ def generate_daily_report(config_path: Optional[str] = None) -> str:
     lines.append("> ### 🏷️ **报告信息与状态总览**")
     lines.append(f"> - **生成时间**：`{now_time}`")
     lines.append(f"> - **系统版本**：`{cfg.get('system', {}).get('version', 'v1.0.0')}`")
-    lines.append(f"> - **监控标的数**：大盘指数 {len(index_quotes)} 只 ｜ 自选重点股 {len(quant_reports)} 只 ｜ 活跃持仓 {len(summary.positions)} 只")
-    lines.append("> - **风险预警状态**：" + (f"🚨 触发 {len(alerts)} 项风险/止盈预警！" if alerts else "🟢 各标的运行平稳，无风险警报"))
+    lines.append(f"> - **监控标的数**：大盘指数 {len(index_quotes)} 只 ｜ 自选重点股 {len(quant_reports)} 只 ｜ 持仓 {str(len(summary.positions))+'只' if not portfolio_error else '未核实'}")
+    lines.append("> - **风险预警状态**：" + (f"🚨 触发 {len(alerts)} 项风险/止盈预警！" if alerts else "未核实持仓，未生成预警" if portfolio_error else "未触发已配置预警条件"))
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -117,23 +127,26 @@ def generate_daily_report(config_path: Optional[str] = None) -> str:
     # 投资组合持仓看板
     lines.append("## 💼 三、投资组合持仓体检与浮动盈亏看板")
     lines.append("")
-    pnl_sign = "+" if summary.total_floating_pnl >= 0 else ""
-    day_sign = "+" if summary.today_floating_pnl >= 0 else ""
-    lines.append(f"> ### 💰 **投资组合整体资产看板**")
-    lines.append(f"> - 📌 **持仓总成本**：`¥{summary.total_cost:,.2f}`")
-    lines.append(f"> - 💎 **最新总市值**：`¥{summary.total_market_value:,.2f}`")
-    lines.append(f"> - 📊 **累计浮动盈亏**：`{pnl_sign}¥{summary.total_floating_pnl:,.2f}` (`{pnl_sign}{summary.total_floating_pnl_pct:.2f}%`)")
-    lines.append(f"> - ⚡ **今日收益变动**：`{day_sign}¥{summary.today_floating_pnl:,.2f}`")
-    lines.append("")
-    lines.append("| 标的代码 | 证券名称 | 持仓股数 | 持仓均价 | 最新市价 | 市值 (元) | 仓位占比 | 累计盈亏 | 累计收益率 | 今日浮动盈亏 |")
-    lines.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
-    for pos in summary.positions:
-        p_sign = "+" if pos.total_pnl >= 0 else ""
-        d_sign = "+" if pos.daily_pnl >= 0 else ""
-        lines.append(
-            f"| `{pos.code}` | **{pos.name}** | {pos.shares:,} | {pos.cost_price:.2f} | {pos.current_price:.2f} | {pos.market_value:,.2f} | {pos.weight_pct:.1f}% | {p_sign}{pos.total_pnl:,.2f} | **{p_sign}{pos.total_pnl_pct:.2f}%** | {d_sign}{pos.daily_pnl:,.2f} |"
-        )
-    lines.append("")
+    if portfolio_error:
+        lines.append("持仓未获取：" + portfolio_error)
+    else:
+        pnl_sign = "+" if summary.total_floating_pnl >= 0 else ""
+        day_sign = "+" if summary.today_floating_pnl >= 0 else ""
+        lines.append(f"> ### 💰 **投资组合整体资产看板**")
+        lines.append(f"> - 📌 **持仓总成本**：`¥{summary.total_cost:,.2f}`")
+        lines.append(f"> - 💎 **最新总市值**：`¥{summary.total_market_value:,.2f}`")
+        lines.append(f"> - 📊 **累计浮动盈亏**：`{pnl_sign}¥{summary.total_floating_pnl:,.2f}` (`{pnl_sign}{summary.total_floating_pnl_pct:.2f}%`)")
+        lines.append(f"> - ⚡ **今日收益变动**：`{day_sign}¥{summary.today_floating_pnl:,.2f}`")
+        lines.append("")
+        lines.append("| 标的代码 | 证券名称 | 持仓股数 | 持仓均价 | 最新市价 | 市值 (元) | 仓位占比 | 累计盈亏 | 累计收益率 | 今日浮动盈亏 |")
+        lines.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
+        for pos in summary.positions:
+            p_sign = "+" if pos.total_pnl >= 0 else ""
+            d_sign = "+" if pos.daily_pnl >= 0 else ""
+            lines.append(
+                f"| `{pos.code}` | **{pos.name}** | {pos.shares:,} | {pos.cost_price:.2f} | {pos.current_price:.2f} | {pos.market_value:,.2f} | {pos.weight_pct:.1f}% | {p_sign}{pos.total_pnl:,.2f} | **{p_sign}{pos.total_pnl_pct:.2f}%** | {d_sign}{pos.daily_pnl:,.2f} |"
+            )
+        lines.append("")
 
     # 预警提醒
     if alerts:
@@ -160,7 +173,7 @@ def generate_daily_report(config_path: Optional[str] = None) -> str:
     try:
         from scripts.data_sources import StockDataHub
         # 挑选重点持仓或自选进行基本面扫描
-        target_codes = [p.code for p in summary.positions[:2]] or [w["code"] for w in watchlist[:2]]
+        target_codes = [p.code for p in summary.positions[:2]] or [w["code"] for w in raw_watchlist[:2]]
         for t_code in target_codes:
             clean_c = t_code.lower().replace("sh", "").replace("sz", "")
             h_data = StockDataHub.get_holders(clean_c)
@@ -177,11 +190,11 @@ def generate_daily_report(config_path: Optional[str] = None) -> str:
             if top10.get("holders"):
                 top1_name = top10["holders"][0]["name"]
                 top1_ratio = top10["holders"][0]["hold_ratio"]
-                lines.append(f"- **第一大股东**：{top1_name} (持股 `{top1_ratio:.2f}%`)")
+                lines.append(f"- **第一大股东**：{top1_name} (持股 `{real_value(top1_ratio)}%`)")
             if h_count:
                 latest_h = h_count[0]
-                chg_h = f"{'+' if latest_h['change_ratio'] >= 0 else ''}{latest_h['change_ratio']:.2f}%"
-                lines.append(f"- **最新股东户数**：`{latest_h['holder_num']:,} 户` (环比: `{chg_h}`，集中度: `{latest_h['focus_level']}`)")
+                chg_h = real_value(latest_h['change_ratio'], '+.2f') + '%'
+                lines.append(f"- **最新股东户数**：`{real_value(latest_h['holder_num'], ',')} 户` (环比: `{chg_h}`，集中度: `{latest_h['focus_level']}`)")
 
             # 2. 分红情况
             if divs:
@@ -191,8 +204,8 @@ def generate_daily_report(config_path: Optional[str] = None) -> str:
             # 3. 大宗交易
             if blocks:
                 b = blocks[0]
-                prem = f"{'+' if b['premium_ratio'] >= 0 else ''}{b['premium_ratio']:.2f}%"
-                lines.append(f"- **近期大宗交易**：{b['trade_date']} 成交 `{b['amount_wan']:.1f}万元` (折溢价: `{prem}`，买方: `{b['buyer']}`)")
+                prem = real_value(b['premium_ratio'], '+.2f') + '%'
+                lines.append(f"- **近期大宗交易**：{b['trade_date']} 成交 `{real_value(b['amount_wan'], '.1f')}万元` (折溢价: `{prem}`，买方: `{b['buyer']}`)")
 
             # 4. 官方公告
             if notices:

@@ -1,0 +1,4 @@
+加载详情失败: Error: 返回的证券代码与请求不一致
+    at Object.openStockDetail (evalmachine.<anonymous>:43:46)
+    at async /Users/linqiyu/Documents/DSH/DSH股票/tests/test_detail_requests.js:26:38
+PASS: response race, symbol mismatch, unverified history rejection

@@ -1,0 +1,20 @@
+{
+  "verified_at": "2026-09-20T06:47:14.742988+00:00",
+  "target": "http://127.0.0.1:8888/",
+  "status": {
+    "status": "running",
+    "service": "DSH Stock Web Server",
+    "version": "v4.5.0",
+    "pid": 95646,
+    "port": 8888,
+    "uptime_seconds": 304,
+    "stock_count": 4601,
+    "csi50_count": 0,
+    "csi100_count": 0,
+    "db_path": "/Users/linqiyu/Documents/DSH/DSH股票/data/stock_database.db",
+    "snapshot_date": "2026-09-18",
+    "current_time": "2026-09-20 14:47:14"
+  },
+  "source_revision": "a0cd26fe9d4d5fb9d12c921e344a0c2e67f7b565",
+  "dirty": true
+}
