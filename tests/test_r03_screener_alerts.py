@@ -443,6 +443,17 @@ class ScreenResultPersistenceTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["code"], "sh600036")
 
+    def test_ordering_uses_real_volume_ratio_not_an_invented_score(self):
+        # 只按真实量比降序排序；score 字段即使被写入也不得影响顺序（不引入人造评分）
+        stock_db.replace_screen_results([
+            self.hit(code="sh600001"), self.hit(code="sz000002"),
+            self.hit(code="sh600003"), self.hit(code="sz000004"),
+        ])
+        rows = stock_db.list_screen_results()
+        ratios = [r["volume_ratio"] for r in rows]
+        self.assertEqual(ratios, sorted(ratios, reverse=True), "命中清单必须按真实量比降序")
+        self.assertTrue(all(r["volume_ratio"] is not None for r in rows))
+
     def test_filter_by_strategy_and_code(self):
         stock_db.replace_screen_results([self.hit(), self.hit(code="sz000001")])
         self.assertEqual(len(stock_db.list_screen_results(code="sz000001")), 1)

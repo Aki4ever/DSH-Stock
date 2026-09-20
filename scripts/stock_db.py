@@ -915,7 +915,13 @@ def replace_screen_results(hits: List[Dict[str, Any]]) -> int:
 
 
 def list_screen_results(strategy: str = "", code: str = "", limit: int = 500) -> List[Dict[str, Any]]:
-    """查询策略选股结果，返回完整命中载荷。"""
+    """
+    查询策略选股结果，返回完整命中载荷。
+
+    排序口径：**只按真实存在的判据数值排序**（当日量比降序、代码升序）。
+    刻意不引入任何「综合评分」——本项目不承诺收益，用人造分数排序会把筛选结果
+    伪装成预测结论。全部排序依据都是可复核的真实字段。
+    """
     import json as _json
     sql = "SELECT * FROM strategy_screen_results WHERE 1=1"
     params: List[Any] = []
@@ -925,7 +931,7 @@ def list_screen_results(strategy: str = "", code: str = "", limit: int = 500) ->
     if code:
         sql += " AND code = ?"
         params.append(code)
-    sql += " ORDER BY score DESC, code LIMIT ?"
+    sql += " ORDER BY volume_ratio DESC, code ASC LIMIT ?"
     params.append(int(limit))
     out = []
     with get_db_connection() as conn:

@@ -324,7 +324,7 @@
 - **Web**：「🎯 策略选股」页（`viewScreenerTab`）。含扫描控制与真实进度、选股快照、策略芯片、三判据参数可调（均量窗口 N / 放量倍数 K / 最小突破幅度）、「仅看可执行命中」筛选、命中清单（含全部判据数值）、告警通道状态与真实下发流水、可展开的策略判据说明。
 - **前端诚实呈现约束**：未获取时明确区分「**无结论**」与「无命中」——全部标的未获取时表格空态写明「这不是无命中而是无结论」；不可执行命中不显示建议股数。
 - 实现：`scripts/strategy_screener.py`、`scripts/alert_channels.py`（均新增）、`scripts/stock_db.py`（`strategy_screen_results` + `alert_dispatch_log` 两表及读写与冷却判定）、`scripts/stock_web_server.py`（任务状态 + 5 个端点）、`scripts/chanlun_signals.py`（`fetch_daily_bars` 改为返回数据新鲜度元信息）、`web/app.js`、`web/index.html`、`web/style.css`、`config/notify_config.example.json`、`.gitignore`。
-- 测试：`tests/test_r03_screener_alerts.py`（42 项），覆盖三条判据各自单独否决命中（含中枢未确认、中枢早于背离的反向结构、成交量缺失、K 线不足）、stale 数据拒绝冒充当日、未知策略拒绝、签名与独立 HMAC 对照、脱敏不泄露令牌、未配置不产生请求、非 https 拒绝、dry-run 零网络、密钥不入库（对流水表做明文断言）、冷却只由成功占用、不同交易日为新告警、不可执行不下发、单轮上限、结果表幂等/整体替换/业务表隔离。
+- 测试：`tests/test_r03_screener_alerts.py`（43 项），覆盖三条判据各自单独否决命中（含中枢未确认、中枢早于背离的反向结构、成交量缺失、K 线不足）、stale 数据拒绝冒充当日、未知策略拒绝、签名与独立 HMAC 对照、脱敏不泄露令牌、未配置不产生请求、非 https 拒绝、dry-run 零网络、密钥不入库（对流水表做明文断言）、冷却只由成功占用、不同交易日为新告警、不可执行不下发、单轮上限、结果表幂等/整体替换/业务表隔离、命中排序只用真实量比而非人造评分。
 
 ### 数据新鲜度口径补充（横切 REQ-008/REQ-012/REQ-019/REQ-020）
 `fetch_daily_bars` 现返回统一结构，显式区分四态并向下游传播：
