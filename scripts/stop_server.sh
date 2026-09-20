@@ -6,8 +6,16 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-PID_FILE="${BASE_DIR}/.server.pid"
+# 端口与 PID 文件口径必须与 start_server.sh 完全一致。
+# 注意：PORT 必须先定义再参与判断，否则非默认端口会误用 .server.pid 而停错进程。
 PORT="${DSH_STOCK_PORT:-8888}"
+if [ "${PORT}" = "8888" ]; then
+  PID_FILE="${BASE_DIR}/.server.pid"
+  WATCHDOG_PID_FILE="${BASE_DIR}/.watchdog.pid"
+else
+  PID_FILE="${BASE_DIR}/.server-${PORT}.pid"
+  WATCHDOG_PID_FILE="${BASE_DIR}/.watchdog-${PORT}.pid"
+fi
 
 echo "======================================================================"
 echo " 🛑 正在停止 DSH A股量化筛选 Web 服务端..."
@@ -16,7 +24,6 @@ echo "======================================================================"
 STOPPED=0
 
 # 0. 先停止高可用守护进程 (Watchdog)，防止停止时被自动拉起
-WATCHDOG_PID_FILE="${BASE_DIR}/.watchdog.pid"
 if [ -f "${WATCHDOG_PID_FILE}" ]; then
   WD_PID=$(cat "${WATCHDOG_PID_FILE}" 2>/dev/null || true)
   if [ -n "${WD_PID}" ] && kill -0 "${WD_PID}" 2>/dev/null; then

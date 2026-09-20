@@ -120,7 +120,15 @@ class AlertMessage:
 
 
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
-    """读取股票工程总配置"""
+    """
+    读取股票工程总配置。
+
+    路径优先级：显式参数 > DSH_STOCK_CONFIG 环境变量 > 默认 config/stock_config.json。
+    环境变量用于同机维护多份持仓底册；与 portfolio_checkup 保持同一口径，
+    避免 CLI 的「持仓看板」与「风险体检」两条路径读出不同底册。
+    """
+    if config_path is None:
+        config_path = os.environ.get("DSH_STOCK_CONFIG")
     if config_path is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         config_path = os.path.join(base_dir, "config", "stock_config.json")

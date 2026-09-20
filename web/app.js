@@ -98,6 +98,7 @@ const dom = {
   tabBtnCrawler: document.getElementById('tabBtnCrawler'),
   tabBtnRadar: document.getElementById('tabBtnRadar'),
   tabBtnScreener: document.getElementById('tabBtnScreener'),
+  tabBtnPortfolio: document.getElementById('tabBtnPortfolio'),
   viewFilterTab: document.getElementById('viewFilterTab'),
   viewDashboardTab: document.getElementById('viewDashboardTab'),
   viewWorldTab: document.getElementById('viewWorldTab'),
@@ -107,6 +108,7 @@ const dom = {
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
   viewRadarTab: document.getElementById('viewRadarTab'),
   viewScreenerTab: document.getElementById('viewScreenerTab'),
+  viewPortfolioTab: document.getElementById('viewPortfolioTab'),
   viewStockDetailTab: document.getElementById('viewStockDetailTab'),
   btnBackToStockList: document.getElementById('btnBackToStockList'),
 
@@ -404,6 +406,7 @@ function switchMainTab(tabId) {
   if (dom.tabBtnCrawler) dom.tabBtnCrawler.classList.toggle('active', tabId === 'crawler');
   if (dom.tabBtnRadar) dom.tabBtnRadar.classList.toggle('active', tabId === 'radar');
   if (dom.tabBtnScreener) dom.tabBtnScreener.classList.toggle('active', tabId === 'screener');
+  if (dom.tabBtnPortfolio) dom.tabBtnPortfolio.classList.toggle('active', tabId === 'portfolio');
 
   if (dom.viewFilterTab) dom.viewFilterTab.classList.toggle('hidden', tabId !== 'filter');
   if (dom.viewDashboardTab) dom.viewDashboardTab.classList.toggle('hidden', tabId !== 'dashboard');
@@ -413,6 +416,7 @@ function switchMainTab(tabId) {
   if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.toggle('hidden', tabId !== 'crawler');
   if (dom.viewRadarTab) dom.viewRadarTab.classList.toggle('hidden', tabId !== 'radar');
   if (dom.viewScreenerTab) dom.viewScreenerTab.classList.toggle('hidden', tabId !== 'screener');
+  if (dom.viewPortfolioTab) dom.viewPortfolioTab.classList.toggle('hidden', tabId !== 'portfolio');
 
   // 隐藏详情全屏页
   if (dom.viewStockDetailTab) dom.viewStockDetailTab.classList.add('hidden');
@@ -436,6 +440,8 @@ function switchMainTab(tabId) {
     loadScreenerResults();
     loadNotifyStatus();
     syncScreenerScanStatus();
+  } else if (tabId === 'portfolio') {
+    loadPortfolioCheckup();
   }
 }
 
@@ -6501,4 +6507,179 @@ async function loadNotifyHistory() {
   } catch (err) {
     body.innerHTML = `<tr><td colspan="6" class="empty-cell">下发记录读取失败：${escapeHtml(err.message)}</td></tr>`;
   }
+}
+
+/* ==========================================================================
+ * 需求REQ-021: 持仓组合风险体检前端
+ * 原则：未核实持仓不产出任何结论；无法判定的规则必须显示为「无法判定」而非「未触发」；
+ *       体检结果是纪律触发的事实陈述，页面上不得出现任何买卖建议式措辞。
+ * ========================================================================== */
+const portfolioState = {
+  report: null,
+  triggeredOnly: false,
+  riskOnly: false
+};
+
+const PORTFOLIO_RULE_LABELS = {
+  S1_take_profit: '止盈达标',
+  S2_stop_loss: '止损击穿',
+  S3_daily_move: '日内异动',
+  D1_ma_breakdown: '均线破位',
+  D2_chanlun_sell: '日线卖点',
+  D3_trailing_stop: '移动止盈回撤'
+};
+
+function togglePortfolioTriggeredOnly() {
+  portfolioState.triggeredOnly = !portfolioState.triggeredOnly;
+  document.getElementById('portfolioTriggeredOnly').classList.toggle('active', portfolioState.triggeredOnly);
+  renderPortfolioTable();
+}
+
+function togglePortfolioRiskOnly() {
+  portfolioState.riskOnly = !portfolioState.riskOnly;
+  document.getElementById('portfolioRiskOnly').classList.toggle('active', portfolioState.riskOnly);
+  renderPortfolioTable();
+}
+
+async function loadPortfolioCheckup() {
+  const body = document.getElementById('portfolioTableBody');
+  if (body) body.innerHTML = '<tr><td colspan="9" class="empty-cell">正在读取持仓体检结果…</td></tr>';
+  try {
+    const resp = await fetch('/api/portfolio/checkup', { cache: 'no-store' });
+    const json = await resp.json();
+    portfolioState.report = json;
+    renderPortfolioGate();
+    renderPortfolioSummary();
+    renderPortfolioTable();
+  } catch (err) {
+    if (body) body.innerHTML = `<tr><td colspan="9" class="empty-cell">体检读取失败：${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+/** 未核实持仓时，界面明确说明门禁原因，而不是显示 0 盈亏这类会被误读的数字 */
+function renderPortfolioGate() {
+  const report = portfolioState.report || {};
+  const bar = document.getElementById('portfolioGateBar');
+  const text = document.getElementById('portfolioGateText');
+  const blocked = report.status === 'unverified' || report.status === 'error';
+  if (bar) bar.style.display = blocked ? '' : 'none';
+  if (text) {
+    text.textContent = blocked
+      ? `${report.reason || '持仓底册未核实'}（底册声明条数：${report.portfolio_declared_count == null ? '未获取' : report.portfolio_declared_count}，未计入任何统计）`
+      : '';
+  }
+  return blocked;
+}
+
+function renderPortfolioSummary() {
+  const bar = document.getElementById('portfolioSummaryBar');
+  const text = document.getElementById('portfolioSummaryText');
+  const report = portfolioState.report || {};
+  const s = report.summary || {};
+  if (!bar || !text) return;
+  if (report.status !== 'available' || !s.position_count) {
+    bar.style.display = 'none';
+    const status = document.getElementById('portfolioDataStatus');
+    if (status) status.textContent = report.status === 'available' ? '无可体检持仓' : '等待持仓核实';
+    return;
+  }
+  bar.style.display = '';
+  text.textContent = `持仓 ${s.position_count} 只（跳过 ${s.skipped_count} 只）· `
+    + `市值 ${formatReal(s.total_market_value)} · 成本 ${formatReal(s.total_cost)} · `
+    + `浮动盈亏 ${formatReal(s.total_floating_pnl)}（${formatReal(s.total_floating_pnl_pct)}%）· `
+    + `当日盈亏 ${formatReal(s.today_floating_pnl)} · 触发规则 ${s.triggered_count} 条`
+    + `（危险 ${s.danger_count} / 警示 ${s.warning_count}）· 无法判定 ${s.unavailable_count} 条`;
+  const status = document.getElementById('portfolioDataStatus');
+  if (status) {
+    const stale = (report.positions || []).filter(p => p.data_status !== 'available').length;
+    status.textContent = stale
+      ? `${stale} 只持仓的日线并非最新（来源当前不可用），已使用此前核验过的真实历史`
+      : '全部持仓日线数据为最新';
+    status.className = stale ? 'radar-blocked' : 'radar-missing';
+  }
+}
+
+function portfolioFilteredPositions() {
+  let list = (portfolioState.report || {}).positions || [];
+  if (portfolioState.riskOnly) {
+    list = list.map(p => ({ ...p, rules: (p.rules || []).filter(r => r.triggered && (r.level === 'DANGER' || r.level === 'WARNING')) }))
+               .filter(p => p.rules.length > 0);
+  } else if (portfolioState.triggeredOnly) {
+    list = list.map(p => ({ ...p, rules: (p.rules || []).filter(r => r.triggered) }))
+               .filter(p => p.rules.length > 0);
+  }
+  return list;
+}
+
+function renderPortfolioRuleRow(rule) {
+  let icon = '⚪';
+  if (rule.status === 'unavailable') icon = '❓';
+  else if (rule.status === 'disabled') icon = '⏸';
+  else if (rule.triggered && rule.level === 'DANGER') icon = '🔴';
+  else if (rule.triggered && rule.level === 'WARNING') icon = '🟡';
+  else if (rule.triggered && rule.level === 'SUCCESS') icon = '🟢';
+  // 配色必须区分「危险 / 警示 / 达标 / 未触发 / 无法判定」五种语义。
+  // 早期实现把所有非 DANGER 的已触发规则都涂成警示色，会把「止盈达标」误报为风险信号。
+  let cls = 'is-idle';
+  if (rule.status === 'unavailable') cls = 'is-unavailable';
+  else if (rule.status === 'disabled') cls = 'is-disabled';
+  else if (!rule.triggered) cls = 'is-idle';
+  else if (rule.level === 'DANGER') cls = 'is-danger';
+  else if (rule.level === 'WARNING') cls = 'is-warn';
+  else if (rule.level === 'SUCCESS') cls = 'is-success';
+  else cls = 'is-info';
+  return `<div class="pf-rule ${cls}">
+    <span class="pf-rule-id">${icon} ${escapeHtml(PORTFOLIO_RULE_LABELS[rule.rule_id] || rule.rule_id)}</span>
+    <span class="pf-rule-detail">${escapeHtml(rule.detail || '')}</span>
+  </div>`;
+}
+
+function renderPortfolioTable() {
+  const body = document.getElementById('portfolioTableBody');
+  const counter = document.getElementById('portfolioPositionCount');
+  if (!body) return;
+  if (renderPortfolioGate()) {
+    body.innerHTML = '<tr><td colspan="9" class="empty-cell">持仓底册未核实，本页不产出任何盈亏或风险结论。请先核实每条持仓的代码、股数、成本价与买入日期。</td></tr>';
+    if (counter) counter.textContent = '0 只';
+    return;
+  }
+  const list = portfolioFilteredPositions();
+  if (counter) counter.textContent = `${list.length} 只`;
+  if (list.length === 0) {
+    body.innerHTML = `<tr><td colspan="9" class="empty-cell">${
+      ((portfolioState.report || {}).positions || []).length > 0
+        ? '当前筛选下没有匹配的持仓，请关闭筛选查看全部。'
+        : (portfolioState.report || {}).reason || '暂无可体检持仓。'}</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(p => {
+    const pnlCls = (p.total_pnl || 0) >= 0 ? 'pf-up' : 'pf-down';
+    const dayCls = (p.daily_pnl || 0) >= 0 ? 'pf-up' : 'pf-down';
+    const levelTag = p.highest_level === 'DANGER'
+      ? '<span class="audit-status-pill audit-status-fail">危险</span>'
+      : (p.highest_level === 'WARNING' ? '<span class="audit-status-pill audit-status-warn">警示</span>'
+        : (p.highest_level === 'SUCCESS' ? '<span class="audit-status-pill audit-status-success">达标</span>'
+          : '<span class="audit-status-pill">未触发</span>'));
+    const triggeredText = (p.triggered_rules || []).length
+      ? (p.triggered_rules || []).map(r => PORTFOLIO_RULE_LABELS[r] || r).join('、')
+      : '无';
+    const staleNote = p.data_status !== 'available'
+      ? `<div class="pf-stale">⚠️ 日线数据状态 ${escapeHtml(p.data_status)}（最后一根 ${escapeHtml(p.data_last_bar_date || '未获取')}）</div>` : '';
+    return `
+      <tr class="radar-row">
+        <td>${escapeHtml(p.name || '')} <code class="radar-code">${escapeHtml(p.code || '')}</code>
+            <div class="radar-missing">${escapeHtml(p.buy_date || '未填写买入日期')}</div></td>
+        <td>${formatReal(p.shares, 0)} 股<br><span class="radar-missing">¥${formatReal(p.cost_price)}</span></td>
+        <td>¥${formatReal(p.current_price)}</td>
+        <td>¥${formatReal(p.market_value)}</td>
+        <td>${formatReal(p.weight_pct)}%</td>
+        <td class="${pnlCls}">¥${formatReal(p.total_pnl)}<br>${formatReal(p.total_pnl_pct)}%</td>
+        <td class="${dayCls}">¥${formatReal(p.daily_pnl)}<br>${formatReal(p.daily_pnl_pct)}%</td>
+        <td>${levelTag}<div class="radar-reason">${escapeHtml(triggeredText)}</div></td>
+        <td class="radar-reason-cell">
+          ${(p.rules || []).map(renderPortfolioRuleRow).join('')}
+          ${staleNote}
+        </td>
+      </tr>`;
+  }).join('');
 }

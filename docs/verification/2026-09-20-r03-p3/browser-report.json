@@ -1,0 +1,73 @@
+{
+  "checks": [
+    {
+      "n": "持仓体检页可进入且与策略选股页互斥",
+      "ok": true,
+      "d": ""
+    },
+    {
+      "n": "未核实持仓时显示门禁而非盈亏数字",
+      "ok": true,
+      "d": "持仓底册尚未确认为真实持仓（config/stock_config.json 的 portfolio_verified 不为 true）。本项目不对未核实持仓产出任何盈亏或风险结论——请核实每条持仓的代码、股数、成本价与"
+    },
+    {
+      "n": "未核实仓位时不显示任何汇总数字",
+      "ok": true
+    },
+    {
+      "n": "未核实时表格不产出任何持仓行",
+      "ok": true,
+      "d": "持仓底册未核实，本页不产出任何盈亏或风险结论。请先核实每条持仓的代码、股数、成本价与买入日期。"
+    },
+    {
+      "n": "未核实时持仓计数不虚报",
+      "ok": true,
+      "d": "0 只"
+    },
+    {
+      "n": "接口如实返回未核实状态",
+      "ok": true,
+      "d": "status=unverified"
+    },
+    {
+      "n": "未核实时不返回任何持仓与汇总",
+      "ok": true,
+      "d": "底册声明 3 条，未计入统计"
+    },
+    {
+      "n": "响应体不泄露底册中的任何持仓信息",
+      "ok": true,
+      "d": "未出现任何证券名/成本价"
+    },
+    {
+      "n": "规则版本与静态/动态阈值随响应下发",
+      "ok": true,
+      "d": "MA20 移动止盈 8%"
+    },
+    {
+      "n": "响应携带免责声明",
+      "ok": true,
+      "d": ""
+    },
+    {
+      "n": "页面控制台无未预期错误",
+      "ok": true,
+      "d": ""
+    }
+  ],
+  "console_errors": [],
+  "contract": {
+    "status": "unverified",
+    "verified": false,
+    "ruleVersion": "REQ-021/v1",
+    "noPositions": true,
+    "emptySummary": true,
+    "declared": 3,
+    "disclaim": true,
+    "hasStatic": true,
+    "hasDynamic": true,
+    "maPeriod": 20,
+    "trail": 0.08,
+    "leaked": false
+  }
+}

@@ -34,7 +34,18 @@ BASE_DIR = os.path.dirname(CURRENT_DIR)
 WEB_DIR = os.path.join(BASE_DIR, "web")
 DATA_DIR = os.path.join(BASE_DIR, "data")
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
-PID_FILE = os.environ.get("DSH_PID_FILE", os.path.join(BASE_DIR, ".server.pid"))
+def _default_pid_file() -> str:
+    """
+    PID 文件按端口区分。默认端口 8888 沿用 .server.pid（保持既有运维习惯与向后兼容），
+    其他端口使用 .server-<port>.pid —— 避免同机多实例（多账户/多底册）互相覆盖 PID 文件，
+    进而让 stop_server.sh / watchdog 停错或误判进程。
+    """
+    port = str(os.environ.get("DSH_STOCK_PORT") or "8888")
+    name = ".server.pid" if port == "8888" else f".server-{port}.pid"
+    return os.path.join(BASE_DIR, name)
+
+
+PID_FILE = os.environ.get("DSH_PID_FILE") or _default_pid_file()
 VERSION_FILE = os.path.join(CONFIG_DIR, "version.json")
 CONSTITUENTS_FILE = os.path.join(CONFIG_DIR, "constituents.json")
 DB_FILE = os.environ.get("DSH_STOCK_DB", os.path.join(DATA_DIR, "stock_database.db"))
@@ -1022,6 +1033,19 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {"code": 200, "message": "success",
                                   "scan": dict(SCREENER_STATE),
                                   "snapshot": stock_db.screen_results_snapshot()})
+            return
+
+        # 3.6.3 需求REQ-021: 持仓组合风险体检
+        if url_path == "/api/portfolio/checkup":
+            from scripts.portfolio_checkup import run_checkup
+            try:
+                report = run_checkup()
+            except (RuntimeError, OSError, ValueError, KeyError, TypeError) as exc:
+                self._send_json(200, {"code": 200, "message": "success", "status": "error",
+                                      "reason": f"体检中止：{exc}",
+                                      "rule_version": "REQ-021/v1", "positions": [], "summary": {}})
+                return
+            self._send_json(200, dict(report, code=200, message="success"))
             return
 
         if url_path == "/api/notify/status":

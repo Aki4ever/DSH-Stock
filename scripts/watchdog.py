@@ -3,7 +3,7 @@
 """
 DSH Stock Server Watchdog (高可用自愈守护进程)
 功能:
-1. 持续监测 127.0.0.1:8888 端口与 /api/status 健康端点
+1. 持续监测 127.0.0.1:<DSH_STOCK_PORT|8888> 端口与 /api/status 健康端点
 2. 当发现服务失去响应、端口拒绝连接或进程意外退出时，1秒内自动平滑拉起服务
 3. 记录自愈日志与异常重启次数，保障 7x24 小时高可用在线
 """
@@ -19,9 +19,15 @@ from datetime import datetime
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
-PORT = 8888
-PID_FILE = os.path.join(BASE_DIR, ".server.pid")
-WATCHDOG_PID_FILE = os.path.join(BASE_DIR, ".watchdog.pid")
+def _port_scoped(port: str, default_name: str, template: str) -> str:
+    """默认端口沿用既有文件名（保持运维习惯），其他端口独立命名，避免多实例互相覆盖。"""
+    return os.path.join(BASE_DIR, default_name if port == "8888" else template.format(port=port))
+
+
+PORT = int(os.environ.get("DSH_STOCK_PORT") or 8888)
+_P = str(PORT)
+PID_FILE = os.environ.get("DSH_PID_FILE") or _port_scoped(_P, ".server.pid", ".server-{port}.pid")
+WATCHDOG_PID_FILE = os.environ.get("DSH_WATCHDOG_PID_FILE") or _port_scoped(_P, ".watchdog.pid", ".watchdog-{port}.pid")
 SERVER_SCRIPT = os.path.join(CURRENT_DIR, "stock_web_server.py")
 WATCHDOG_LOG = os.path.join(BASE_DIR, "watchdog.log")
 
@@ -79,11 +85,15 @@ def restart_server():
 
     # 2. 启动服务
     log_file = open(os.path.join(BASE_DIR, "server.log"), "a", encoding="utf-8")
+    env = dict(os.environ)
+    env["DSH_STOCK_PORT"] = str(PORT)
+    env["DSH_PID_FILE"] = PID_FILE
     proc = subprocess.Popen(
         [sys.executable, "-u", SERVER_SCRIPT, "--port", str(PORT)],
         cwd=BASE_DIR,
         stdout=log_file,
-        stderr=subprocess.STDOUT
+        stderr=subprocess.STDOUT,
+        env=env
     )
     with open(PID_FILE, "w") as f:
         f.write(str(proc.pid))

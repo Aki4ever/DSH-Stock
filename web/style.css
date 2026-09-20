@@ -3456,3 +3456,29 @@ body {
 .notify-chip.is-off { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.28); }
 .notify-note { font-size: 0.76rem; line-height: 1.7; color: #94a3b8; margin: 0 0 0.8rem; }
 .notify-note code { background: rgba(15, 23, 42, 0.8); padding: 0.06rem 0.34rem; border-radius: 4px; color: #7dd3fc; }
+
+/* 需求REQ-021: 持仓体检页 */
+.pf-rule {
+  display: flex; flex-direction: column; gap: 0.12rem;
+  padding: 0.3rem 0.5rem; margin-bottom: 0.3rem;
+  border-radius: 6px; border-left: 3px solid transparent;
+  background: rgba(15, 23, 42, 0.45);
+}
+.pf-rule-id { font-size: 0.74rem; font-weight: 600; color: #cbd5e1; }
+.pf-rule-detail { font-size: 0.74rem; line-height: 1.55; color: #94a3b8; }
+.pf-rule.is-danger { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+.pf-rule.is-danger .pf-rule-id { color: #fca5a5; }
+.pf-rule.is-warn { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.09); }
+.pf-rule.is-warn .pf-rule-id { color: #fcd34d; }
+.pf-rule.is-unavailable { border-left-color: #64748b; background: rgba(100, 116, 139, 0.12); }
+.pf-rule.is-unavailable .pf-rule-id { color: #cbd5e1; }
+.pf-rule.is-idle { opacity: 0.62; }
+.pf-up { color: #fca5a5; }
+.pf-down { color: #86efac; }
+.pf-stale { margin-top: 0.3rem; font-size: 0.72rem; color: #fcd34d; }
+/* 需求REQ-021: 规则配色需区分达标与信息级，不得与警示混用 */
+.pf-rule.is-success { border-left-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+.pf-rule.is-success .pf-rule-id { color: #86efac; }
+.pf-rule.is-info { border-left-color: #38bdf8; background: rgba(56, 189, 248, 0.09); }
+.pf-rule.is-info .pf-rule-id { color: #7dd3fc; }
+.pf-rule.is-disabled { border-left-color: #475569; opacity: 0.5; }

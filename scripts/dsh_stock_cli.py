@@ -145,8 +145,19 @@ def cmd_analyze(code: str):
     return 0
 
 
-def cmd_portfolio():
-    """查看投资组合持仓与浮动盈亏"""
+def cmd_portfolio(as_json=False):
+    """查看投资组合持仓与浮动盈亏，并输出 REQ-021 风险体检结论"""
+    if as_json:
+        # 需求REQ-021: 结构化输出，供脚本与外部工具消费；未核实持仓会如实返回 unverified
+        import json as _json
+        from scripts.portfolio_checkup import run_checkup
+        try:
+            report = run_checkup()
+        except (RuntimeError, OSError, ValueError, KeyError, TypeError) as exc:
+            print(_json.dumps({"status": "error", "reason": str(exc)}, ensure_ascii=False, indent=2))
+            return 1
+        print(_json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["status"] == "available" else 1
     try:
         summary, alerts = build_portfolio_summary(allow_mock=False)
     except RuntimeError as exc:
@@ -363,8 +374,10 @@ def main():
     p_ana = subparsers.add_parser("analyze", help="对单只股票进行 100 分制多空量化评分与指标体检")
     p_ana.add_argument("code", help="股票代码，如 600519 或 sz300750")
 
-    # portfolio 子命令
-    subparsers.add_parser("portfolio", help="查看投资组合持仓看板、累计盈亏与风险预警")
+    # portfolio 子命令 (需求REQ-021: 新增 --json 结构化输出)
+    p_port = subparsers.add_parser("portfolio", help="查看投资组合持仓看板、累计盈亏与风险预警")
+    p_port.add_argument("--json", action="store_true", dest="portfolio_json",
+                        help="以 JSON 输出完整体检结论（含静态与动态规则逐条触发状态）")
 
     # chart 子命令
     p_chart = subparsers.add_parser("chart", help="生成指定标的的矢量 SVG K线与技术指标走势图")
@@ -445,7 +458,7 @@ def main():
     elif args.command == "analyze":
         return cmd_analyze(args.code)
     elif args.command == "portfolio":
-        return cmd_portfolio()
+        return cmd_portfolio(getattr(args, "portfolio_json", False))
     elif args.command == "chart":
         return cmd_chart(args.code, args.output)
     elif args.command == "holder":

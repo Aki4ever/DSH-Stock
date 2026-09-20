@@ -45,6 +45,9 @@
       <button id="tabBtnScreener" class="nav-tab-btn" onclick="switchMainTab('screener')">
         <span>🎯 策略选股</span>
       </button>
+      <button id="tabBtnPortfolio" class="nav-tab-btn" onclick="switchMainTab('portfolio')">
+        <span>💼 持仓体检</span>
+      </button>
     </nav>
 
     <!-- 服务端运行状态常显中枢 -->
@@ -1345,6 +1348,104 @@
               <li><b>数据新鲜度</b>：本策略三条判据都依赖「最新交易日」。若日线来源当前不可用、只能取到此前的历史缓存，本轮会明确拒绝判定，绝不用历史某天的结构冒充今日信号。</li>
               <li><b>成交量口径</b>：只使用可信不复权日线的真实成交量字段；成交额来源未提供即不参与判定，不用「成交量 × 收盘价」之类的推算值冒充成交额。</li>
             </ul>
+          </div>
+        </details>
+
+      </div>
+    </div>
+
+    <!-- 视图 9: 持仓组合风险体检 (Tab: portfolio)            -->
+    <!-- ==================================================== -->
+    <div id="viewPortfolioTab" class="tab-view hidden">
+      <div class="radar-dashboard">
+
+        <div class="crawler-header-card">
+          <div class="crawler-title-area">
+            <h2>💼 持仓组合风险体检与动态止盈止损</h2>
+            <p>
+              在<b>已核实</b>持仓底册之上，按既定纪律逐条体检：止盈 +20% / 止损 -8% / 日异动 ±5%，
+              以及 MA20 破位、日线 S1/S2/S3 卖点、自持仓期峰值回撤 8% 移动止盈。
+              每条规则都会给出判定所用的真实数值与是否可判定；
+              <b>体检结果是按纪律触发的结构化事实，不构成投资建议，不承诺收益。</b>
+            </p>
+          </div>
+          <div class="crawler-btn-group">
+            <button class="btn btn-crawl-full" onclick="loadPortfolioCheckup()">🩺 重新体检</button>
+          </div>
+        </div>
+
+        <div id="portfolioGateBar" class="data-baseline-bar is-warning" style="display:none;">
+          <b>⛔ 无法体检：</b><span id="portfolioGateText"></span>
+        </div>
+
+        <div id="portfolioSummaryBar" class="data-baseline-bar" style="display:none;">
+          <b>📊 组合概览：</b><span id="portfolioSummaryText"></span>
+        </div>
+
+        <div class="radar-filter-bar">
+          <div class="radar-filter-group">
+            <span class="radar-filter-label">结论口径</span>
+            <div class="radar-chip-row">
+              <button type="button" id="portfolioTriggeredOnly" class="seg-btn" onclick="togglePortfolioTriggeredOnly()">仅看已触发规则</button>
+              <button type="button" id="portfolioRiskOnly" class="seg-btn" onclick="togglePortfolioRiskOnly()">仅看危险与警示</button>
+            </div>
+          </div>
+          <div class="radar-filter-group">
+            <span class="radar-filter-label">数据口径</span>
+            <div class="radar-chip-row">
+              <span id="portfolioDataStatus" class="radar-missing">正在核验…</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="radar-result-card">
+          <div class="radar-result-head">
+            <h3>🧾 持仓明细与规则触发</h3>
+            <span id="portfolioPositionCount" class="radar-result-count">0 只</span>
+          </div>
+          <div class="table-scroll">
+            <table class="crawler-table radar-table">
+              <thead>
+                <tr>
+                  <th style="width:150px;">证券</th>
+                  <th style="width:92px;">持股/成本</th>
+                  <th style="width:92px;">现价</th>
+                  <th style="width:96px;">市值</th>
+                  <th style="width:88px;">仓位</th>
+                  <th style="width:140px;">累计盈亏</th>
+                  <th style="width:110px;">当日盈亏</th>
+                  <th style="width:120px;">规则触发</th>
+                  <th>逐条规则判定</th>
+                </tr>
+              </thead>
+              <tbody id="portfolioTableBody">
+                <tr><td colspan="9" class="empty-cell">正在读取持仓体检结果…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <details class="radar-method-card">
+          <summary>📖 体检规则与口径说明（点击展开）</summary>
+          <div class="radar-method-body">
+            <p><b>前置门禁</b>：持仓底册必须已核实（<code>config/stock_config.json</code> 的 <code>portfolio_verified=true</code>）。
+            未核实时本页不产出任何盈亏或风险结论，也不做任何统计——避免把样例或占位持仓当成真实持仓。</p>
+            <p><b>静态规则</b></p>
+            <ul>
+              <li><b>S1 止盈达标</b>：累计收益率 ≥ +20%（阈值可在 <code>alert_rules</code> 调整）。</li>
+              <li><b>S2 止损击穿</b>：累计收益率 ≤ -8%。</li>
+              <li><b>S3 日内异动</b>：当日涨跌幅 ≥ +5% 或 ≤ -5%。</li>
+            </ul>
+            <p><b>动态规则</b></p>
+            <ul>
+              <li><b>D1 MA20 破位</b>：最新收盘价跌破 MA20（周期可配置）。</li>
+              <li><b>D2 日线卖点</b>：复用 REQ-019 引擎的日线 S1/S2/S3，随信号携带规则版本与可执行性。</li>
+              <li><b>D3 移动止盈回撤</b>：自持仓期内最高价回撤 ≥ 8%。峰值取自买入日之后的日线最高价；
+              若买入日早于来源覆盖起点，会明确标注峰值可能被低估，不假装覆盖完整。</li>
+            </ul>
+            <p><b>不可判定</b>：日线未获取或K线不足时，相关规则标注为「无法判定」而不是「未触发」——
+            没有数据与没有风险是两件完全不同的事。</p>
+            <p><b>行情口径</b>：真实多源行情，任一必需字段缺失即报错，绝不补 0 或猜测。</p>
           </div>
         </details>
 

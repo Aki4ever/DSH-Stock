@@ -6,8 +6,16 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-PID_FILE="${BASE_DIR}/.server.pid"
 PORT="${DSH_STOCK_PORT:-8888}"
+
+# PID 文件按端口区分：默认端口沿用 .server.pid，其他端口独立命名，避免多实例互相覆盖
+if [ "${PORT}" = "8888" ]; then
+  PID_FILE="${BASE_DIR}/.server.pid"
+  WATCHDOG_PID_FILE="${BASE_DIR}/.watchdog.pid"
+else
+  PID_FILE="${BASE_DIR}/.server-${PORT}.pid"
+  WATCHDOG_PID_FILE="${BASE_DIR}/.watchdog-${PORT}.pid"
+fi
 
 echo "======================================================================"
 echo " 🚀 正在启动 DSH A股量化筛选 Web 服务端 (端口: ${PORT})..."
@@ -47,14 +55,14 @@ if [ "${READY}" -eq 1 ]; then
   echo "📄 运行日志文件  : ${BASE_DIR}/server.log"
 
   # 启动高可用自愈守护进程 (Watchdog)
-  WATCHDOG_PID_FILE="${BASE_DIR}/.watchdog.pid"
   if [ -f "${WATCHDOG_PID_FILE}" ]; then
     OLD_WD_PID=$(cat "${WATCHDOG_PID_FILE}" 2>/dev/null || true)
     if [ -n "${OLD_WD_PID}" ] && kill -0 "${OLD_WD_PID}" 2>/dev/null; then
       kill -9 "${OLD_WD_PID}" 2>/dev/null || true
     fi
   fi
-  nohup python3 -u "${SCRIPT_DIR}/watchdog.py" > /dev/null 2>&1 &
+  DSH_STOCK_PORT="${PORT}" DSH_PID_FILE="${PID_FILE}" DSH_WATCHDOG_PID_FILE="${WATCHDOG_PID_FILE}" \
+    nohup python3 -u "${SCRIPT_DIR}/watchdog.py" > /dev/null 2>&1 &
   echo "🛡️ 高可用自愈看门狗已激活守护进程，7x24小时保证 127.0.0.1:${PORT} 在线自愈。"
 else
   echo "⚠️ 服务端正在启动中，请检查日志: cat ${BASE_DIR}/server.log"
