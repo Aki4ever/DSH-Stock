@@ -45,3 +45,6 @@ temp/
 
 # Local recoverable release baselines (not production data)
 /data/backups/
+
+# 需求REQ-020: 告警密钥配置文件绝不入库、不入版本控制
+config/notify_config.json

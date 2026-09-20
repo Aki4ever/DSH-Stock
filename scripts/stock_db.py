@@ -192,6 +192,40 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_radar_code ON chanlun_signal_radar(code);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_radar_period ON chanlun_signal_radar(period);")
 
+        # 9. 需求REQ-020: 策略选股结果表 (每次扫描整体替换)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS strategy_screen_results (
+            hit_key TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            name TEXT DEFAULT '',
+            strategy TEXT NOT NULL,
+            trade_date TEXT DEFAULT '',
+            score REAL,
+            close REAL,
+            volume_ratio REAL,
+            pivot_zg REAL,
+            payload TEXT NOT NULL,
+            computed_at TEXT DEFAULT ''
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_screen_strategy ON strategy_screen_results(strategy);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_screen_code ON strategy_screen_results(code);")
+
+        # 10. 需求REQ-020: 告警下发流水 (仅记录真实下发结果，绝不记录任何密钥/令牌明文)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS alert_dispatch_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alert_key TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            sent_at TEXT NOT NULL,
+            ok INTEGER NOT NULL DEFAULT 0,
+            status_code INTEGER,
+            target_hint TEXT DEFAULT '',
+            error TEXT DEFAULT ''
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_alert_key ON alert_dispatch_log(alert_key, channel, sent_at);")
+
         conn.commit()
 
     # 需求REQ-017: 基准兜底初始化 (无基准时回填最近一条已核验成功批次)
@@ -847,3 +881,118 @@ def chanlun_radar_snapshot() -> Dict[str, Any]:
 if __name__ == "__main__":
     init_db()
     print(f"[DB] 数据库已初始化成功，路径: {DB_PATH}")
+
+
+# ============================================================
+# 需求REQ-020: 策略选股结果读写
+# ============================================================
+
+def replace_screen_results(hits: List[Dict[str, Any]]) -> int:
+    """整体替换策略选股结果（一次扫描 = 一个快照），幂等且不残留上一轮命中。"""
+    import json as _json
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rows = []
+    for hit in hits or []:
+        key = "|".join([str(hit.get("strategy") or ""), str(hit.get("code") or ""), str(hit.get("trade_date") or "")])
+        rows.append((
+            key, hit.get("code") or "", hit.get("name") or "", hit.get("strategy") or "",
+            hit.get("trade_date") or "", hit.get("score"), hit.get("close"),
+            hit.get("volume_ratio"), hit.get("pivot_zg"),
+            _json.dumps(hit, ensure_ascii=False), now_str,
+        ))
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM strategy_screen_results;")
+        if rows:
+            cursor.executemany("""
+            INSERT OR REPLACE INTO strategy_screen_results (
+                hit_key, code, name, strategy, trade_date, score, close,
+                volume_ratio, pivot_zg, payload, computed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, rows)
+        conn.commit()
+        return len(rows)
+
+
+def list_screen_results(strategy: str = "", code: str = "", limit: int = 500) -> List[Dict[str, Any]]:
+    """查询策略选股结果，返回完整命中载荷。"""
+    import json as _json
+    sql = "SELECT * FROM strategy_screen_results WHERE 1=1"
+    params: List[Any] = []
+    if strategy:
+        sql += " AND strategy = ?"
+        params.append(strategy)
+    if code:
+        sql += " AND code = ?"
+        params.append(code)
+    sql += " ORDER BY score DESC, code LIMIT ?"
+    params.append(int(limit))
+    out = []
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        for row in cursor.execute(sql, tuple(params)).fetchall():
+            record = dict(row)
+            try:
+                record["hit"] = _json.loads(record.get("payload") or "{}")
+            except (ValueError, TypeError):
+                record["hit"] = None
+            record.pop("payload", None)
+            out.append(record)
+    return out
+
+
+def screen_results_snapshot() -> Dict[str, Any]:
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        total = cursor.execute("SELECT COUNT(*) c FROM strategy_screen_results;").fetchone()["c"]
+        by_strategy = {r["strategy"]: r["c"] for r in cursor.execute(
+            "SELECT strategy, COUNT(*) c FROM strategy_screen_results GROUP BY strategy;").fetchall()}
+        last = cursor.execute("SELECT MAX(computed_at) m FROM strategy_screen_results;").fetchone()["m"]
+    return {"total": total, "by_strategy": by_strategy, "computed_at": last}
+
+
+# ============================================================
+# 需求REQ-020: 告警下发流水与冷却判定
+# ============================================================
+
+def record_alert_dispatch(alert_key: str, channel: str, ok: bool, status_code: Optional[int] = None,
+                          target_hint: str = "", error: str = "") -> None:
+    """记录一次真实下发结果。target_hint 只能是脱敏后的目标提示，严禁写入任何密钥。"""
+    with get_db_connection() as conn:
+        conn.execute("""
+        INSERT INTO alert_dispatch_log (alert_key, channel, sent_at, ok, status_code, target_hint, error)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+        """, (alert_key, channel, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+              1 if ok else 0, status_code, target_hint, error))
+        conn.commit()
+
+
+def list_alert_dispatch(limit: int = 100) -> List[Dict[str, Any]]:
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM alert_dispatch_log ORDER BY id DESC LIMIT ?;", (int(limit),))
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def alert_cooldown_remaining(alert_key: str, channel: str, cooldown_minutes: int) -> int:
+    """
+    返回冷却剩余分钟数；0 表示不在冷却中、可以下发。
+    只把**成功下发**计入冷却，失败的下发不占用冷却窗口，避免一次网络抖动静默丢掉告警。
+    """
+    if cooldown_minutes <= 0:
+        return 0
+    with get_db_connection() as conn:
+        row = conn.execute("""
+        SELECT sent_at FROM alert_dispatch_log
+        WHERE alert_key=? AND channel=? AND ok=1
+        ORDER BY id DESC LIMIT 1;
+        """, (alert_key, channel)).fetchone()
+    if not row or not row["sent_at"]:
+        return 0
+    try:
+        last = datetime.strptime(row["sent_at"], "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return 0
+    elapsed = (datetime.now() - last).total_seconds() / 60.0
+    remaining = cooldown_minutes - elapsed
+    return int(remaining) if remaining > 0 else 0

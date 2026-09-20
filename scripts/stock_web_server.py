@@ -485,6 +485,81 @@ def start_chanlun_radar_scan(codes=None, refresh: bool = False) -> Tuple[bool, s
     return True, "雷达池扫描已启动"
 
 
+# ============================================================
+# 需求REQ-020: 策略选股与告警下发任务状态
+# ============================================================
+SCREENER_LOCK = threading.Lock()
+SCREENER_STATE: Dict[str, Any] = {
+    "status": "idle",          # idle | running | done | failed
+    "strategy": "dip-divergence-breakout",
+    "total": 0,
+    "done": 0,
+    "current": "",
+    "started_at": None,
+    "finished_at": None,
+    "hit_count": 0,
+    "miss_count": 0,
+    "unavailable_count": 0,
+    "persisted_count": 0,
+    "unavailable": [],
+    "notify": None,
+    "error": None,
+}
+
+
+def _screener_worker(pool=None, strategy: str = "dip-divergence-breakout",
+                     notify_channels=None, refresh: bool = False, dry_run: bool = False):
+    from scripts.strategy_screener import run_screen
+
+    def progress(index, total, code):
+        with SCREENER_LOCK:
+            SCREENER_STATE["done"] = index - 1
+            SCREENER_STATE["total"] = total
+            SCREENER_STATE["current"] = code
+
+    try:
+        result = run_screen(pool, strategy=strategy, refresh=refresh, persist=True, progress=progress)
+        notify_outcome = None
+        if notify_channels:
+            from scripts.alert_channels import notify_hits
+            try:
+                notify_outcome = notify_hits(result["hits"], notify_channels, dry_run=dry_run)
+            except Exception as exc:  # noqa: BLE001
+                notify_outcome = {"sent": 0, "reason": f"告警下发异常: {exc}", "results": []}
+        with SCREENER_LOCK:
+            SCREENER_STATE.update({
+                "status": "done", "total": result["universe_count"], "done": result["universe_count"],
+                "current": "", "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "hit_count": result["hit_count"], "miss_count": result["miss_count"],
+                "unavailable_count": result["unavailable_count"],
+                "persisted_count": result["persisted_count"],
+                "unavailable": result["unavailable"], "notify": notify_outcome, "error": None,
+            })
+    except Exception as exc:  # noqa: BLE001
+        with SCREENER_LOCK:
+            SCREENER_STATE.update({
+                "status": "failed", "current": "",
+                "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "error": f"策略选股失败: {exc}",
+            })
+
+
+def start_screener_run(pool=None, strategy: str = "dip-divergence-breakout",
+                       notify_channels=None, refresh: bool = False, dry_run: bool = False) -> Tuple[bool, str]:
+    with SCREENER_LOCK:
+        if SCREENER_STATE["status"] == "running":
+            return False, f"策略选股已在进行中（{SCREENER_STATE['done']}/{SCREENER_STATE['total']}）"
+        SCREENER_STATE.update({
+            "status": "running", "strategy": strategy, "total": 0, "done": 0, "current": "",
+            "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "finished_at": None,
+            "hit_count": 0, "miss_count": 0, "unavailable_count": 0, "persisted_count": 0,
+            "unavailable": [], "notify": None, "error": None,
+        })
+    threading.Thread(target=_screener_worker, args=(pool, strategy, notify_channels, refresh, dry_run),
+                     daemon=True).start()
+    return True, "策略选股已启动"
+
+
 
 # ====================================================
 # 需求REQ-017: 数据基准 (Baseline) 口径辅助函数
@@ -921,6 +996,56 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        # 3.6.2 需求REQ-020: 策略选股结果与告警通道状态
+        if url_path == "/api/screener/results":
+            from scripts import stock_db
+            from scripts.strategy_screener import STRATEGY_META
+            q = parse_qs(urlsplit(self.path).query)
+            strategy = (q.get("strategy", [""])[0] or "").strip()
+            code = (q.get("code", [""])[0] or "").strip()
+            limit = int(q.get("limit", ["500"])[0] or 500)
+            records = stock_db.list_screen_results(strategy=strategy, code=code, limit=limit)
+            self._send_json(200, {
+                "code": 200, "message": "success",
+                "strategies": [{"key": k, "name": v["name"], "side": v["side"],
+                                "desc": v["desc"], "defaults": v["defaults"]} for k, v in STRATEGY_META.items()],
+                "snapshot": stock_db.screen_results_snapshot(),
+                "scan": dict(SCREENER_STATE),
+                "data": [r.get("hit") for r in records if r.get("hit")],
+                "disclaimer": ("命中为结构化条件筛选结果，不构成投资建议，不承诺收益或胜率；"
+                               "未命中不代表该证券没有机会或没有风险。"),
+            })
+            return
+
+        if url_path == "/api/screener/scan-status":
+            from scripts import stock_db
+            self._send_json(200, {"code": 200, "message": "success",
+                                  "scan": dict(SCREENER_STATE),
+                                  "snapshot": stock_db.screen_results_snapshot()})
+            return
+
+        if url_path == "/api/notify/status":
+            from scripts.alert_channels import channel_status, load_notify_config
+            config = load_notify_config()
+            self._send_json(200, {
+                "code": 200, "message": "success",
+                "enabled": bool(config.get("enabled")),
+                "cooldown_minutes": config.get("cooldown_minutes"),
+                "max_per_run": config.get("max_per_run"),
+                "channels": channel_status(config),
+                "note": ("Webhook 与加签密钥只从 config/notify_config.json 读取，既不入库也不入版本控制；"
+                         "此处只返回是否已配置与脱敏目标提示。"),
+            })
+            return
+
+        if url_path == "/api/notify/history":
+            from scripts import stock_db
+            limit = int((parse_qs(urlsplit(self.path).query).get("limit", ["50"])[0]) or 50)
+            self._send_json(200, {"code": 200, "message": "success",
+                                  "data": stock_db.list_alert_dispatch(limit=limit),
+                                  "note": "只记录真实下发结果与脱敏目标提示，不含任何密钥。"})
+            return
+
         if url_path.startswith('/api/chanlun/'):
             try:
                 from scripts.chanlun_analysis import analyze_bars
@@ -1183,6 +1308,31 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "success": started,
                 "message": msg,
                 "scan": dict(CHANLUN_RADAR_STATE),
+            })
+            return
+
+        # 6.6 需求REQ-020: 启动策略选股 (/api/screener/scan)
+        if url_path == "/api/screener/scan":
+            pool = params.get("codes")
+            codes = None
+            if isinstance(pool, list) and pool:
+                from scripts.chanlun_signals import normalize_code
+                codes = [(normalize_code(str(c)), "") for c in pool if str(c).strip()]
+            notify_raw = params.get("notify")
+            notify_channels = None
+            if isinstance(notify_raw, list):
+                notify_channels = [str(c).strip() for c in notify_raw if str(c).strip()] or None
+            elif isinstance(notify_raw, str) and notify_raw.strip() and notify_raw.strip().lower() != "all":
+                notify_channels = [c.strip() for c in notify_raw.split(",") if c.strip()]
+            elif isinstance(notify_raw, str) and notify_raw.strip().lower() == "all":
+                notify_channels = ["feishu", "dingtalk"]
+            started, msg = start_screener_run(
+                codes, strategy=str(params.get("strategy") or "dip-divergence-breakout"),
+                notify_channels=notify_channels,
+                refresh=bool(params.get("refresh")), dry_run=bool(params.get("dry_run")))
+            self._send_json(200 if started else 409, {
+                "code": 200 if started else 409, "success": started, "message": msg,
+                "scan": dict(SCREENER_STATE),
             })
             return
 

@@ -349,23 +349,44 @@ def normalize_code(code: str) -> str:
     return f"sz{clean}"
 
 
-def fetch_daily_bars(code: str, refresh: bool = False) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+def fetch_daily_bars(code: str, refresh: bool = False) -> Dict[str, Any]:
     """
     日线使用与产品同一套可信不复权历史服务（REQ-008/012 口径），不使用前复权数据。
-    返回 (bars, error)；error 非空表示来源未获取，调用方不得据此产出信号。
+
+    返回统一结构：
+      {"bars": [...], "error": str|None, "data_status": "available"|"partial"|"stale"|"unavailable",
+       "coverage_end": "YYYY-MM-DD"|None, "source": str, "provider_history_complete": bool}
+
+    新鲜度口径（关键，不得含糊）：
+    - `available` / `partial`：本次来源响应成功，覆盖区间可追溯到 `coverage_end`。
+    - `stale`：来源当前不可用，回落到的**是此前已核验并落库的真实完整历史**。数据本身真实，
+      但 `coverage_end` 可能不是最新交易日。结构解构可以继续使用它，
+      但任何依赖「最新交易日」的判断（例如当日放量）都必须据此拒绝执行，不得把历史信号
+      当作当日信号推送。
+    - `unavailable`：无任何可用数据，调用方不得产出信号。
     """
     try:
         from scripts.history_service import get_daily_history
         payload = get_daily_history(code, refresh=refresh)
     except Exception as exc:  # noqa: BLE001
-        return [], f"可信历史服务异常: {exc}"
+        return {"bars": [], "error": f"可信历史服务异常: {exc}", "data_status": "unavailable",
+                "coverage_end": None, "source": "", "provider_history_complete": False}
     if not isinstance(payload, dict):
-        return [], "可信历史服务未返回数据"
+        return {"bars": [], "error": "可信历史服务未返回数据", "data_status": "unavailable",
+                "coverage_end": None, "source": "", "provider_history_complete": False}
+
     status = payload.get("status")
     bars = payload.get("bars") or []
-    if status not in ("available", "partial") or not bars:
-        return [], payload.get("error") or "日线来源未获取"
-    return bars, None
+    meta = {
+        "data_status": status or "unavailable",
+        "coverage_end": payload.get("coverage_end"),
+        "source": payload.get("source") or "",
+        "provider_history_complete": bool(payload.get("provider_history_complete")),
+    }
+    if status in ("available", "partial", "stale") and bars:
+        return dict(meta, bars=bars, error=(payload.get("error") or None) if status == "stale" else None)
+    return dict(meta, bars=[], data_status="unavailable",
+                error=payload.get("error") or "日线来源未获取")
 
 
 def fetch_min30_bars(code: str, datalen: int = 320) -> Tuple[List[Dict[str, Any]], Optional[str]]:
@@ -449,9 +470,15 @@ def analyze_code(code: str, name: str = "", *, daily_bars=None, m30_bars=None,
 
     daily_bars = daily_bars if daily_bars is not None else None
     if daily_bars is None:
-        daily_bars, daily_err = fetch_daily_bars(code, refresh=refresh)
-        if daily_err:
-            result["errors"]["daily"] = daily_err
+        daily_meta = fetch_daily_bars(code, refresh=refresh)
+        daily_bars = daily_meta["bars"]
+        result["data_quality"] = {"daily": {k: v for k, v in daily_meta.items() if k != "bars"}}
+        if daily_meta["error"]:
+            result["errors"]["daily"] = daily_meta["error"]
+        if daily_meta["data_status"] == "stale":
+            result.setdefault("warnings", []).append(
+                f"日线来源当前不可用，已回落使用此前核验过的真实完整历史（覆盖至 {daily_meta['coverage_end']}）；"
+                f"结构结论可用，但该日期不一定是最新交易日，请勿当作当日实时信号")
     m30_bars = m30_bars if m30_bars is not None else None
     if m30_bars is None:
         m30_bars, m30_err = fetch_min30_bars(code)
@@ -480,11 +507,15 @@ def analyze_code(code: str, name: str = "", *, daily_bars=None, m30_bars=None,
         result["periods"]["daily"] = {
             "status": daily_analysis["status"], "bar_count": daily_analysis["bar_count"],
             "counts": daily_analysis["counts"], "last_close": _round(daily_bars[-1]["close"]),
+            "last_bar_date": str(daily_bars[-1].get("date") or "")[:10],
+            "data_status": (result.get("data_quality", {}).get("daily") or {}).get("data_status", "available"),
         }
     if m30_analysis:
         result["periods"]["m30"] = {
             "status": m30_analysis["status"], "bar_count": m30_analysis["bar_count"],
             "counts": m30_analysis["counts"], "last_close": _round(m30_bars[-1]["close"]),
+            "last_bar_date": str(m30_bars[-1].get("date") or "")[:10],
+            "data_status": "available",
         }
 
     daily_signals = []
@@ -496,6 +527,11 @@ def analyze_code(code: str, name: str = "", *, daily_bars=None, m30_bars=None,
         m30_signals = detect_signals(m30_analysis, code, name, "m30",
                                      current_price=m30_bars[-1]["close"])
 
+    daily_status = (result.get("data_quality", {}).get("daily") or {}).get("data_status", "available")
+    daily_last = str(daily_bars[-1].get("date") or "")[:10] if daily_bars else None
+    for signal in daily_signals:
+        signal["data_status"] = daily_status
+        signal["data_last_bar_date"] = daily_last
     result["signals"] = daily_signals + compute_resonance(daily_signals, m30_signals)
     result["counts"] = {
         "daily": len(daily_signals), "m30": len(m30_signals),

@@ -1,0 +1,322 @@
+{
+  "checks": [
+    {
+      "n": "策略选股页可进入且其他视图隐藏",
+      "ok": true,
+      "d": ""
+    },
+    {
+      "n": "策略芯片按后端注册表渲染",
+      "ok": true,
+      "d": "底背驰 + 放量突破中枢"
+    },
+    {
+      "n": "三条判据参数可配置且有默认值",
+      "ok": true,
+      "d": "N=20 K=1.5 突破%=0.5"
+    },
+    {
+      "n": "告警通道状态如实显示为未配置",
+      "ok": true,
+      "d": "飞书：未配置钉钉：未配置"
+    },
+    {
+      "n": "告警总开关状态如实显示",
+      "ok": true,
+      "d": "总开关未启用"
+    },
+    {
+      "n": "无下发记录时给出明确空态说明",
+      "ok": true,
+      "d": "暂无下发记录。"
+    },
+    {
+      "n": "未运行扫描时快照与状态条文案诚实",
+      "ok": true,
+      "d": "策略选股就绪，尚未运行本次会话的扫描"
+    },
+    {
+      "n": "点选运行后后台任务真实启动",
+      "ok": true,
+      "d": "done 30/30 "
+    },
+    {
+      "n": "扫描真实结束并给出逐类计数",
+      "ok": true,
+      "d": "命中 0 / 未命中 0 / 未获取 30"
+    },
+    {
+      "n": "未获取证券逐条保留原因（来源当前不可用）",
+      "ok": true,
+      "d": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+    },
+    {
+      "n": "扫描完成后状态条与提示同步真实结果",
+      "ok": true,
+      "d": "扫描完成于 2026-09-20 16:25:11：命中 0 / 未命中 0 / 未获取 30，落库 0 条"
+    },
+    {
+      "n": "未获取提示明确说明\"不等于无信号\"",
+      "ok": true,
+      "d": "⚠️ 30 只未获取：sh510300 沪深300ETF、sh510500 中证500ETF、sz159915 创业板ETF 等。未获取不等于无信号。"
+    },
+    {
+      "n": "全部未获取时空态明确区分「无结论」与「无命中」",
+      "ok": true,
+      "d": "本轮 30 只标的全部未获取，没有任何一只完成判定，因此这不是「无命中」而是「无结论」。请查看上方提示中的未获取原因（通常为数据来源当前不可用），稍后重试。"
+    },
+    {
+      "n": "结果接口携带免责与策略注册表",
+      "ok": true,
+      "d": ""
+    },
+    {
+      "n": "告警接口不泄露任何 Webhook 令牌",
+      "ok": true,
+      "d": "未检测到明文令牌"
+    },
+    {
+      "n": "告警配置说明明确密钥不入库",
+      "ok": true,
+      "d": ""
+    },
+    {
+      "n": "扫描未配置告警时不产生虚假下发记录",
+      "ok": true,
+      "d": "记录 0 条"
+    },
+    {
+      "n": "页面控制台无未预期错误",
+      "ok": true,
+      "d": ""
+    }
+  ],
+  "console_errors": [],
+  "scan": {
+    "status": "done",
+    "strategy": "dip-divergence-breakout",
+    "total": 30,
+    "done": 30,
+    "current": "",
+    "started_at": "2026-09-20 16:25:08",
+    "finished_at": "2026-09-20 16:25:11",
+    "hit_count": 0,
+    "miss_count": 0,
+    "unavailable_count": 30,
+    "persisted_count": 0,
+    "unavailable": [
+      {
+        "code": "sh510300",
+        "name": "沪深300ETF",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh510500",
+        "name": "中证500ETF",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sz159915",
+        "name": "创业板ETF",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh588000",
+        "name": "科创50ETF",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh510050",
+        "name": "上证50ETF",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sh600519",
+        "name": "贵州茅台",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sz000858",
+        "name": "五粮液",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh601318",
+        "name": "中国平安",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sz300750",
+        "name": "宁德时代",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sz002594",
+        "name": "比亚迪",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh600036",
+        "name": "招商银行",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh601899",
+        "name": "紫金矿业",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh601166",
+        "name": "兴业银行",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sz000333",
+        "name": "美的集团",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh600900",
+        "name": "长江电力",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh688981",
+        "name": "中芯国际",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sz002475",
+        "name": "立讯精密",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh601988",
+        "name": "中国银行",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sz000001",
+        "name": "平安银行",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh600030",
+        "name": "中信证券",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "日线来源当前不可用（HTTP Error 501: Not Implemented），仅有覆盖至 2026-09-18 的历史缓存。本策略依赖最新交易日的收盘突破与当日放量，不以历史数据冒充当日信号，因此本轮不判定"
+      },
+      {
+        "code": "sh601012",
+        "name": "隆基绿能",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sz002415",
+        "name": "海康威视",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sh600276",
+        "name": "恒瑞医药",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sz300059",
+        "name": "东方财富",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sh601888",
+        "name": "中国中免",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sz000651",
+        "name": "格力电器",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sh601668",
+        "name": "中国建筑",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sh600887",
+        "name": "伊利股份",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sz002304",
+        "name": "洋河股份",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      },
+      {
+        "code": "sh603259",
+        "name": "药明康德",
+        "status": "unavailable",
+        "hit": false,
+        "reason": "HTTP Error 501: Not Implemented"
+      }
+    ],
+    "notify": null,
+    "error": null
+  }
+}

@@ -42,6 +42,9 @@
       <button id="tabBtnRadar" class="nav-tab-btn" onclick="switchMainTab('radar')">
         <span>☯️ 缠论雷达</span>
       </button>
+      <button id="tabBtnScreener" class="nav-tab-btn" onclick="switchMainTab('screener')">
+        <span>🎯 策略选股</span>
+      </button>
     </nav>
 
     <!-- 服务端运行状态常显中枢 -->
@@ -1201,6 +1204,150 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- 视图 8: 策略选股与告警 (Tab: screener)              -->
+    <!-- ==================================================== -->
+    <div id="viewScreenerTab" class="tab-view hidden">
+      <div class="radar-dashboard">
+
+        <div class="crawler-header-card">
+          <div class="crawler-title-area">
+            <h2>🎯 策略选股与实时信号预警</h2>
+            <p>
+              当前策略：<b>底背驰 + 放量突破中枢</b>。三条判据必须同时成立——笔级底背驰衰竭、
+              收盘站上最近一个<b>已确认</b>笔中枢上沿 ZG、当日成交量达到前 N 日均量的 K 倍。
+              任一条件不满足即不命中，并且逐条给出真实差距，不降低标准凑结果。
+              <b>不构成投资建议，不承诺收益或胜率。</b>
+            </p>
+          </div>
+          <div class="crawler-btn-group">
+            <button id="btnScreenerScan" class="btn btn-crawl-full" onclick="triggerScreenerScan()">🔍 运行策略选股</button>
+            <button class="btn btn-secondary" onclick="loadScreenerResults()">🔄 刷新结果</button>
+          </div>
+        </div>
+
+        <div id="screenerScanBar" class="crawler-monitor-card">
+          <div class="monitor-top">
+            <div class="monitor-status-label">
+              <span id="screenerPulseDot" class="status-indicator" style="background-color: #94a3b8;"></span>
+              <span id="screenerScanText">策略选股就绪，尚未运行本次会话的扫描</span>
+            </div>
+            <div class="monitor-percentage" id="screenerScanCount">0.0%</div>
+          </div>
+          <div class="progress-track"><div id="screenerScanProgress" class="progress-fill" style="width:0%"></div></div>
+          <p id="screenerScanHint" class="radar-scan-hint"></p>
+        </div>
+
+        <div id="screenerSnapshotBar" class="data-baseline-bar">
+          <b>📊 选股快照：</b><span id="screenerSnapshotText">正在读取…</span>
+        </div>
+
+        <div class="radar-filter-bar">
+          <div class="radar-filter-group">
+            <span class="radar-filter-label">策略</span>
+            <div id="screenerStrategyChips" class="radar-chip-row"></div>
+          </div>
+          <div class="radar-filter-group">
+            <span class="radar-filter-label">参数口径</span>
+            <div class="radar-chip-row">
+              <label class="radar-param">
+                均量窗口 N
+                <input type="number" id="screenerVolWindow" class="radar-param-input" min="5" max="120" value="20">
+              </label>
+              <label class="radar-param">
+                放量倍数 K
+                <input type="number" id="screenerVolRatio" class="radar-param-input" min="1" max="10" step="0.1" value="1.5">
+              </label>
+              <label class="radar-param">
+                最小突破幅度 %
+                <input type="number" id="screenerBreakoutPct" class="radar-param-input" min="0" max="20" step="0.1" value="0.5">
+              </label>
+            </div>
+          </div>
+          <div class="radar-filter-group">
+            <span class="radar-filter-label">结论口径</span>
+            <div class="radar-chip-row">
+              <button type="button" id="screenerActionableOnly" class="seg-btn" onclick="toggleScreenerActionableOnly()">仅看可执行命中</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="radar-result-card">
+          <div class="radar-result-head">
+            <h3>✅ 命中清单</h3>
+            <span id="screenerHitCount" class="radar-result-count">0 条</span>
+          </div>
+          <div class="table-scroll">
+            <table class="crawler-table radar-table">
+              <thead>
+                <tr>
+                  <th style="width:150px;">证券</th>
+                  <th style="width:88px;">交易日</th>
+                  <th style="width:88px;">收盘</th>
+                  <th style="width:96px;">中枢上沿ZG</th>
+                  <th style="width:92px;">突破幅度</th>
+                  <th style="width:104px;">量比(N日)</th>
+                  <th style="width:96px;">结构止损</th>
+                  <th style="width:88px;">结构距离</th>
+                  <th style="width:104px;">建议股数</th>
+                  <th>命中依据</th>
+                </tr>
+              </thead>
+              <tbody id="screenerTableBody">
+                <tr><td colspan="10" class="empty-cell">尚无选股结果，请点击上方「运行策略选股」。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="radar-result-card">
+          <div class="radar-result-head">
+            <h3>📡 告警通道</h3>
+            <span id="notifyStatusHint" class="radar-result-count"></span>
+          </div>
+          <div class="notify-panel">
+            <div id="notifyChannelList" class="notify-channel-list">正在读取通道配置…</div>
+            <p class="notify-note">
+              Webhook 与加签密钥只从 <code>config/notify_config.json</code> 读取，<b>既不入库也不入版本控制</b>，
+              本页只展示是否已配置与脱敏目标提示。未配置时不会发送任何请求，也不会假装发送成功。
+              同一结构的告警在冷却窗口内不重复推送；下发失败不占用冷却，会被记录并可重试。
+            </p>
+            <div class="table-scroll">
+              <table class="crawler-table radar-table">
+                <thead>
+                  <tr>
+                    <th style="width:150px;">时间</th>
+                    <th style="width:88px;">通道</th>
+                    <th style="width:76px;">结果</th>
+                    <th style="width:88px;">状态码</th>
+                    <th style="width:180px;">目标（脱敏）</th>
+                    <th>说明</th>
+                  </tr>
+                </thead>
+                <tbody id="notifyHistoryBody">
+                  <tr><td colspan="6" class="empty-cell">暂无下发记录。</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <details class="radar-method-card">
+          <summary>📖 策略判据与参数说明（点击展开）</summary>
+          <div class="radar-method-body">
+            <ul>
+              <li><b>判据一 底背驰</b>：最近 8 笔内存在笔级底背离（向下笔创新低且 MACD 绝对柱面积较前一同向笔减弱）。</li>
+              <li><b>判据二 突破中枢</b>：最新收盘价站上最近一个<b>已确认</b>笔中枢的上沿 ZG，且突破幅度 ≥ 设定阈值；突破必须发生在底背离之后，先衰竭后突破才是本策略要的多头结构。</li>
+              <li><b>判据三 放量</b>：当日成交量 ≥ 前 N 日均量 × K。均量窗口与倍数可在上方调整。</li>
+              <li><b>结构止损</b>：取中枢上沿 ZG 本身——跌回中枢之内即代表突破失败。</li>
+              <li><b>数据新鲜度</b>：本策略三条判据都依赖「最新交易日」。若日线来源当前不可用、只能取到此前的历史缓存，本轮会明确拒绝判定，绝不用历史某天的结构冒充今日信号。</li>
+              <li><b>成交量口径</b>：只使用可信不复权日线的真实成交量字段；成交额来源未提供即不参与判定，不用「成交量 × 收盘价」之类的推算值冒充成交额。</li>
+            </ul>
+          </div>
+        </details>
+
       </div>
     </div>
 

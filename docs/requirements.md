@@ -1,10 +1,10 @@
 # DSH 股票量化与自选监控工程需求台账 (Requirements Ledger)
 
 > ### 🏷️ **版本信息与实施追踪**
-> - **当前系统实施总版本**：`v4.7.0`
+> - **当前系统实施总版本**：`v4.8.0`
 > - **维护工程**：DSH 股票监控与量化分析系统 (DSH Stock)
 > - **最后更新日期**：2026-09-20
-> - **版本状态**：`[Release 稳定生效 / R03 第二批已交付]`
+> - **版本状态**：`[Release 稳定生效 / R03 第三批已交付]`
 
 本文档是本工程唯一的**独立核心需求管理台账**。任何规则与代码的变更必须在此溯源记录。
 
@@ -295,3 +295,42 @@
 - 测试：`tests/test_r03_chanlun_signals.py`（32 项），覆盖六类规则**均可被触发**（含 3B/S3 正向触发与反向不触发）、待确认语义、去重取最新、可执行性五种拒止路径、区间套四种判定、雷达池落库幂等/整体替换/筛选/快照/业务表不受影响/JSON 可序列化。
 
 版本差异：新增 REQ-019 v1，交付 v4.7.0；REQ-020（策略选股与飞书钉钉告警）、REQ-021（持仓体检与动态止盈止损）仍为 `[EVOLVING]`。
+
+
+## 2026-09-20 生效变更：v4.8.0（R03 第三批 P2）
+
+直接前版：v4.7.0。以下口径优先于历史描述。
+
+### REQ-020 v1：策略选股与实时信号预警
+- 状态：已完成；本地技术验收（自动化 42 项 + 真实浏览器 18 项 + 真实数据链路联调），用户验收待确认。
+- 新增 `scripts/strategy_screener.py`（规则版本 `REQ-020/v1`），已实现策略 **`dip-divergence-breakout`「底背驰 + 放量突破中枢」**，三条判据**必须同时成立**：
+  1. **底背驰**：最近 `divergence_lookback`（默认 8）笔内存在笔级底背离。
+  2. **放量突破中枢**：最新收盘价站上最近一个**已确认**笔中枢上沿 ZG，突破幅度 ≥ `min_breakout_pct`（默认 0.5%），且**突破发生在底背离之后**；若中枢结束时间早于底背离，判定为「先突破后衰竭」的反向结构并否决。
+  3. **放量**：当日成交量 ≥ 前 `volume_window`（默认 20）日均量 × `volume_ratio`（默认 1.5）。
+- 结构止损取**中枢上沿 ZG 本身**（跌回中枢之内即代表突破失败）；本策略不臆造目标位，`target_price` 恒为 `null` 并附 `target_note`。
+- 每个未命中都给出**具体差距**（当前突破幅度 vs 要求、当前量比 vs 要求、缺哪条判据），便于人工复核；`evidence` 携带判定所用的全部真实数值。
+- **数据新鲜度硬约束（新增，关键）**：本策略三条判据都依赖最新交易日，因此当 `fetch_daily_bars` 返回 `stale`（来源不可用、仅剩此前核验过的真实完整历史缓存）时，**明确拒绝判定**并说明原因，绝不用历史某天的结构冒充当日信号。这与 REQ-019 雷达形成有意的差异：雷达做结构解构，允许使用 `stale` 缓存但会标注数据新鲜度与 `last_bar_date`；选股做当日择时，不允许。
+- **成交量口径**：只使用可信不复权日线的真实 `volume` 字段；成交额来源未提供即不参与判定，**不用「成交量 × 收盘价」之类的推算值冒充成交额**。前 N 日存在缺失或 0 成交量时直接不判定，不跳过缺失值硬算均量。
+- 新增 `scripts/alert_channels.py`：
+  - **密钥保护**：Webhook 与加签密钥只从 `config/notify_config.json` 读取（已加入 `.gitignore`），**既不入库也不入版本控制**；对外一律只通过 `mask_webhook` 暴露 `主机名/…末4位`。`config/notify_config.example.json` 为可提交的填写模板。
+  - **未配置即明确报「未配置」**，不产生任何网络请求、不假装发送成功；非 `https` Webhook 一律拒绝发送以防令牌明文外泄。
+  - 加签：飞书 `{timestamp}\n{secret}` HMAC-SHA256 + base64；钉钉 HMAC-SHA256(key=secret) + base64 + urlencode。
+  - 成功码按两家官方约定分别判定（`code`/`StatusCode`/`errcode`），不只信 HTTP 200。
+  - **冷却去重**：去重键 = 策略|证券|信号类型|周期|交易日；**只有成功下发才占用冷却窗口**，失败不占用以便重试；不同交易日视为新告警；`force` 可绕过冷却。
+  - **只对 `actionable=true` 的命中下发**，不可执行信号不推送，避免制造无用的交易指令。
+  - 每次下发结果（通道、是否成功、HTTP 状态码、脱敏目标、错误）都真实落库到 `alert_dispatch_log`。
+- **接口**：新增 `GET /api/screener/results`、`GET /api/screener/scan-status`、`POST /api/screener/scan`（后台线程；重复启动返回 409）、`GET /api/notify/status`、`GET /api/notify/history`。
+- **CLI**：`python3 -m scripts.strategy_screener [--strategy dip-divergence-breakout] [--volume-ratio K] [--volume-window N] [--pool a,b] [--notify feishu,dingtalk|all] [--dry-run] [--json]`；`python3 -m scripts.alert_channels [--send 文本] [--channel feishu|dingtalk] [--dry-run]` 自检。
+- **Web**：「🎯 策略选股」页（`viewScreenerTab`）。含扫描控制与真实进度、选股快照、策略芯片、三判据参数可调（均量窗口 N / 放量倍数 K / 最小突破幅度）、「仅看可执行命中」筛选、命中清单（含全部判据数值）、告警通道状态与真实下发流水、可展开的策略判据说明。
+- **前端诚实呈现约束**：未获取时明确区分「**无结论**」与「无命中」——全部标的未获取时表格空态写明「这不是无命中而是无结论」；不可执行命中不显示建议股数。
+- 实现：`scripts/strategy_screener.py`、`scripts/alert_channels.py`（均新增）、`scripts/stock_db.py`（`strategy_screen_results` + `alert_dispatch_log` 两表及读写与冷却判定）、`scripts/stock_web_server.py`（任务状态 + 5 个端点）、`scripts/chanlun_signals.py`（`fetch_daily_bars` 改为返回数据新鲜度元信息）、`web/app.js`、`web/index.html`、`web/style.css`、`config/notify_config.example.json`、`.gitignore`。
+- 测试：`tests/test_r03_screener_alerts.py`（42 项），覆盖三条判据各自单独否决命中（含中枢未确认、中枢早于背离的反向结构、成交量缺失、K 线不足）、stale 数据拒绝冒充当日、未知策略拒绝、签名与独立 HMAC 对照、脱敏不泄露令牌、未配置不产生请求、非 https 拒绝、dry-run 零网络、密钥不入库（对流水表做明文断言）、冷却只由成功占用、不同交易日为新告警、不可执行不下发、单轮上限、结果表幂等/整体替换/业务表隔离。
+
+### 数据新鲜度口径补充（横切 REQ-008/REQ-012/REQ-019/REQ-020）
+`fetch_daily_bars` 现返回统一结构，显式区分四态并向下游传播：
+- `available` / `partial`：本次来源响应成功，覆盖区间可追溯到 `coverage_end`。
+- `stale`：来源当前不可用，回落到的**是此前已核验并落库的真实完整历史**。数据真实但可能不是最新交易日；结构解构可用（REQ-019 会标注 `data_status`/`last_bar_date` 并给出告警文案），依赖「最新交易日」的择时判定不可用（REQ-020 拒绝判定）。
+- `unavailable`：无任何可用数据，不产出任何信号。
+前端与 CLI 均据此标注，不把 `stale` 静默当成最新。
+
+版本差异：新增 REQ-020 v1 与数据新鲜度口径，交付 v4.8.0；REQ-021（持仓体检与动态止盈止损）仍为 `[EVOLVING]`。

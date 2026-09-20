@@ -3432,3 +3432,27 @@ body {
   min-height: 1.1em;
 }
 .radar-scan-hint:empty { display: none; }
+
+/* 需求REQ-020: 策略选股页 */
+.radar-param {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.76rem; color: #cbd5e1;
+}
+.radar-param-input {
+  width: 66px; padding: 0.26rem 0.4rem;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px; color: #e2e8f0; font-size: 0.78rem;
+}
+.radar-param-input:focus { outline: none; border-color: #38bdf8; }
+
+.notify-panel { padding: 0.9rem 1.1rem 1.1rem; }
+.notify-channel-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.7rem; }
+.notify-chip {
+  display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px;
+  font-size: 0.76rem; border: 1px solid transparent;
+}
+.notify-chip.is-on { background: rgba(34, 197, 94, 0.14); color: #86efac; border-color: rgba(34, 197, 94, 0.4); }
+.notify-chip.is-off { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.28); }
+.notify-note { font-size: 0.76rem; line-height: 1.7; color: #94a3b8; margin: 0 0 0.8rem; }
+.notify-note code { background: rgba(15, 23, 42, 0.8); padding: 0.06rem 0.34rem; border-radius: 4px; color: #7dd3fc; }

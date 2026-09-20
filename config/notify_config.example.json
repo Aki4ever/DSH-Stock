@@ -1,0 +1,17 @@
+{
+  "_说明": "复制本文件为 config/notify_config.json 后填写真实 Webhook。notify_config.json 已被 .gitignore 排除，密钥不会进入版本控制，也不会写入 SQLite 数据库。",
+  "_飞书获取方式": "飞书群 → 设置 → 群机器人 → 添加自定义机器人 → 复制 Webhook 地址；若开启「签名校验」则把密钥填入 secret。",
+  "_钉钉获取方式": "钉钉群 → 群设置 → 智能群助手 → 添加机器人 → 自定义 → 安全设置勾选「加签」→ 复制 Webhook 与加签密钥。",
+  "enabled": false,
+  "cooldown_minutes": 240,
+  "max_per_run": 20,
+  "timeout_seconds": 8,
+  "feishu": {
+    "webhook": "",
+    "secret": ""
+  },
+  "dingtalk": {
+    "webhook": "",
+    "secret": ""
+  }
+}

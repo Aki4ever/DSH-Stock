@@ -97,6 +97,7 @@ const dom = {
   tabBtnIndex: document.getElementById('tabBtnIndex'),
   tabBtnCrawler: document.getElementById('tabBtnCrawler'),
   tabBtnRadar: document.getElementById('tabBtnRadar'),
+  tabBtnScreener: document.getElementById('tabBtnScreener'),
   viewFilterTab: document.getElementById('viewFilterTab'),
   viewDashboardTab: document.getElementById('viewDashboardTab'),
   viewWorldTab: document.getElementById('viewWorldTab'),
@@ -105,6 +106,7 @@ const dom = {
   viewIndexDetailTab: document.getElementById('viewIndexDetailTab'),
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
   viewRadarTab: document.getElementById('viewRadarTab'),
+  viewScreenerTab: document.getElementById('viewScreenerTab'),
   viewStockDetailTab: document.getElementById('viewStockDetailTab'),
   btnBackToStockList: document.getElementById('btnBackToStockList'),
 
@@ -401,6 +403,7 @@ function switchMainTab(tabId) {
   if (dom.tabBtnIndex) dom.tabBtnIndex.classList.toggle('active', tabId === 'index');
   if (dom.tabBtnCrawler) dom.tabBtnCrawler.classList.toggle('active', tabId === 'crawler');
   if (dom.tabBtnRadar) dom.tabBtnRadar.classList.toggle('active', tabId === 'radar');
+  if (dom.tabBtnScreener) dom.tabBtnScreener.classList.toggle('active', tabId === 'screener');
 
   if (dom.viewFilterTab) dom.viewFilterTab.classList.toggle('hidden', tabId !== 'filter');
   if (dom.viewDashboardTab) dom.viewDashboardTab.classList.toggle('hidden', tabId !== 'dashboard');
@@ -409,6 +412,7 @@ function switchMainTab(tabId) {
   if (dom.viewIndexTab) dom.viewIndexTab.classList.toggle('hidden', tabId !== 'index');
   if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.toggle('hidden', tabId !== 'crawler');
   if (dom.viewRadarTab) dom.viewRadarTab.classList.toggle('hidden', tabId !== 'radar');
+  if (dom.viewScreenerTab) dom.viewScreenerTab.classList.toggle('hidden', tabId !== 'screener');
 
   // 隐藏详情全屏页
   if (dom.viewStockDetailTab) dom.viewStockDetailTab.classList.add('hidden');
@@ -428,6 +432,10 @@ function switchMainTab(tabId) {
   } else if (tabId === 'radar') {
     loadRadarPool();
     syncRadarScanStatus();
+  } else if (tabId === 'screener') {
+    loadScreenerResults();
+    loadNotifyStatus();
+    syncScreenerScanStatus();
   }
 }
 
@@ -6195,4 +6203,302 @@ function applyRadarScanState(scan, snapshot) {
     hints.push(`⚠️ ${scan.failures.length} 只未获取：${names}${scan.failures.length > 4 ? ' 等' : ''}。未获取不代表无信号。`);
   }
   setRadarScanHint(hints.join(' '));
+}
+
+/* ==========================================================================
+ * 需求REQ-020: 策略选股与告警前端
+ * 原则：命中即给出全部真实判据数值；未命中/未获取逐条说明原因；
+ *       不可执行命中不展示建议股数；告警只呈现真实下发结果与脱敏目标。
+ * ========================================================================== */
+const screenerState = {
+  strategies: [],
+  strategy: 'dip-divergence-breakout',
+  hits: [],
+  snapshot: null,
+  scan: null,
+  actionableOnly: false,
+  scanTimer: null,
+  requestId: 0
+};
+
+function screenerParams() {
+  const num = (id, fallback) => {
+    const el = document.getElementById(id);
+    const v = el ? Number(el.value) : NaN;
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  };
+  return {
+    volume_window: num('screenerVolWindow', 20),
+    volume_ratio: num('screenerVolRatio', 1.5),
+    min_breakout_pct: Number.isFinite(Number((document.getElementById('screenerBreakoutPct') || {}).value))
+      ? Number(document.getElementById('screenerBreakoutPct').value) : 0.5
+  };
+}
+
+function toggleScreenerActionableOnly() {
+  screenerState.actionableOnly = !screenerState.actionableOnly;
+  const btn = document.getElementById('screenerActionableOnly');
+  if (btn) btn.classList.toggle('active', screenerState.actionableOnly);
+  renderScreenerTable();
+}
+
+function renderScreenerStrategyChips() {
+  const host = document.getElementById('screenerStrategyChips');
+  if (!host) return;
+  host.innerHTML = (screenerState.strategies || []).map(s =>
+    `<button type="button" class="seg-btn ${s.key === screenerState.strategy ? 'active' : ''}"
+             data-strategy="${escapeHtml(s.key)}" title="${escapeHtml(s.desc)}"
+             onclick="setScreenerStrategy('${escapeHtml(s.key)}')">${escapeHtml(s.name)}</button>`
+  ).join('') || '<span class="radar-missing">未获取到可用策略</span>';
+}
+
+function setScreenerStrategy(key) {
+  screenerState.strategy = key;
+  renderScreenerStrategyChips();
+  loadScreenerResults();
+}
+
+async function loadScreenerResults() {
+  const params = new URLSearchParams();
+  if (screenerState.strategy) params.set('strategy', screenerState.strategy);
+  const requestId = ++screenerState.requestId;
+  try {
+    const resp = await fetch(`/api/screener/results?${params.toString()}`, { cache: 'no-store' });
+    const json = await resp.json();
+    if (requestId !== screenerState.requestId) return;
+    if (json.code !== 200) throw new Error(json.message || '选股结果读取失败');
+    screenerState.strategies = json.strategies || [];
+    screenerState.hits = json.data || [];
+    screenerState.snapshot = json.snapshot || null;
+    screenerState.scan = json.scan || null;
+    renderScreenerStrategyChips();
+    renderScreenerSnapshot();
+    renderScreenerTable();
+    if (screenerState.scan && screenerState.scan.status === 'running') startScreenerPolling();
+  } catch (err) {
+    const body = document.getElementById('screenerTableBody');
+    if (body) body.innerHTML = `<tr><td colspan="10" class="empty-cell">选股结果读取失败：${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderScreenerSnapshot() {
+  const el = document.getElementById('screenerSnapshotText');
+  if (!el) return;
+  const snap = screenerState.snapshot;
+  const scan = screenerState.scan;
+  if (!snap || !snap.total) {
+    let text = '尚无命中记录。';
+    if (scan && scan.status === 'done') {
+      text += `最近一次扫描：${scan.total} 只中命中 ${scan.hit_count} 只 / 未命中 ${scan.miss_count} 只 / 未获取 ${scan.unavailable_count} 只。`;
+      if (scan.unavailable_count > 0) text += ' 未获取项不等于无信号，需人工复核。';
+    }
+    el.textContent = text;
+    return;
+  }
+  el.textContent = `最近一次扫描命中 ${snap.total} 条，计算时间 ${snap.computed_at || '未获取'}。`
+    + (scan && scan.status === 'done'
+      ? `扫描池 ${scan.total} 只：未命中 ${scan.miss_count} 只、未获取 ${scan.unavailable_count} 只。` : '');
+}
+
+function renderScreenerTable() {
+  const body = document.getElementById('screenerTableBody');
+  const counter = document.getElementById('screenerHitCount');
+  if (!body) return;
+  let list = screenerState.hits || [];
+  if (screenerState.actionableOnly) list = list.filter(h => h.actionable === true);
+  if (counter) counter.textContent = `${list.length} 条`;
+  if (list.length === 0) {
+    const scan = screenerState.scan;
+    // 诚实性: 必须区分「评估后不满足判据」与「根本没能完成判定」，不得把未获取说成无命中
+    let why;
+    if ((screenerState.hits || []).length > 0) {
+      why = '当前筛选下没有可执行命中，请关闭「仅看可执行命中」查看全部命中与其不可执行原因。';
+    } else if (scan && scan.status === 'done' && scan.hit_count === 0 && scan.miss_count === 0
+               && scan.unavailable_count > 0) {
+      why = `本轮 ${scan.unavailable_count} 只标的全部未获取，没有任何一只完成判定，`
+          + '因此这不是「无命中」而是「无结论」。请查看上方提示中的未获取原因（通常为数据来源当前不可用），稍后重试。';
+    } else if (scan && scan.status === 'done' && scan.hit_count === 0) {
+      why = `本轮已完整评估 ${scan.miss_count} 只，均不满足当前三条判据（另有 ${scan.unavailable_count} 只未获取）。`
+          + '不满足判据不代表该证券没有机会或没有风险。';
+    } else {
+      why = '尚无选股结果。无命中表示不满足当前判据，不代表该证券没有机会或没有风险。';
+    }
+    body.innerHTML = `<tr><td colspan="10" class="empty-cell">${why}</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(h => {
+    const ev = h.evidence || {};
+    const shares = h.actionable
+      ? `${formatReal(h.suggested_shares, 0)} 股`
+      : `<span class="radar-blocked" title="${escapeHtml(h.risk_budget_note || '')}">不可执行</span>`;
+    const riskText = h.risk_pct == null ? '<span class="radar-missing">未获取</span>'
+      : (h.risk_pct < 0 ? `<span class="radar-blocked">${formatReal(h.risk_pct)}%</span>` : `${formatReal(h.risk_pct)}%`);
+    return `
+      <tr class="radar-row">
+        <td>${escapeHtml(h.name || '')} <code class="radar-code">${escapeHtml(h.code || '')}</code></td>
+        <td>${escapeHtml(h.trade_date || '')}</td>
+        <td>¥${formatReal(h.close)}</td>
+        <td>¥${formatReal(h.pivot_zg)}</td>
+        <td>${formatReal(ev.breakout_pct)}%</td>
+        <td>${formatReal(h.volume_ratio)}× <span class="radar-missing">(${formatReal(ev.volume_window, 0)}日)</span></td>
+        <td>¥${formatReal(h.stop_price)}</td>
+        <td>${riskText}</td>
+        <td>${shares}</td>
+        <td class="radar-reason-cell">
+          <div class="radar-reason">${escapeHtml(h.reason || '')}</div>
+          <div class="radar-structure">
+            <span class="radar-struct-pen">底背离 ${escapeHtml(String(ev.divergence_time || '').slice(0, 10))} 面积比 ${formatReal(ev.divergence_area_ratio)}</span>
+            <span class="radar-struct-pen">ZG ${formatReal(ev.pivot_zg)} / ZD ${formatReal(ev.pivot_zd)}</span>
+            <span class="radar-struct-pen">当日量 ${formatReal(ev.volume, 0)} / ${formatReal(ev.volume_window, 0)}日均量 ${formatReal(ev.avg_volume, 0)}</span>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function setScreenerScanHint(text) {
+  const el = document.getElementById('screenerScanHint');
+  if (el) el.textContent = text || '';
+}
+
+async function triggerScreenerScan() {
+  const btn = document.getElementById('btnScreenerScan');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 选股中…'; }
+  try {
+    const resp = await fetch('/api/screener/scan', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ strategy: screenerState.strategy, params: screenerParams() })
+    });
+    const json = await resp.json();
+    if (!json.success) {
+      setScreenerScanHint(json.message || '选股未能启动');
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 运行策略选股'; }
+      return;
+    }
+    startScreenerPolling();
+  } catch (err) {
+    setScreenerScanHint(`选股启动失败：${err.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 运行策略选股'; }
+  }
+}
+
+function startScreenerPolling() {
+  if (screenerState.scanTimer) return;
+  screenerState.scanTimer = setInterval(pollScreenerScanStatus, 2500);
+  pollScreenerScanStatus();
+}
+
+async function syncScreenerScanStatus() {
+  try {
+    const resp = await fetch('/api/screener/scan-status', { cache: 'no-store' });
+    const json = await resp.json();
+    applyScreenerScanState(json.scan, json.snapshot);
+    if (json.scan && json.scan.status === 'running') {
+      const btn = document.getElementById('btnScreenerScan');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ 选股中…'; }
+      startScreenerPolling();
+    }
+  } catch (err) { /* 状态读取失败不阻断页面 */ }
+}
+
+async function pollScreenerScanStatus() {
+  try {
+    const resp = await fetch('/api/screener/scan-status', { cache: 'no-store' });
+    const json = await resp.json();
+    applyScreenerScanState(json.scan, json.snapshot);
+    if (!json.scan || json.scan.status !== 'running') {
+      clearInterval(screenerState.scanTimer);
+      screenerState.scanTimer = null;
+      const btn = document.getElementById('btnScreenerScan');
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 运行策略选股'; }
+      await loadScreenerResults();
+      await loadNotifyHistory();
+    }
+  } catch (err) {
+    clearInterval(screenerState.scanTimer);
+    screenerState.scanTimer = null;
+    const btn = document.getElementById('btnScreenerScan');
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 运行策略选股'; }
+    setScreenerScanHint(`选股状态读取失败：${err.message}`);
+  }
+}
+
+function applyScreenerScanState(scan, snapshot) {
+  if (snapshot) { screenerState.snapshot = snapshot; }
+  if (!scan) return;
+  screenerState.scan = scan;
+  const total = scan.total || 0;
+  const done = scan.done || 0;
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : (scan.status === 'running' ? 4 : 0);
+  const progress = document.getElementById('screenerScanProgress');
+  if (progress) progress.style.width = `${pct}%`;
+  const count = document.getElementById('screenerScanCount');
+  if (count) count.textContent = total > 0 ? `${Math.round(pct)}%  (${done} / ${total})` : (scan.status === 'running' ? '准备中' : '0.0%');
+  const dot = document.getElementById('screenerPulseDot');
+  if (dot) {
+    dot.style.backgroundColor = scan.status === 'running' ? '#38bdf8'
+      : (scan.status === 'done' ? '#4ade80' : (scan.status === 'failed' ? '#f87171' : '#94a3b8'));
+  }
+  const text = document.getElementById('screenerScanText');
+  if (text) {
+    if (scan.status === 'running') text.textContent = `正在评估 ${scan.current || ''}…`;
+    else if (scan.status === 'done') text.textContent = `扫描完成于 ${scan.finished_at || ''}：命中 ${scan.hit_count} / 未命中 ${scan.miss_count} / 未获取 ${scan.unavailable_count}，落库 ${scan.persisted_count} 条`;
+    else if (scan.status === 'failed') text.textContent = `扫描失败：${scan.error || '未知原因'}`;
+    else text.textContent = '策略选股就绪，尚未运行本次会话的扫描';
+  }
+  const hints = [];
+  if (scan.status === 'done' && (scan.unavailable || []).length) {
+    const names = scan.unavailable.slice(0, 3).map(u => `${u.code}${u.name ? ' ' + u.name : ''}`).join('、');
+    hints.push(`⚠️ ${scan.unavailable.length} 只未获取：${names}${scan.unavailable.length > 3 ? ' 等' : ''}。未获取不等于无信号。`);
+  }
+  if (scan.notify && scan.notify.reason) hints.push(`📡 ${scan.notify.reason}`);
+  if (scan.notify && scan.notify.sent) hints.push(`📡 已下发 ${scan.notify.sent} 条告警，冷却跳过 ${scan.notify.skipped || 0} 条。`);
+  setScreenerScanHint(hints.join(' '));
+  renderScreenerSnapshot();
+}
+
+async function loadNotifyStatus() {
+  const host = document.getElementById('notifyChannelList');
+  try {
+    const resp = await fetch('/api/notify/status', { cache: 'no-store' });
+    const json = await resp.json();
+    const hint = document.getElementById('notifyStatusHint');
+    if (hint) hint.textContent = json.enabled ? '总开关已启用' : '总开关未启用';
+    if (!host) return;
+    host.innerHTML = (json.channels || []).map(c => {
+      const state = c.configured ? '已配置' : '未配置';
+      const sign = c.signed ? '（含加签）' : '';
+      const cls = c.configured ? 'is-on' : 'is-off';
+      return `<span class="notify-chip ${cls}" title="${escapeHtml(c.configured ? c.target_hint : '未配置 Webhook，不会发送任何请求')}">${escapeHtml(c.label)}：${state}${sign}${c.configured && c.target_hint ? ' · ' + escapeHtml(c.target_hint) : ''}</span>`;
+    }).join('');
+  } catch (err) {
+    if (host) host.innerHTML = `<span class="radar-missing">告警通道状态读取失败：${escapeHtml(err.message)}</span>`;
+  }
+}
+
+async function loadNotifyHistory() {
+  const body = document.getElementById('notifyHistoryBody');
+  if (!body) return;
+  try {
+    const resp = await fetch('/api/notify/history?limit=30', { cache: 'no-store' });
+    const json = await resp.json();
+    const rows = json.data || [];
+    if (rows.length === 0) {
+      body.innerHTML = '<tr><td colspan="6" class="empty-cell">暂无下发记录。未配置通道或尚未触发告警时不会产生记录。</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(r => {
+      const label = r.channel === 'feishu' ? '飞书' : (r.channel === 'dingtalk' ? '钉钉' : escapeHtml(r.channel));
+      return `<tr class="radar-row">
+        <td>${escapeHtml(r.sent_at || '')}</td>
+        <td>${label}</td>
+        <td>${r.ok ? '<span class="audit-status-pill audit-status-success">成功</span>' : '<span class="audit-status-pill audit-status-fail">失败</span>'}</td>
+        <td>${r.status_code == null ? '<span class="radar-missing">未获取</span>' : escapeHtml(String(r.status_code))}</td>
+        <td><code class="radar-code">${escapeHtml(r.target_hint || '')}</code></td>
+        <td class="radar-reason-cell"><div class="radar-reason">${escapeHtml(r.error || '发送成功')}</div></td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="6" class="empty-cell">下发记录读取失败：${escapeHtml(err.message)}</td></tr>`;
+  }
 }
