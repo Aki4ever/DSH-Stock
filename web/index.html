@@ -39,6 +39,9 @@
       <button id="tabBtnCrawler" class="nav-tab-btn" onclick="switchMainTab('crawler')">
         <span>🗄️ 数据中心</span>
       </button>
+      <button id="tabBtnRadar" class="nav-tab-btn" onclick="switchMainTab('radar')">
+        <span>☯️ 缠论雷达</span>
+      </button>
     </nav>
 
     <!-- 服务端运行状态常显中枢 -->
@@ -1198,6 +1201,124 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- 视图 7: 缠论多周期买卖点雷达 (Tab: radar)            -->
+    <!-- ==================================================== -->
+    <div id="viewRadarTab" class="tab-view hidden">
+      <div class="radar-dashboard">
+
+        <div class="crawler-header-card">
+          <div class="crawler-title-area">
+            <h2>☯️ 缠论多周期买卖点雷达</h2>
+            <p>
+              严格对称的六类买卖点：1B / 2B / 3B 买点与 S1 / S2 / S3 卖点。
+              日线定方向、30 分钟定买点的<b>区间套</b>嵌套确认；不满足嵌套的信号会显式降级为「单周期」，绝不冒充共振结论。
+              全部结构由笔级中枢与笔背离推导，<b>不构成投资建议，不承诺收益或胜率</b>。
+            </p>
+          </div>
+          <div class="crawler-btn-group">
+            <button id="btnRadarScan" class="btn btn-crawl-full" onclick="triggerRadarScan()">🔍 运行全池雷达扫描</button>
+            <button class="btn btn-secondary" onclick="loadRadarPool()">🔄 刷新雷达池</button>
+          </div>
+        </div>
+
+        <div id="radarScanBar" class="crawler-monitor-card">
+          <div class="monitor-top">
+            <div class="monitor-status-label">
+              <span id="radarPulseDot" class="status-indicator" style="background-color: #94a3b8;"></span>
+              <span id="radarScanText">雷达池就绪，尚未运行本次会话的扫描</span>
+            </div>
+            <div class="monitor-percentage" id="radarScanCount">0 / 0</div>
+          </div>
+          <div class="progress-track"><div id="radarScanProgress" class="progress-fill" style="width:0%"></div></div>
+          <p id="radarScanHint" class="radar-scan-hint"></p>
+        </div>
+
+        <div id="radarSnapshotBar" class="data-baseline-bar">
+          <b>📊 雷达池快照：</b><span id="radarSnapshotText">正在读取…</span>
+        </div>
+
+        <div class="radar-filter-bar">
+          <div class="radar-filter-group">
+            <span class="radar-filter-label">买卖点类型</span>
+            <div id="radarTypeChips" class="radar-chip-row">
+              <button type="button" class="seg-btn active" data-radar-type="ALL" onclick="toggleRadarType('ALL')">全部</button>
+              <button type="button" class="seg-btn" data-radar-type="1B" onclick="toggleRadarType('1B')">1B 第一类买点</button>
+              <button type="button" class="seg-btn" data-radar-type="2B" onclick="toggleRadarType('2B')">2B 第二类买点</button>
+              <button type="button" class="seg-btn" data-radar-type="3B" onclick="toggleRadarType('3B')">3B 第三类买点</button>
+              <button type="button" class="seg-btn" data-radar-type="S1" onclick="toggleRadarType('S1')">S1 第一类卖点</button>
+              <button type="button" class="seg-btn" data-radar-type="S2" onclick="toggleRadarType('S2')">S2 第二类卖点</button>
+              <button type="button" class="seg-btn" data-radar-type="S3" onclick="toggleRadarType('S3')">S3 第三类卖点</button>
+            </div>
+          </div>
+          <div class="radar-filter-group">
+            <span class="radar-filter-label">周期口径</span>
+            <div id="radarPeriodChips" class="radar-chip-row">
+              <button type="button" class="seg-btn active" data-radar-period="" onclick="setRadarPeriod('')">全部周期</button>
+              <button type="button" class="seg-btn" data-radar-period="daily" onclick="setRadarPeriod('daily')">日线</button>
+              <button type="button" class="seg-btn" data-radar-period="m30" onclick="setRadarPeriod('m30')">30 分钟</button>
+            </div>
+          </div>
+          <div class="radar-filter-group">
+            <span class="radar-filter-label">结论口径</span>
+            <div class="radar-chip-row">
+              <button type="button" id="radarResonanceOnly" class="seg-btn" onclick="toggleRadarResonanceOnly()">仅看区间套共振</button>
+              <button type="button" id="radarActionableOnly" class="seg-btn" onclick="toggleRadarActionableOnly()">仅看可执行信号</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="radar-result-card">
+          <div class="radar-result-head">
+            <h3>📋 信号清单</h3>
+            <span id="radarResultCount" class="radar-result-count">0 条</span>
+          </div>
+          <div class="table-scroll">
+            <table class="crawler-table radar-table">
+              <thead>
+                <tr>
+                  <th style="width:96px;">买/卖点</th>
+                  <th style="width:78px;">周期</th>
+                  <th style="width:150px;">证券</th>
+                  <th style="width:96px;">现价</th>
+                  <th style="width:96px;">结构止损</th>
+                  <th style="width:88px;">结构距离</th>
+                  <th style="width:110px;">目标位</th>
+                  <th style="width:110px;">建议股数</th>
+                  <th style="width:110px;">确认结论</th>
+                  <th>结构依据</th>
+                </tr>
+              </thead>
+              <tbody id="radarTableBody">
+                <tr><td colspan="10" class="empty-cell">尚未运行雷达扫描，请点击上方「运行全池雷达扫描」。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <details class="radar-method-card">
+          <summary>📖 判定规则与口径说明（点击展开）</summary>
+          <div class="radar-method-body">
+            <p><b>买点（与卖点严格对称）</b></p>
+            <ul>
+              <li><b>1B 第一类买点</b>：向下笔价格创出新低，但 MACD 绝对柱面积较前一同向笔减弱（笔级底背离）。</li>
+              <li><b>2B 第二类买点</b>：下跌笔 → 反弹笔 → 回调笔，回调低点高于前一下跌笔低点。</li>
+              <li><b>3B 第三类买点</b>：向上笔突破笔中枢上沿 ZG，随后回抽笔低点不低于 ZG。</li>
+            </ul>
+            <p><b>卖点</b></p>
+            <ul>
+              <li><b>S1 第一类卖点</b>：向上笔价格创出新高，但 MACD 绝对柱面积减弱（笔级顶背离）。</li>
+              <li><b>S2 第二类卖点</b>：上涨笔 → 回调笔 → 反抽笔，反抽高点低于前一上涨笔高点。</li>
+              <li><b>S3 第三类卖点</b>：向下笔跌破笔中枢下沿 ZD，随后反抽笔高点不高于 ZD。</li>
+            </ul>
+            <p><b>区间套</b>：30 分钟信号必须落在同向日线结构区间内才判定为共振；否则标注「单周期·已降级」并写明原因。</p>
+            <p><b>可执行性</b>：买点结构止损高于现价（或卖点结构止损低于现价）说明结构已被证伪；结构止损距离超过 15% 或结构尚未确认时，均不给建议股数。建议股数按单笔最大亏损 2%、单只不超过总资金 30%、100 股整手计算，仅为资金管理参数。</p>
+            <p><b>数据来源</b>：日线为可信不复权历史（与产品同一口径），30 分钟为真实公开分钟线；来源未获取则该周期不产出任何信号。</p>
+          </div>
+        </details>
+
       </div>
     </div>
 

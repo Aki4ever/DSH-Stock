@@ -168,6 +168,30 @@ def init_db():
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_timeline_code ON stock_timeline(code, trade_date);")
 
+        # 8. 需求REQ-019: 缠论信号雷达池表 (每次全池扫描整体替换，幂等)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chanlun_signal_radar (
+            signal_key TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            name TEXT DEFAULT '',
+            period TEXT NOT NULL,
+            signal_type TEXT NOT NULL,
+            side TEXT NOT NULL,
+            signal_time TEXT DEFAULT '',
+            entry_price REAL,
+            stop_price REAL,
+            target_price REAL,
+            risk_pct REAL,
+            status TEXT DEFAULT '',
+            resonance INTEGER DEFAULT 0,
+            payload TEXT NOT NULL,
+            computed_at TEXT DEFAULT ''
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_radar_type ON chanlun_signal_radar(signal_type);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_radar_code ON chanlun_signal_radar(code);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_radar_period ON chanlun_signal_radar(period);")
+
         conn.commit()
 
     # 需求REQ-017: 基准兜底初始化 (无基准时回填最近一条已核验成功批次)
@@ -727,6 +751,97 @@ def list_crawl_audit_records(limit: int = 50, offset: int = 0) -> List[Dict[str,
         ORDER BY id DESC LIMIT ? OFFSET ?;
         """, (limit, offset))
         return [dict(r) for r in cursor.fetchall()]
+
+
+# ============================================================
+# 需求REQ-019: 缠论信号雷达池读写
+# ============================================================
+
+def replace_chanlun_radar(signals: List[Dict[str, Any]]) -> int:
+    """
+    整体替换雷达池内容（一次扫描 = 一个快照），幂等且不残留过期信号。
+    只落结构与风控事实，不落任何推造数据。
+    """
+    import json as _json
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rows = []
+    for signal in signals or []:
+        key = "|".join([
+            str(signal.get("code") or ""), str(signal.get("period") or ""),
+            str(signal.get("signal_type") or ""), str(signal.get("time") or ""),
+        ])
+        rows.append((
+            key, signal.get("code") or "", signal.get("name") or "",
+            signal.get("period") or "", signal.get("signal_type") or "",
+            signal.get("side") or "", signal.get("time") or "",
+            signal.get("entry_price"), signal.get("stop_price"), signal.get("target_price"),
+            signal.get("risk_pct"), signal.get("status") or "",
+            1 if signal.get("resonance") is True else 0,
+            _json.dumps(signal, ensure_ascii=False), now_str,
+        ))
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM chanlun_signal_radar;")
+        if rows:
+            cursor.executemany("""
+            INSERT OR REPLACE INTO chanlun_signal_radar (
+                signal_key, code, name, period, signal_type, side, signal_time,
+                entry_price, stop_price, target_price, risk_pct, status,
+                resonance, payload, computed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, rows)
+        conn.commit()
+        return len(rows)
+
+
+def list_chanlun_radar(signal_types: Optional[List[str]] = None, period: str = "",
+                       code: str = "", since: str = "",
+                       limit: int = 500) -> List[Dict[str, Any]]:
+    """按信号类型 / 周期 / 证券 / 起始时间查询雷达池，返回完整信号载荷。"""
+    import json as _json
+    sql = "SELECT * FROM chanlun_signal_radar WHERE 1=1"
+    params: List[Any] = []
+    if signal_types:
+        sql += " AND signal_type IN (%s)" % ",".join("?" for _ in signal_types)
+        params.extend(signal_types)
+    if period:
+        sql += " AND period = ?"
+        params.append(period)
+    if code:
+        sql += " AND code = ?"
+        params.append(code)
+    if since:
+        sql += " AND computed_at >= ?"
+        params.append(since)
+    sql += " ORDER BY CASE side WHEN 'buy' THEN 0 ELSE 1 END, signal_type, code LIMIT ?"
+    params.append(int(limit))
+    out = []
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        for row in cursor.execute(sql, tuple(params)).fetchall():
+            record = dict(row)
+            try:
+                record["signal"] = _json.loads(record.get("payload") or "{}")
+            except (ValueError, TypeError):
+                record["signal"] = None
+            record.pop("payload", None)
+            out.append(record)
+    return out
+
+
+def chanlun_radar_snapshot() -> Dict[str, Any]:
+    """雷达池概览：总数、各类型计数与最近一次计算时间。"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        total = cursor.execute("SELECT COUNT(*) c FROM chanlun_signal_radar;").fetchone()["c"]
+        by_type = {r["signal_type"]: r["c"] for r in cursor.execute(
+            "SELECT signal_type, COUNT(*) c FROM chanlun_signal_radar GROUP BY signal_type;").fetchall()}
+        by_period = {r["period"]: r["c"] for r in cursor.execute(
+            "SELECT period, COUNT(*) c FROM chanlun_signal_radar GROUP BY period;").fetchall()}
+        last = cursor.execute("SELECT MAX(computed_at) m FROM chanlun_signal_radar;").fetchone()["m"]
+        resonance = cursor.execute("SELECT COUNT(*) c FROM chanlun_signal_radar WHERE resonance=1;").fetchone()["c"]
+    return {"total": total, "by_signal_type": by_type, "by_period": by_period,
+            "resonance_count": resonance, "computed_at": last}
 
 
 if __name__ == "__main__":

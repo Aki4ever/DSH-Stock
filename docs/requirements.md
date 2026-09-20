@@ -1,10 +1,10 @@
 # DSH 股票量化与自选监控工程需求台账 (Requirements Ledger)
 
 > ### 🏷️ **版本信息与实施追踪**
-> - **当前系统实施总版本**：`v4.6.0`
+> - **当前系统实施总版本**：`v4.7.0`
 > - **维护工程**：DSH 股票监控与量化分析系统 (DSH Stock)
 > - **最后更新日期**：2026-09-20
-> - **版本状态**：`[Release 稳定生效 / R03 第一批已交付]`
+> - **版本状态**：`[Release 稳定生效 / R03 第二批已交付]`
 
 本文档是本工程唯一的**独立核心需求管理台账**。任何规则与代码的变更必须在此溯源记录。
 
@@ -266,3 +266,32 @@
 - 依赖：REQ-019 为 REQ-020/021 前置；REQ-017 为后续所有日期口径的数据一致性前置。
 
 版本差异：新增 REQ-014/015/016/017/018，登记 REQ-019~021 为演进中；新增 `tests/test_r03_data_center.py`、`tests/test_layer_interaction.js`、`tests/browser_r03_verify.js`；`tests/test_detail_requests.js` 增补图层模型注入；移除 `web/app.js` 中已废弃的 `drawnHorizontalLines`/`indexState.customLines` 实际作用（保留空壳仅为兼容旧引用，渲染与逻辑一律以图层模型为准）。
+
+
+## 2026-09-20 生效变更：v4.7.0（R03 第二批 P1）
+
+直接前版：v4.6.0。以下口径优先于历史描述。
+
+### REQ-019 v1：缠论多周期买卖点引擎与信号雷达池
+- 状态：已完成；本地技术验收（自动化 + 真实数据 + 真实浏览器），用户验收待确认。
+- 新增 `scripts/chanlun_signals.py`（规则版本 `REQ-019/v1`），结构仍由 `scripts/chanlun_analysis.py` 唯一计算入口产出，本模块只做买卖点判定与组合，不重复实现形态学。
+- **六类买卖点严格对称**：
+  - 1B 向下笔创新低且 MACD 绝对柱面积减弱（笔级底背离）；S1 为向上笔创新高且面积减弱的镜像规则。
+  - 2B 下跌笔→反弹笔→回调笔且回调低点高于前一下跌笔低点；S2 为上涨笔→回调笔→反抽笔且反抽高点低于前一上涨笔高点的镜像规则。
+  - 3B 向上笔突破笔中枢上沿 ZG 且回抽笔低点不低于 ZG；S3 为向下笔跌破笔中枢下沿 ZD 且反抽笔高点不高于 ZD 的镜像规则。
+  - 3B/S3 在「已突破但回抽确认笔尚未形成」时只输出待确认（`provisional`）提示并标注 `stage`，不冒充已完成的三买/三卖。
+- **区间套**：30 分钟信号必须落在同向日线结构区间（`structure_window`）内才判定 `resonance=true`；否则保留信号但标记 `resonance_level='m30-only'` 与降级原因，**不得冒充共振结论**。买点与卖点不得互为共振。
+- **结构化输出**：`signal_type / period / side / entry_price / stop_price / target_price / risk_pct / status / rule / rule_version / analysis_rules_version / structure[] / structure_window / pivot`。目标位只在存在可依据的中枢边界时给出（买点上方取 ZG，卖点下方取 ZD），否则显式 `null` 标注「未获取」，不臆造目标价。
+- **可执行性判定**（新增，防止误导）：以下任一情形即 `actionable=false` 并说明原因，且**不给出建议股数**——① 买点结构止损高于现价（卖点结构止损低于现价）说明结构已被证伪；② 结构止损距离超过 15%；③ 结构尚未确认；④ 缺少入场/止损价；⑤ 按 100 股整手取整后为 0 股。建议股数按单笔最大亏损 2%、单只不超过总资金 30%、100 股整手计算，`risk_budget_note` 写明口径。
+- **去重**：同一周期同一类型只保留最新一条结构，避免同一结构被重复计数。
+- **雷达池**：新增 SQLite 表 `chanlun_signal_radar`（含 `signal_key` 幂等主键与类型/证券/周期索引），一次全池扫描整体替换，不残留上一轮过期信号。默认雷达池 20 只（宽基 ETF + 主要权重股），可由调用方覆盖。
+- **数据来源口径**：日线复用与产品同一套可信不复权历史服务（REQ-008/012），**不使用前复权数据**；30 分钟为真实公开分钟线。任一周期来源未获取即该周期不产出任何信号，错误逐条记录在 `errors` 与扫描 `failures` 中，不静默吞并。
+- **接口**：新增 `GET /api/chanlun/radar`（`?code=` 走实时双周期解构并返回 `mode=live`，否则读雷达池快照并返回 `mode=radar`，支持 `types`/`period`/`limit`）、`GET /api/chanlun/radar/scan-status`、`POST /api/chanlun/radar/scan`（后台线程扫描，重复启动返回 409 而非并发跑两份）。路由必须优先于既有通用 `/api/chanlun/<code>` 结构端点匹配。
+- **CLI**：`python3 -m scripts.chanlun_signals <code> [--json] [--refresh]` 单只双周期判定；省略代码则跑全池雷达，`--pool a,b,c` 自定义池，`--no-persist` 仅扫描不落库。
+- **Web**：「☯️ 缠论雷达」页（`viewRadarTab`）。含扫描控制与真实进度（脉冲点 + 百分比 + 进度条）、雷达池快照条、六类买卖点类型芯片、周期口径芯片、「仅看区间套共振」「仅看可执行信号」结论芯片、信号清单表与可展开的规则口径说明。
+- **前端诚实呈现约束**：不可执行信号在建议股数列显示「不可执行」并 tooltip 说明原因，**绝不显示建议股数**；无目标位显示「未获取」；空结果文案明确「池中无记录可能因为来源未获取，不等于无信号、不等于无风险」。
+- **竞态修正**：雷达筛选请求加入与 REQ-011 详情请求同一套序号守卫，快速切换筛选时丢弃过期响应，避免旧筛选结果覆盖新筛选（该缺陷由真实浏览器验证发现并修复）。
+- 实现：`scripts/chanlun_signals.py`（新增）、`scripts/stock_db.py`（表结构 + `replace_chanlun_radar`/`list_chanlun_radar`/`chanlun_radar_snapshot`）、`scripts/stock_web_server.py`（任务状态 + 3 个端点）、`web/app.js`、`web/index.html`、`web/style.css`。
+- 测试：`tests/test_r03_chanlun_signals.py`（32 项），覆盖六类规则**均可被触发**（含 3B/S3 正向触发与反向不触发）、待确认语义、去重取最新、可执行性五种拒止路径、区间套四种判定、雷达池落库幂等/整体替换/筛选/快照/业务表不受影响/JSON 可序列化。
+
+版本差异：新增 REQ-019 v1，交付 v4.7.0；REQ-020（策略选股与飞书钉钉告警）、REQ-021（持仓体检与动态止盈止损）仍为 `[EVOLVING]`。

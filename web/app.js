@@ -96,6 +96,7 @@ const dom = {
   tabBtnShareholders: document.getElementById('tabBtnShareholders'),
   tabBtnIndex: document.getElementById('tabBtnIndex'),
   tabBtnCrawler: document.getElementById('tabBtnCrawler'),
+  tabBtnRadar: document.getElementById('tabBtnRadar'),
   viewFilterTab: document.getElementById('viewFilterTab'),
   viewDashboardTab: document.getElementById('viewDashboardTab'),
   viewWorldTab: document.getElementById('viewWorldTab'),
@@ -103,6 +104,7 @@ const dom = {
   viewIndexTab: document.getElementById('viewIndexTab'),
   viewIndexDetailTab: document.getElementById('viewIndexDetailTab'),
   viewCrawlerTab: document.getElementById('viewCrawlerTab'),
+  viewRadarTab: document.getElementById('viewRadarTab'),
   viewStockDetailTab: document.getElementById('viewStockDetailTab'),
   btnBackToStockList: document.getElementById('btnBackToStockList'),
 
@@ -398,6 +400,7 @@ function switchMainTab(tabId) {
   if (dom.tabBtnShareholders) dom.tabBtnShareholders.classList.toggle('active', tabId === 'shareholders');
   if (dom.tabBtnIndex) dom.tabBtnIndex.classList.toggle('active', tabId === 'index');
   if (dom.tabBtnCrawler) dom.tabBtnCrawler.classList.toggle('active', tabId === 'crawler');
+  if (dom.tabBtnRadar) dom.tabBtnRadar.classList.toggle('active', tabId === 'radar');
 
   if (dom.viewFilterTab) dom.viewFilterTab.classList.toggle('hidden', tabId !== 'filter');
   if (dom.viewDashboardTab) dom.viewDashboardTab.classList.toggle('hidden', tabId !== 'dashboard');
@@ -405,6 +408,7 @@ function switchMainTab(tabId) {
   if (dom.viewShareholdersTab) dom.viewShareholdersTab.classList.toggle('hidden', tabId !== 'shareholders');
   if (dom.viewIndexTab) dom.viewIndexTab.classList.toggle('hidden', tabId !== 'index');
   if (dom.viewCrawlerTab) dom.viewCrawlerTab.classList.toggle('hidden', tabId !== 'crawler');
+  if (dom.viewRadarTab) dom.viewRadarTab.classList.toggle('hidden', tabId !== 'radar');
 
   // 隐藏详情全屏页
   if (dom.viewStockDetailTab) dom.viewStockDetailTab.classList.add('hidden');
@@ -421,6 +425,9 @@ function switchMainTab(tabId) {
   } else if (tabId === 'crawler') {
     pollCrawlerStatus();
     loadCrawlerAuditList();
+  } else if (tabId === 'radar') {
+    loadRadarPool();
+    syncRadarScanStatus();
   }
 }
 
@@ -5910,3 +5917,282 @@ function formatReal(value,digits=2) { return value == null || !Number.isFinite(N
 function escapeHtml(value) { return escapeActionText(String(value ?? "")); }
 
 function changeShareholderPage(delta) { const page=shareholderState.page+delta; if(page<1||page>Math.ceil(shareholderState.total/shareholderState.pageSize))return;shareholderState.page=page;loadShareholdersOverview(); }
+
+/* ==========================================================================
+ * 需求REQ-019: 缠论多周期买卖点雷达池前端
+ * 原则：只呈现后端返回的真实结构与风控事实；未获取/不可执行都必须显式说明，
+ *       不得把「无信号」说成「无风险」，也不得对不可执行信号展示建议股数。
+ * ========================================================================== */
+const radarState = {
+  types: new Set(['ALL']),   // 选中的买卖点类型
+  period: '',
+  resonanceOnly: false,
+  actionableOnly: false,
+  signals: [],
+  scanTimer: null,
+  snapshot: null,
+  scan: null,
+  requestId: 0            // 与 REQ-011 详情请求同一套竞态守卫：只接受最新一次筛选的响应
+};
+
+const RADAR_TYPE_META = {
+  '1B': { label: '1B', name: '第一类买点', side: 'buy', hint: '笔级底背离' },
+  '2B': { label: '2B', name: '第二类买点', side: 'buy', hint: '回踩不破前低' },
+  '3B': { label: '3B', name: '第三类买点', side: 'buy', hint: '突破中枢回抽不破 ZG' },
+  'S1': { label: 'S1', name: '第一类卖点', side: 'sell', hint: '笔级顶背离' },
+  'S2': { label: 'S2', name: '第二类卖点', side: 'sell', hint: '反抽不破前高' },
+  'S3': { label: 'S3', name: '第三类卖点', side: 'sell', hint: '跌破中枢反抽不回 ZD' }
+};
+
+function radarTypeQuery() {
+  if (radarState.types.has('ALL') || radarState.types.size === 0) return '';
+  return Array.from(radarState.types).join(',');
+}
+
+function toggleRadarType(type) {
+  if (type === 'ALL') {
+    radarState.types = new Set(['ALL']);
+  } else {
+    radarState.types.delete('ALL');
+    if (radarState.types.has(type)) radarState.types.delete(type);
+    else radarState.types.add(type);
+    if (radarState.types.size === 0) radarState.types = new Set(['ALL']);
+  }
+  syncRadarChips();
+  loadRadarPool();
+}
+
+function setRadarPeriod(period) {
+  radarState.period = period;
+  syncRadarChips();
+  loadRadarPool();
+}
+
+function toggleRadarResonanceOnly() {
+  radarState.resonanceOnly = !radarState.resonanceOnly;
+  syncRadarChips();
+  renderRadarTable();
+}
+
+function toggleRadarActionableOnly() {
+  radarState.actionableOnly = !radarState.actionableOnly;
+  syncRadarChips();
+  renderRadarTable();
+}
+
+/** 相似性 + 状态可见性：所有筛选芯片用同一套 active 视觉语言 */
+function syncRadarChips() {
+  document.querySelectorAll('#radarTypeChips .seg-btn').forEach(btn => {
+    btn.classList.toggle('active', radarState.types.has(btn.dataset.radarType));
+  });
+  document.querySelectorAll('#radarPeriodChips .seg-btn').forEach(btn => {
+    btn.classList.toggle('active', (btn.dataset.radarPeriod || '') === radarState.period);
+  });
+  const ro = document.getElementById('radarResonanceOnly');
+  if (ro) ro.classList.toggle('active', radarState.resonanceOnly);
+  const ao = document.getElementById('radarActionableOnly');
+  if (ao) ao.classList.toggle('active', radarState.actionableOnly);
+}
+
+async function loadRadarPool() {
+  syncRadarChips();
+  const types = radarTypeQuery();
+  const params = new URLSearchParams();
+  if (types) params.set('types', types);
+  if (radarState.period) params.set('period', radarState.period);
+  const body = document.getElementById('radarTableBody');
+  // 竞态守卫：快速切换筛选时，先发的请求可能后返回，必须丢弃过期响应，避免旧结果覆盖新筛选
+  const requestId = ++radarState.requestId;
+  try {
+    const resp = await fetch(`/api/chanlun/radar?${params.toString()}`, { cache: 'no-store' });
+    const json = await resp.json();
+    if (requestId !== radarState.requestId) return;
+    if (json.code !== 200) throw new Error(json.message || '雷达池读取失败');
+    radarState.signals = json.data || [];
+    radarState.snapshot = json.snapshot || null;
+    radarState.scan = json.scan || null;
+    renderRadarSnapshot();
+    renderRadarTable();
+    if (radarState.scan && radarState.scan.status === 'running') startRadarPolling();
+  } catch (err) {
+    if (requestId !== radarState.requestId) return;
+    if (body) {
+      body.innerHTML = `<tr><td colspan="10" class="empty-cell">雷达池读取失败：${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+}
+
+/** 邻近性：快照条紧贴筛选区之上，集中呈现口径与计数 */
+function renderRadarSnapshot() {
+  const el = document.getElementById('radarSnapshotText');
+  if (!el) return;
+  const snap = radarState.snapshot;
+  if (!snap || !snap.total) {
+    el.textContent = '雷达池为空。尚未运行扫描，或本次扫描未命中任何符合条件的买卖点。';
+    return;
+  }
+  const typeText = Object.entries(snap.by_signal_type || {})
+    .map(([k, v]) => `${k} ${v}`).join(' · ') || '无';
+  el.textContent = `共 ${snap.total} 条结构化信号（${typeText}）；其中区间套共振 ${snap.resonance_count} 条。`
+    + `计算时间 ${snap.computed_at || '未获取'}。日线 ${((snap.by_period || {}).daily) || 0} 条 · 30分钟 ${((snap.by_period || {}).m30) || 0} 条。`;
+}
+
+function radarFilteredSignals() {
+  let list = radarState.signals || [];
+  if (radarState.resonanceOnly) list = list.filter(s => s.resonance === true);
+  if (radarState.actionableOnly) list = list.filter(s => s.actionable === true);
+  return list;
+}
+
+function renderRadarTable() {
+  const body = document.getElementById('radarTableBody');
+  const counter = document.getElementById('radarResultCount');
+  if (!body) return;
+  const list = radarFilteredSignals();
+  if (counter) counter.textContent = `${list.length} 条`;
+  if (list.length === 0) {
+    const why = (radarState.signals || []).length > 0
+      ? '当前筛选条件下没有信号，请放宽「仅看区间套共振 / 仅看可执行信号」或类型筛选。'
+      : '雷达池中暂无该类型/周期的信号。注意：池中无记录可能因为来源未获取，不等于该证券没有风险，也不等于无信号。';
+    body.innerHTML = `<tr><td colspan="10" class="empty-cell">${why}</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(s => {
+    const meta = RADAR_TYPE_META[s.signal_type] || { name: s.signal_type, side: s.side };
+    const sideClass = s.side === 'buy' ? 'is-buy' : 'is-sell';
+    const periodText = s.period === 'daily' ? '日线' : (s.period === 'm30' ? '30分钟' : s.period);
+    const resonanceTag = s.resonance === true
+      ? '<span class="radar-tag is-resonance" title="30分钟信号落在同向日线结构区间内">区间套共振</span>'
+      : (s.resonance === false ? '<span class="radar-tag is-single" title="未落在同向日线结构区间内，已降级">单周期·已降级</span>' : '');
+    const statusTag = s.status === 'confirmed'
+      ? '<span class="audit-status-pill audit-status-success">已确认</span>'
+      : '<span class="audit-status-pill audit-status-warn">待确认</span>';
+    const targetText = s.target_price == null
+      ? '<span class="radar-missing" title="结构上没有可依据的中枢边界，按真实数据原则不臆造目标位">未获取</span>'
+      : `¥${formatReal(s.target_price)}`;
+    const sharesText = s.actionable
+      ? `${formatReal(s.suggested_shares, 0)} 股`
+      : `<span class="radar-blocked" title="${escapeHtml(s.risk_budget_note || '未给出建议仓位')}">不可执行</span>`;
+    const riskText = s.risk_pct == null ? '<span class="radar-missing">未获取</span>'
+      : (s.risk_pct < 0 ? `<span class="radar-blocked">${formatReal(s.risk_pct)}%</span>` : `${formatReal(s.risk_pct)}%`);
+    const structureText = (s.structure || []).map(p => {
+      const arrow = p.direction === 1 ? '↗' : '↘';
+      return `<span class="radar-struct-pen">${arrow} ${escapeHtml(String(p.end_time).slice(0, 10))} ¥${formatReal(p.end_price)}</span>`;
+    }).join('');
+    return `
+      <tr class="radar-row">
+        <td><span class="radar-point-badge ${sideClass}" title="${escapeHtml(meta.name || '')} · ${escapeHtml(s.rule || '')}">${s.signal_type}</span></td>
+        <td>${periodText}</td>
+        <td>${escapeHtml(s.name || '')} <code class="radar-code">${escapeHtml(s.code || '')}</code></td>
+        <td>¥${formatReal(s.entry_price)}</td>
+        <td>¥${formatReal(s.stop_price)}</td>
+        <td>${riskText}</td>
+        <td>${targetText}</td>
+        <td>${sharesText}</td>
+        <td>${statusTag}<br>${resonanceTag}</td>
+        <td class="radar-reason-cell">
+          <div class="radar-reason">${escapeHtml(s.reason || '')}</div>
+          <div class="radar-structure">${structureText}</div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function triggerRadarScan() {
+  const btn = document.getElementById('btnRadarScan');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 扫描中…'; }
+  try {
+    const resp = await fetch('/api/chanlun/radar/scan', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const json = await resp.json();
+    if (!json.success) {
+      setRadarScanHint(json.message || '扫描未能启动');
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 运行全池雷达扫描'; }
+      return;
+    }
+    startRadarPolling();
+  } catch (err) {
+    setRadarScanHint(`扫描启动失败：${err.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 运行全池雷达扫描'; }
+  }
+}
+
+function setRadarScanHint(text) {
+  const el = document.getElementById('radarScanHint');
+  if (el) el.textContent = text || '';
+}
+
+function startRadarPolling() {
+  if (radarState.scanTimer) return;
+  radarState.scanTimer = setInterval(pollRadarScanStatus, 2500);
+  pollRadarScanStatus();
+}
+
+async function pollRadarScanStatus() {
+  try {
+    const resp = await fetch('/api/chanlun/radar/scan-status', { cache: 'no-store' });
+    const json = await resp.json();
+    applyRadarScanState(json.scan, json.snapshot);
+    if (!json.scan || json.scan.status !== 'running') {
+      clearInterval(radarState.scanTimer);
+      radarState.scanTimer = null;
+      const btn = document.getElementById('btnRadarScan');
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 运行全池雷达扫描'; }
+      await loadRadarPool();
+    }
+  } catch (err) {
+    clearInterval(radarState.scanTimer);
+    radarState.scanTimer = null;
+    const btn = document.getElementById('btnRadarScan');
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 运行全池雷达扫描'; }
+    setRadarScanHint(`扫描状态读取失败：${err.message}`);
+  }
+}
+
+/** 只读同步一次状态，不启动轮询（进入页面时用） */
+async function syncRadarScanStatus() {
+  try {
+    const resp = await fetch('/api/chanlun/radar/scan-status', { cache: 'no-store' });
+    const json = await resp.json();
+    applyRadarScanState(json.scan, json.snapshot);
+    if (json.scan && json.scan.status === 'running') {
+      const btn = document.getElementById('btnRadarScan');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ 扫描中…'; }
+      startRadarPolling();
+    }
+  } catch (err) { /* 状态读取失败不阻断页面 */ }
+}
+
+function applyRadarScanState(scan, snapshot) {
+  if (snapshot) { radarState.snapshot = snapshot; renderRadarSnapshot(); }
+  if (!scan) return;
+  radarState.scan = scan;
+  const total = scan.total || 0;
+  const done = scan.done || 0;
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : (scan.status === 'running' ? 4 : 0);
+  const progress = document.getElementById('radarScanProgress');
+  if (progress) progress.style.width = `${pct}%`;
+  const count = document.getElementById('radarScanCount');
+  if (count) count.textContent = total > 0 ? `${Math.round(pct)}%  (${done} / ${total})` : (scan.status === 'running' ? '准备中' : '0.0%');
+  const dot = document.getElementById('radarPulseDot');
+  if (dot) {
+    dot.style.backgroundColor = scan.status === 'running' ? '#38bdf8'
+      : (scan.status === 'done' ? '#4ade80' : (scan.status === 'failed' ? '#f87171' : '#94a3b8'));
+  }
+  const text = document.getElementById('radarScanText');
+  if (text) {
+    if (scan.status === 'running') text.textContent = `正在扫描 ${scan.current || ''}…`;
+    else if (scan.status === 'done') text.textContent = `扫描完成于 ${scan.finished_at || ''}，命中信号 ${scan.signal_count} 条，落库 ${scan.persisted_count} 条`;
+    else if (scan.status === 'failed') text.textContent = `扫描失败：${scan.error || '未知原因'}`;
+    else text.textContent = '雷达池就绪，尚未运行本次会话的扫描';
+  }
+  const hints = [];
+  if (scan.status === 'done' && (scan.failures || []).length) {
+    const names = scan.failures.slice(0, 4).map(f => `${f.code}${f.name ? ' ' + f.name : ''}`).join('、');
+    hints.push(`⚠️ ${scan.failures.length} 只未获取：${names}${scan.failures.length > 4 ? ' 等' : ''}。未获取不代表无信号。`);
+  }
+  setRadarScanHint(hints.join(' '));
+}

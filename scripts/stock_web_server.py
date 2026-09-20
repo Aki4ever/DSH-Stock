@@ -424,6 +424,67 @@ SERVER_START_TIME = time.time()
 SERVER_INSTANCE = None
 SHUTDOWN_REQUESTED = False
 
+# ============================================================
+# 需求REQ-019: 缠论雷达池全池扫描的后台任务状态
+# 状态只记录真实进度与真实结果计数；失败项逐个保留原因，不做吞并。
+# ============================================================
+CHANLUN_RADAR_LOCK = threading.Lock()
+CHANLUN_RADAR_STATE: Dict[str, Any] = {
+    "status": "idle",          # idle | running | done | failed
+    "total": 0,
+    "done": 0,
+    "current": "",
+    "started_at": None,
+    "finished_at": None,
+    "signal_count": 0,
+    "persisted_count": 0,
+    "failures": [],
+    "error": None,
+}
+
+
+def _chanlun_radar_worker(codes=None, refresh: bool = False):
+    """后台执行全池扫描；逐只更新进度，异常逐条记录，不静默吞掉。"""
+    from scripts.chanlun_signals import run_radar
+
+    def progress(index, total, code):
+        with CHANLUN_RADAR_LOCK:
+            CHANLUN_RADAR_STATE["done"] = index - 1
+            CHANLUN_RADAR_STATE["total"] = total
+            CHANLUN_RADAR_STATE["current"] = code
+
+    try:
+        result = run_radar(codes, refresh=refresh, persist=True, progress=progress)
+        with CHANLUN_RADAR_LOCK:
+            CHANLUN_RADAR_STATE.update({
+                "status": "done", "total": result["scanned_count"], "done": result["scanned_count"],
+                "current": "", "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "signal_count": result["signal_count"], "persisted_count": result["persisted_count"],
+                "failures": result["failures"], "error": None,
+            })
+    except Exception as exc:  # noqa: BLE001
+        with CHANLUN_RADAR_LOCK:
+            CHANLUN_RADAR_STATE.update({
+                "status": "failed", "current": "",
+                "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "error": f"雷达池扫描失败: {exc}",
+            })
+
+
+def start_chanlun_radar_scan(codes=None, refresh: bool = False) -> Tuple[bool, str]:
+    """启动雷达池扫描；已有扫描在跑时拒绝重复启动，返回 (是否启动, 说明)。"""
+    with CHANLUN_RADAR_LOCK:
+        if CHANLUN_RADAR_STATE["status"] == "running":
+            return False, f"雷达池扫描已在进行中（{CHANLUN_RADAR_STATE['done']}/{CHANLUN_RADAR_STATE['total']}）"
+        CHANLUN_RADAR_STATE.update({
+            "status": "running", "total": 0, "done": 0, "current": "",
+            "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "finished_at": None,
+            "signal_count": 0, "persisted_count": 0, "failures": [], "error": None,
+        })
+    threading.Thread(target=_chanlun_radar_worker, args=(codes, refresh), daemon=True).start()
+    return True, "雷达池扫描已启动"
+
+
 
 # ====================================================
 # 需求REQ-017: 数据基准 (Baseline) 口径辅助函数
@@ -811,6 +872,55 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        # 3.6.0 需求REQ-019: 缠论多周期买卖点雷达池端点
+        # 注意：必须先于下面的通用 /api/chanlun/<code> 结构端点匹配
+        if url_path == "/api/chanlun/radar":
+            q = parse_qs(urlsplit(self.path).query)
+            code = (q.get("code", [""])[0] or "").strip()
+            types = [t for t in (q.get("types", [""])[0] or "").replace("，", ",").split(",") if t.strip()]
+            period = (q.get("period", [""])[0] or "").strip()
+            limit = int(q.get("limit", ["500"])[0] or 500)
+            from scripts import stock_db
+            if code:
+                # 指定证券：实时按双周期重新解构，返回含区间套判定的事实结果
+                from scripts.chanlun_signals import analyze_code
+                report = analyze_code(code, "", refresh=q.get("refresh", [""])[0] in ("1", "true"))
+                signals = report.get("signals") or []
+                if types:
+                    signals = [s for s in signals if s["signal_type"] in types]
+                if period:
+                    signals = [s for s in signals if s["period"] == period]
+                self._send_json(200, {
+                    "code": 200, "message": "success", "mode": "live",
+                    "rule_version": report.get("rule_version"),
+                    "target": {"code": report.get("code")},
+                    "periods": report.get("periods"), "errors": report.get("errors"),
+                    "counts": report.get("counts"),
+                    "snapshot": None,
+                    "data": signals,
+                    "disclaimer": report.get("disclaimer"),
+                })
+                return
+            records = stock_db.list_chanlun_radar(signal_types=types or None, period=period, limit=limit)
+            self._send_json(200, {
+                "code": 200, "message": "success", "mode": "radar",
+                "snapshot": stock_db.chanlun_radar_snapshot(),
+                "scan": dict(CHANLUN_RADAR_STATE),
+                "data": [r.get("signal") for r in records if r.get("signal")],
+                "disclaimer": ("雷达池为最近一次全池扫描的结构化事实快照，不构成投资建议，不承诺收益；"
+                               "池中无该证券记录可能因为来源未获取，需结合扫描明细中的失败项判断。"),
+            })
+            return
+
+        if url_path == "/api/chanlun/radar/scan-status":
+            from scripts import stock_db
+            self._send_json(200, {
+                "code": 200, "message": "success",
+                "scan": dict(CHANLUN_RADAR_STATE),
+                "snapshot": stock_db.chanlun_radar_snapshot(),
+            })
+            return
+
         if url_path.startswith('/api/chanlun/'):
             try:
                 from scripts.chanlun_analysis import analyze_bars
@@ -1057,6 +1167,22 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "code": 200,
                 "message": "已发送取消指令",
                 "snapshot": CRAWLER_JOB.get_snapshot()
+            })
+            return
+
+        # 6.5 需求REQ-019: 启动缠论雷达池全池扫描 (/api/chanlun/radar/scan)
+        if url_path == "/api/chanlun/radar/scan":
+            pool = params.get("codes")
+            codes = None
+            if isinstance(pool, list) and pool:
+                from scripts.chanlun_signals import normalize_code
+                codes = [(normalize_code(str(c)), "") for c in pool if str(c).strip()]
+            started, msg = start_chanlun_radar_scan(codes, refresh=bool(params.get("refresh")))
+            self._send_json(200 if started else 409, {
+                "code": 200 if started else 409,
+                "success": started,
+                "message": msg,
+                "scan": dict(CHANLUN_RADAR_STATE),
             })
             return
 
