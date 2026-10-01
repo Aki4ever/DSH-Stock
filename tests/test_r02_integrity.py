@@ -25,7 +25,14 @@ def pen_sequence(points,areas=None):
 class ChanlunTests(unittest.TestCase):
     def test_five_outputs_flat_series_and_ma_warmup(self):
         r=analyze_bars(bars([10]*40))
-        self.assertEqual(set(r['counts']),{'pens','segments','pivots','divergences','ma_entanglements'})
+        # 需求REQ-040 (v5.2.0): counts 在既有五个图层之外新增三类买卖点字段；
+        # 既有图层键必须原样保留（向后兼容），新增键必须齐全。
+        legacy = {'pens','segments','pivots','divergences','ma_entanglements'}
+        self.assertTrue(legacy.issubset(set(r['counts'])), '既有五类图层计数不得丢失')
+        self.assertEqual(set(r['counts']) - legacy,
+                         {'buy_sell_points','buy1','buy2','buy3','sell1','sell2','sell3'})
+        for k in ('buy1','buy2','buy3','sell1','sell2','sell3'):
+            self.assertEqual(r['counts'][k], 0, '横盘序列不得产生任何买卖点')
         self.assertEqual([r['counts'][k] for k in ['pens','segments','pivots','divergences']],[0,0,0,0])
         self.assertEqual(r['ma_entanglements'][0]['start_index'],19)
         self.assertEqual(r['ma_entanglements'][0]['bar_count'],21)

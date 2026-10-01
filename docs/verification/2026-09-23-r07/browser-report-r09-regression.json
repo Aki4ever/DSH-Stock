@@ -1,0 +1,238 @@
+{
+  "round": "R07",
+  "base": "http://127.0.0.1:8888",
+  "at": "2026-09-24T06:38:26.960Z",
+  "total": 44,
+  "passed": 44,
+  "results": [
+    {
+      "name": "headless Chrome 已就绪",
+      "ok": true,
+      "detail": "Chrome/148.0.7778.96"
+    },
+    {
+      "name": "页面加载成功",
+      "ok": true,
+      "detail": "【v5.4.0】A股多维量化筛选器 - DSH Stock Web"
+    },
+    {
+      "name": "个股详情已加载真实历史与缠论买卖点",
+      "ok": true,
+      "detail": "贵州茅台 · 日K 6011 根 · 买卖点 82 个"
+    },
+    {
+      "name": "REQ-037 K线图默认副图＝成交额(亿元)",
+      "ok": true,
+      "detail": "active=amt · 副图：成交额（含估算：均价×成交量）总"
+    },
+    {
+      "name": "REQ-037 K线图实际渲染的副图标题＝成交额",
+      "ok": true,
+      "detail": "副图：成交额（含估算：均价×成交量）总"
+    },
+    {
+      "name": "REQ-037 默认档位在页面唯一高亮（幅图联动控件：成交额）",
+      "ok": true,
+      "detail": "高亮档位 amt"
+    },
+    {
+      "name": "REQ-039 分组标题栏「压力线」「缠论相关」已出现",
+      "ok": true,
+      "detail": "压力线 | 缠论相关"
+    },
+    {
+      "name": "REQ-039「压力线」位于自动线控件之前且同组",
+      "ok": true,
+      "detail": "压力线 在自动线之前=true · 同组=true"
+    },
+    {
+      "name": "REQ-039「缠论相关」位于缠论画线按钮之前且同组",
+      "ok": true,
+      "detail": "缠论相关 在缠论画线之前=true · 同组=true"
+    },
+    {
+      "name": "REQ-039 分时图面板同样具备两个分组标题栏",
+      "ok": true,
+      "detail": "压力线 | 缠论相关"
+    },
+    {
+      "name": "REQ-039 分组标题与其控件处于同一行（中心线对齐、未被换行拆散）",
+      "ok": true,
+      "detail": "压力线 中心差 0.00px · 垂直重叠 22.5px（标题高 22.5 vs 控件高 37.4，top 差 7.5px 属高度差） · 缠论相关 中心差 0.00px · 垂直重叠 22.5px"
+    },
+    {
+      "name": "REQ-040 两个面板各新增买点1/2/3、卖点1/2/3 六个开关",
+      "ok": true,
+      "detail": "6/6(右) · 6/6(左)"
+    },
+    {
+      "name": "区间内六类买卖点齐全，可逐类验证",
+      "ok": true,
+      "detail": "2008-09-01~2010-01-29（视窗 345/345 根）共 7 个：买1 1／买2 1／买3 2／卖1 1／卖2 1／卖3 1"
+    },
+    {
+      "name": "REQ-041 默认即自动标记六类买卖点（买点1/2/3 + 卖点1/2/3 全部开启）",
+      "ok": true,
+      "detail": "buy1=true buy2=true buy3=true sell1=true sell2=true sell3=true"
+    },
+    {
+      "name": "REQ-041 默认状态下六类标记全部画出，且与后端判定逐类一致",
+      "ok": true,
+      "detail": "图上 {\"buy1\":1,\"buy2\":1,\"buy3\":2,\"sell1\":1,\"sell2\":1,\"sell3\":1} · 后端 {\"buy1\":1,\"buy2\":1,\"buy3\":2,\"sell1\":1,\"sell2\":1,\"sell3\":1}"
+    },
+    {
+      "name": "REQ-041 六个等级按钮仍可临时关闭（关闭后不残留任何标记）",
+      "ok": true,
+      "detail": "{\"buy1\":0,\"buy2\":0,\"buy3\":0,\"sell1\":0,\"sell2\":0,\"sell3\":0}"
+    },
+    {
+      "name": "REQ-040 选「买点3」时三个买点按钮同时点亮（累积语义）",
+      "ok": true,
+      "detail": "买1/2/3 active=true/true/true，卖1 active=false"
+    },
+    {
+      "name": "REQ-040 选「买点3」＝同时画出买点1、2、3（数量与后端逐类一致）",
+      "ok": true,
+      "detail": "图上 1买=1 2买=1 3买=2；后端一致"
+    },
+    {
+      "name": "REQ-040 仅显示买点时不得出现卖点标记",
+      "ok": true,
+      "detail": "卖点合计 0"
+    },
+    {
+      "name": "REQ-040 改选「买点1」＝只画出第一类买点",
+      "ok": true,
+      "detail": "1买=1（后端 1）· 2买=0 · 3买=0"
+    },
+    {
+      "name": "REQ-040 卖点开关独立于点且同样累积（选卖点2＝卖点1+2）",
+      "ok": true,
+      "detail": "卖1=1 卖2=1 卖3=0（后端 1/1）"
+    },
+    {
+      "name": "REQ-040 买卖点可同时显示（买点1 + 卖点1、2）",
+      "ok": true,
+      "detail": "1买=1 1卖=1 2卖=1"
+    },
+    {
+      "name": "REQ-040 标记文本标注类别（1买/2买/1卖…）",
+      "ok": true,
+      "detail": "已开启等级应显示 3 个，实际 3 个：1买 1卖 2卖"
+    },
+    {
+      "name": "REQ-040 标记附带可核对的缠论判定依据（含中枢/背驰/MACD 数值）",
+      "ok": true,
+      "detail": "第一类买点｜级别：日线级别 · 2009-01-21 · ¥99 · 已确认｜判定依据：下跌趋势：中枢 ¥175.50~¥192.50 → ¥128.00~¥144.00（不重叠）；离开段创新低 ¥9"
+    },
+    {
+      "name": "REQ-040 按钮上标注的识别数量＝后端全部历史识别数量（与视窗无关，诚实计数）",
+      "ok": true,
+      "detail": "buy1:6/6 buy2:2/2 buy3:30/30 sell1:15/15 sell2:9/9 sell3:20/20"
+    },
+    {
+      "name": "REQ-041 周线图给出真实「周线级别」判定（不再是「未获取缠论分析」）",
+      "ok": true,
+      "detail": "级别=weekly · 提交 1265 根周K · 后端识别 11 个 · 自动标记买卖点（周线级别）"
+    },
+    {
+      "name": "REQ-038 双图模式已进入 dual-panel 布局",
+      "ok": true,
+      "detail": "chart-panel-row dual-panel"
+    },
+    {
+      "name": "REQ-038 工具区间为固定高度（CSS 变量 --chart-toolzone-h，两面板一致）",
+      "ok": true,
+      "detail": "右 500px · 左 500px · CSS 500px"
+    },
+    {
+      "name": "REQ-038 两个K线图从同一高度开始（SVG 顶部差值＝0）",
+      "ok": true,
+      "detail": "左 961.953125 / 右 961.953125 → 差值 0.00px"
+    },
+    {
+      "name": "REQ-038 工具区超出内容时内部滚动（overflow-y: auto）",
+      "ok": true,
+      "detail": "auto"
+    },
+    {
+      "name": "REQ-038 内容不足的工具区保持固定高度并留白（不被内容压矮）",
+      "ok": true,
+      "detail": "容器 500px · 内容 115px · 留白 385px"
+    },
+    {
+      "name": "REQ-038 一侧内容变多（4 根自动线撑高）时两图依旧绝对同高",
+      "ok": true,
+      "detail": "SVG 顶部差值 0.00px · 右内容 567px / 容器 500px · 自动线 4 条"
+    },
+    {
+      "name": "REQ-038 图层面板完整落在固定高度内（未被裁剪，无需滚动即可看到全部图层）",
+      "ok": true,
+      "detail": "图层底 934 / 工具区底 962 · 可见节点 46/46"
+    },
+    {
+      "name": "REQ-037 幅图控件已合并为唯一联动控件（单点切换）",
+      "ok": true,
+      "detail": "控件 1 个：chartSubPlotControlUnified · 高亮 amt"
+    },
+    {
+      "name": "REQ-037 双图模式下K线面板仍为成交额",
+      "ok": true,
+      "detail": "amt · 副图：成交额（含估算：均价×成交量）总"
+    },
+    {
+      "name": "REQ-037 首屏沿用本维度默认档位（K线＝成交额 / 当日分时＝成交量，点选后即联动同步）",
+      "ok": true,
+      "detail": "统一控件高亮 amt · 当日分时实际渲染 副图：成交量总和:"
+    },
+    {
+      "name": "REQ-037 用户手动选过副图后，切换颗粒度不会被强制改回默认",
+      "ok": true,
+      "detail": "vol · 副图：成交量总和:"
+    },
+    {
+      "name": "REQ-037 手动切换后两面板联动一致（同一次选择同步生效）",
+      "ok": true,
+      "detail": "vol · 副图：成交量总和:"
+    },
+    {
+      "name": "REQ-037 5分K线（K线形态图）跟随统一档位渲染＝成交额",
+      "ok": true,
+      "detail": "amt · 副图：成交额（含估算：均价×成交量）总"
+    },
+    {
+      "name": "REQ-037 切回当日分时后仍与统一档位一致（联动不丢失）",
+      "ok": true,
+      "detail": "amt · 副图：成交额总和:"
+    },
+    {
+      "name": "REQ-040/REQ-041 买卖点开关按图独立生效（关掉左图不影响右图与右图按钮）",
+      "ok": true,
+      "detail": "右 active=true(等级3/2) 标记 2 · 左 active=false(等级0/0) 标记 0"
+    },
+    {
+      "name": "REQ-040 再次点击同一等级即关闭该方向全部买卖点标记",
+      "ok": true,
+      "detail": "关闭前买点 4 个 → 关闭后 0 个"
+    },
+    {
+      "name": "REQ-040 买、卖开关各自独立关闭后图上不再残留标记",
+      "ok": true,
+      "detail": "剩余标记 0 个"
+    },
+    {
+      "name": "页面无 JS 运行错误",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "consoleErrors": [],
+  "shots": [
+    "docs/verification/2026-09-24-r09/r07-rerun/01-buy3-cumulative.png",
+    "docs/verification/2026-09-24-r09/r07-rerun/02-buy1-sell2.png",
+    "docs/verification/2026-09-24-r09/r07-rerun/03-dual-panel-aligned.png",
+    "docs/verification/2026-09-24-r09/r07-rerun/04-panel-independent.png"
+  ],
+  "batch": "R09 regression (v5.4.0)",
+  "note": "R09 口径修订后的重跑报告；R07 交付时的结论见 README 上方表格"
+}

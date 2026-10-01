@@ -13,7 +13,7 @@
     <div class="brand-section">
       <span class="brand-icon">📈</span>
       <span class="brand-title">A股多维量化筛选器</span>
-      <span id="appVersionBadge" class="version-badge">v5.0.0</span>
+      <span id="appVersionBadge" class="version-badge">v5.6.0</span>
       <!-- 需求1: 顶部常显数据快照截取有效期 -->
       <span id="dataValidityBadge" class="data-validity-badge" title="行情来源的实际日期">📅 行情日期未获取</span>
       <span class="brand-tag">已收录主板+创业板</span>
@@ -102,8 +102,8 @@
           <div class="preset-tags">
             <span class="preset-title">快捷方案:</span>
             <button class="preset-chip" onclick="applyPreset('all')">全部已收录股票</button>
-            <button class="preset-chip" disabled title="成分股名单尚未核验">🏆 中证50核心龙头</button>
-            <button class="preset-chip" disabled title="成分股名单尚未核验">⭐ 中证100翘楚</button>
+            <button class="preset-chip" onclick="applyPreset('csi50')" title="中证A50 成分股（名单来源：东方财富数据中心 RPT_INDEX_COMPONENT，已核验）">🏆 中证A50核心龙头</button>
+            <button class="preset-chip" onclick="applyPreset('csi100')" title="中证A100 成分股（名单来源：东方财富数据中心 RPT_INDEX_COMPONENT，已核验）">⭐ 中证A100翘楚</button>
             <button class="preset-chip" onclick="applyPreset('chinext_growth')">🚀 创业板成长股</button>
             <button class="preset-chip" onclick="applyPreset('high_dividend')">🎁 高频分红(&gt;15次)</button>
             <button class="preset-chip" onclick="applyPreset('seasoned')">⏳ 穿越牛熊(&gt;15年)</button>
@@ -205,8 +205,8 @@
             </div>
             <div class="segmented-control" id="constituentControl">
               <button type="button" class="seg-btn active" data-val="all">全部 (不限)</button>
-              <button type="button" class="seg-btn" data-val="csi50" disabled title="成分股名单尚未核验">中证50</button>
-              <button type="button" class="seg-btn" data-val="csi100" disabled title="成分股名单尚未核验">中证100</button>
+              <button type="button" class="seg-btn" data-val="csi50" title="中证A50 成分股（名单来源：东方财富数据中心 RPT_INDEX_COMPONENT，已核验）">中证A50</button>
+              <button type="button" class="seg-btn" data-val="csi100" title="中证A100 成分股（名单来源：东方财富数据中心 RPT_INDEX_COMPONENT，已核验）">中证A100</button>
             </div>
           </div>
 
@@ -950,7 +950,7 @@
             <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5;">
               当前区间评估事件数: <strong id="worldEventsCount" style="color: #38bdf8;">未获取</strong> 件 ｜
               涵盖领域: <strong>财经、政治、金融、科技、产业</strong><br>
-              <span style="color: var(--text-muted); font-size: 0.75rem;">尚无可核验事件和评分依据，当前不生成宏观分数。</span>
+              <span id="worldScoreBasis" style="color: var(--text-muted); font-size: 0.75rem;">评分依据正在核验…</span>
             </div>
           </div>
         </div>
@@ -1775,8 +1775,9 @@
             <!-- 需求2: 8 大时段 Tab: 分时 / 5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部K线 -->
             <div class="segmented-control" id="indexChartPeriodControl">
               <button type="button" class="seg-btn active" data-period="timeline" onclick="switchIndexChartPeriod('timeline')">⏱️ 分时图</button>
-              <button type="button" class="seg-btn" data-period="kline5" onclick="switchIndexChartPeriod('kline5')">⚡ 5天K线</button>
-              <button type="button" class="seg-btn" data-period="kline10" onclick="switchIndexChartPeriod('kline10')">🔥 10天K线</button>
+              <button type="button" class="seg-btn" data-period="kline5m" onclick="switchIndexChartPeriod('kline5m')">🕔 5分K线</button>
+              <button type="button" class="seg-btn" data-period="kline15m" onclick="switchIndexChartPeriod('kline15m')">🕒 15分K线</button>
+              <button type="button" class="seg-btn" data-period="kline30m" onclick="switchIndexChartPeriod('kline30m')">🕧 30分K线</button>
               <button type="button" class="seg-btn" data-period="kline20" onclick="switchIndexChartPeriod('kline20')">📊 20天K线</button>
               <button type="button" class="seg-btn" data-period="kline60" onclick="switchIndexChartPeriod('kline60')">📈 60天K线</button>
               <button type="button" class="seg-btn" data-period="kline120" onclick="switchIndexChartPeriod('kline120')">📅 120天K线</button>
@@ -1849,86 +1850,25 @@
         </div>
       </div>
 
-      <!-- 行情走势图谱核心区 (分时图 / 20天K线 / 60天K线 / 全部) -->
+      <!-- 行情走势图谱核心区 (需求REQ-034: 双维度双图 —— 分时图维度 与 K线图维度 可同屏并存) -->
       <section class="detail-chart-section">
-        <div class="chart-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.6rem;">
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span style="font-weight: 700; font-size: 1.05rem;">📈 行情走势图谱</span>
+        <div class="chart-panel-header">
+          <div class="chart-panel-header-left">
+            <span class="chart-panel-header-title">📈 行情走势图谱</span>
+            <span class="chart-dual-hint">分时图与K线图是两个独立维度，可同屏左右对照；各自的周期、缩放与画线工具互不影响</span>
           </div>
-          <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
-            <!-- 需求2: 主图时段扩充为 8 个 Tab (分时图 / 5天 / 10天 / 20天 / 60天 / 120天 / 180天 / 全部) -->
-            <div class="segmented-control" id="chartPeriodControl">
-              <button type="button" class="seg-btn" data-period="timeline" onclick="switchChartPeriod('timeline')">⏱️ 分时图</button>
-              <button type="button" class="seg-btn" data-period="kline5" onclick="switchChartPeriod('kline5')">⚡ 5天K线</button>
-              <button type="button" class="seg-btn" data-period="kline10" onclick="switchChartPeriod('kline10')">🔥 10天K线</button>
-              <button type="button" class="seg-btn" data-period="kline20" onclick="switchChartPeriod('kline20')">📊 20天K线</button>
-              <button type="button" class="seg-btn" data-period="kline60" onclick="switchChartPeriod('kline60')">📈 60天K线</button>
-              <button type="button" class="seg-btn" data-period="kline120" onclick="switchChartPeriod('kline120')">📅 120天K线</button>
-              <button type="button" class="seg-btn" data-period="kline180" onclick="switchChartPeriod('kline180')">🗓️ 180天K线</button>
-              <button type="button" class="seg-btn active" data-period="all" onclick="switchChartPeriod('all')">🌟 全部</button>
-            </div>
-            <!-- 需求REQ-022: K线缩放视窗固定为「标准 200 根」口径；滚轮只改根数（5~200），不再提供超窗预设 -->
-            <div class="segmented-control" id="chartZoomControl" style="display: none;">
-              <button type="button" class="seg-btn active" data-zoom="200" onclick="setChartZoomWindow(200)">🎯 标准 200 根</button>
-              <button type="button" class="seg-btn" data-zoom="max" onclick="setChartZoomWindow('max')">🔄 复位标准视窗</button>
-            </div>
-
-            <!-- K线自定义时间区间控制器 -->
-            <div class="kline-date-control-bar" id="klineDateRangeBar" style="display: none;">
-              <span>区间:</span>
-              <button type="button" class="seg-btn" onclick="if(appState.activeDetailStock) openStockDetail(appState.activeDetailStock.code, true)">刷新历史</button>
-              <input type="date" id="klineStartDate" class="kline-date-input" onchange="applyKlineCustomDateRange()">
-              <span>~</span>
-              <input type="date" id="klineEndDate" class="kline-date-input" onchange="applyKlineCustomDateRange()">
-            </div>
-            <!-- 副图指标切换 -->
-            <div class="segmented-control" id="chartSubPlotControl">
-              <button type="button" class="seg-btn active" data-subplot="vol" onclick="switchChartSubplot('vol')">📊 成交量(手)</button>
-              <button type="button" class="seg-btn" data-subplot="amt" onclick="switchChartSubplot('amt')">💰 成交额(亿元)</button>
-            </div>
-
-            <!-- 需求2: 自动画图拆分为自动画1根、2根、3根、4根分段选择器 -->
-            <div class="segmented-control" id="autoLinesCountControl">
-              <span style="font-size: 0.78rem; color: #94a3b8; margin: 0 0.2rem 0 0.4rem; display: flex; align-items: center;">🤖 自动线:</span>
-              <button type="button" class="seg-btn active" data-count="0" onclick="setAutoLinesCount(0)">关</button>
-              <button type="button" class="seg-btn" data-count="1" onclick="setAutoLinesCount(1)">1根</button>
-              <button type="button" class="seg-btn" data-count="2" onclick="setAutoLinesCount(2)">2根</button>
-              <button type="button" class="seg-btn" data-count="3" onclick="setAutoLinesCount(3)">3根</button>
-              <button type="button" class="seg-btn" data-count="4" onclick="setAutoLinesCount(4)">4根</button>
-            </div>
-
-            <!-- 需求4: 缠论自动画线与适用范围说明按钮 -->
-            <div class="chart-draw-toolbox">
-              <button type="button" id="btnChanlunDraw" class="btn-draw-tool" onclick="toggleChanlunDraw()" title="依据[REQ-007]标准执行包含关系合并、顶底分型、画笔与三类买卖点标记">
-                ☯️ 缠论画线
-              </button>
-              <button type="button" id="btnChanlunScope" class="btn-draw-tool" onclick="openChanlunScopeModal()" title="查看缠论自动画笔与三类买卖点的技术原理与实战适用范围指南">
-                📖 适用范围
-              </button>
-            </div>
-
-            <!-- 需求REQ-014: 画图辅助工具 (手动画线 / 清除全部) —— 分模型清除见下方图层管理面板 -->
-            <div class="chart-draw-toolbox">
-              <button type="button" id="btnToggleHLine" class="btn-draw-tool" onclick="toggleDrawHLineMode()" title="开启画水平线模式后，在图表任意价格位置点击即可放置手动辅助线，并按价格自动归入「压力线」或「支撑线」模型">
-                📏 画水平线
-              </button>
-              <button type="button" id="btnClearLines" class="btn-draw-tool danger" onclick="clearAllChartDrawLines()" title="兜底操作：清除全部画线模型（自动多阶线 + 压力线 + 支撑线）；只想清一类请用下方图层管理面板中对应的清除按钮">
-                🧹 清除全部
-              </button>
-            </div>
+          <div class="chart-panel-header-actions">
+            <!-- 需求REQ-045: 分时图与日线图默认同时显示，故首屏「调出分时图」按钮隐藏（收起后才会出现） -->
+            <button type="button" id="btnAddMinutePanel" class="chart-open-btn" hidden onclick="showChartPanel('left')" title="在左侧调出分时图（当日分时 / 5分K线），与右侧K线图同屏对照">➕ 调出分时图</button>
+            <button type="button" id="btnAddKlinePanel" class="chart-open-btn" hidden onclick="showChartPanel('right')" title="在右侧调出K线图（日线图 / 周线图 / 季线图）">➕ 调出K线图</button>
           </div>
         </div>
-
-          <!-- 需求REQ-014/015: 图层管理面板 (格式塔·共同区域) —— 每个画线模型一行，各自独立显示/清除 -->
-          <div id="chartLayerPanel" class="chart-layer-panel" role="group" aria-label="图表画线图层管理"></div>
 
           <section id="stockActionSummary" style="font-size:.8rem;margin-bottom:1rem"></section>
           <p id="historyCoverage" role="status" style="color:var(--text-secondary);font-size:.8rem;line-height:1.6"></p>
 
-        <!-- 动态矢量图表容器 -->
-        <div id="chanlunLegend" class="chanlun-legend" hidden></div>
-        <div id="chartToastHost" class="chart-toast-host" role="status" aria-live="polite"></div>
         <div id="modalChartWrapper" class="chart-wrapper">
+          <!-- 需求REQ-034: 双图共用一个浮动摘要卡（同一时刻只有一个鼠标位置） -->
           <div id="chartTooltipBox" class="chart-tooltip-box">
             <div class="chart-tooltip-row"><span class="chart-tooltip-label">时间</span><span id="ttDate" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>
             <div class="chart-tooltip-row"><span class="chart-tooltip-label">开盘</span><span id="ttOpen" class="chart-tooltip-val">--</span></div>
@@ -1941,10 +1881,180 @@
             <div class="chart-tooltip-row"><span class="chart-tooltip-label">成交额</span><span id="ttAmount" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>
             <div class="chart-tooltip-row"><span class="chart-tooltip-label">换手率</span><span id="ttTurnover" class="chart-tooltip-val" style="color:#ffffff;">--</span></div>
           </div>
-          <div id="chartSvgContainer" style="width: 100%; display: flex; justify-content: center;">
-            <div style="padding: 2.5rem; color: var(--text-muted);">图表加载中...</div>
+
+          <!-- 需求REQ-045: 默认即「分时图 + 日线图」双图并排（无需点击添加），故首屏即为 dual-panel -->
+          <div id="chartPanelRow" class="chart-panel-row dual-panel">
+
+            <!-- ==================== 面板一：分时图维度 ==================== -->
+            <div class="chart-panel" id="chartPanelLeft">
+              <div class="chart-panel-head">
+                <span class="chart-panel-title">⏱️ 分时图维度</span>
+                <div class="segmented-control" id="minuteSubControl">
+                  <button type="button" class="seg-btn active" data-sub="timeline" onclick="switchMinuteSub('timeline')" title="当日真实分时走势（09:30-15:00 固定全景）">⏱️ 当日分时</button>
+                  <button type="button" class="seg-btn" data-sub="m5" onclick="switchMinuteSub('m5')" title="每根K线＝5分钟真实时间区间">🕔 5分K线</button>
+                </div>
+                <button type="button" class="chart-panel-close" onclick="hideChartPanel('left')" title="收起分时图（K线图将占满整行）">✕</button>
+              </div>
+
+              <div class="chart-panel-toolzone" id="chartToolzoneLeft">
+              <div class="chart-panel-toolbar">
+                <!-- 需求REQ-039: 分组标题栏「压力线」 -->
+                <div class="chart-tool-group">
+                <span class="chart-group-title">压力线</span>
+                <div class="segmented-control" id="autoLinesCountControl_left">
+                  <span class="chart-tool-label">🤖 自动线:</span>
+                  <button type="button" class="seg-btn active" data-count="0" onclick="setAutoLinesCount(0,'left')">关</button>
+                  <button type="button" class="seg-btn" data-count="1" onclick="setAutoLinesCount(1,'left')">1根</button>
+                  <button type="button" class="seg-btn" data-count="2" onclick="setAutoLinesCount(2,'left')">2根</button>
+                  <button type="button" class="seg-btn" data-count="3" onclick="setAutoLinesCount(3,'left')">3根</button>
+                  <button type="button" class="seg-btn" data-count="4" onclick="setAutoLinesCount(4,'left')">4根</button>
+                </div>
+                </div>
+                <!-- 需求REQ-039: 分组标题栏「缠论相关」；需求REQ-040: 三类买卖点开关 -->
+                <div class="chart-tool-group">
+                <span class="chart-group-title" title="缠论相关：买卖点默认按缠论定义自动标记第 1/2/3 类买点与卖点（可在下方按钮临时关闭）">缠论相关</span>
+                <div class="chart-draw-toolbox">
+                  <button type="button" id="btnChanlunDraw_left" class="btn-draw-tool" onclick="toggleChanlunDraw('left')" title="本图独立生效：依据[REQ-007]标准绘制包含关系合并、顶底分型、画笔与三类买卖点标记">☯️ 缠论画线</button>
+                  <button type="button" class="btn-draw-tool" onclick="openChanlunScopeModal()" title="查看缠论自动画笔与三类买卖点的技术原理与实战适用范围指南">📖 适用范围</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsBuy1_left" data-bs="buy1" onclick="toggleChartBsLevel('buy',1,'left')" title="第一类买点：下跌趋势（两个同向且不重叠的连续中枢）中，最后一个中枢的离开段出现趋势背驰（创新低且MACD绝对柱面积缩小）（选「买点1」即同时显示第 1~1 类，由后端严格按缠论定义识别，识别不到即显示未获取）">买点1</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsBuy2_left" data-bs="buy2" onclick="toggleChartBsLevel('buy',2,'left')" title="第二类买点：第一类买点之后的第一次回调不创新低（回调低点不破第一类买点低点）（选「买点2」即同时显示第 1~2 类，由后端严格按缠论定义识别，识别不到即显示未获取）">买点2</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsBuy3_left" data-bs="buy3" onclick="toggleChartBsLevel('buy',3,'left')" title="第三类买点：次级别向上离开中枢后回调不重新回到中枢区间（回调低点 > 中枢上沿 ZG）（选「买点3」即同时显示第 1~3 类，由后端严格按缠论定义识别，识别不到即显示未获取）">买点3</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsSell1_left" data-bs="sell1" onclick="toggleChartBsLevel('sell',1,'left')" title="第一类卖点：上涨趋势（两个同向且不重叠的连续中枢）中，最后一个中枢的离开段出现趋势背驰（创新高且MACD绝对柱面积缩小）（选「卖点1」即同时显示第 1~1 类，由后端严格按缠论定义识别，识别不到即显示未获取）">卖点1</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsSell2_left" data-bs="sell2" onclick="toggleChartBsLevel('sell',2,'left')" title="第二类卖点：第一类卖点之后的第一次反弹不创新高（反弹高点不破第一类卖点高点）（选「卖点2」即同时显示第 1~2 类，由后端严格按缠论定义识别，识别不到即显示未获取）">卖点2</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsSell3_left" data-bs="sell3" onclick="toggleChartBsLevel('sell',3,'left')" title="第三类卖点：次级别向下离开中枢后反抽不重新回到中枢区间（反抽高点 < 中枢下沿 ZD）（选「卖点3」即同时显示第 1~3 类，由后端严格按缠论定义识别，识别不到即显示未获取）">卖点3</button>
+                </div>
+                </div>
+                <!-- 第一性原理买卖点 (方法1: AMT拍卖理论 / 方法8: 努力与结果) -->
+                <div class="chart-tool-group first-principles-group">
+                <span class="chart-group-title" title="第一性原理买卖点：基于拍卖市场理论(AMT)价值区拒绝与威科夫努力与结果定律(Effort vs Result)">第一性原理</span>
+                <div class="chart-draw-toolbox">
+                  <button type="button" id="btnAmtDraw_left" class="btn-draw-tool fp-btn amt active" onclick="toggleAmtDraw('left')" title="拍卖市场理论 (AMT)：绘制70%成交量价值区(VAH/VAL/POC)，识别假跌破/假突破的价值区边缘拒绝买卖点">🏛️ 拍卖价值区</button>
+                  <button type="button" id="btnEffortDraw_left" class="btn-draw-tool fp-btn effort active" onclick="toggleEffortDraw('left')" title="威科夫努力与结果 (Effort vs Result)：识别天量极窄实体(底部被动吸收买点 / 高位滞涨派发卖点)">⚡ 努力与结果</button>
+                  <button type="button" class="btn-draw-tool help" onclick="openFirstPrinciplesModal()" title="查看方法1(AMT)与方法8(努力与结果)微观物理逻辑及格式塔操作指南">💡 微观原理</button>
+                </div>
+                </div>
+                <div class="chart-draw-toolbox">
+                  <button type="button" id="btnToggleHLine_left" class="btn-draw-tool" onclick="toggleDrawHLineMode('left')" title="本图独立生效：开启后在图上点击即可放置水平辅助线">📏 画水平线</button>
+                  <button type="button" class="btn-draw-tool danger" onclick="clearAllChartDrawLines('left')" title="只清除本图（分时图）的全部画线模型，不影响右侧K线图">🧹 清除本图全部</button>
+                </div>
+              </div>
+
+              <div id="chartLayerPanelLeft" class="chart-layer-panel" role="group" aria-label="分时图画线图层管理"></div>
+              </div>
+              <div class="chart-stage-container" style="position: relative;">
+                <div id="chartSvgContainerLeft" class="chart-svg-host"></div>
+                <!-- 需求2: 格式塔交互，缩放控制胶囊悬浮于走势图侧边 -->
+                <div class="chart-floating-zoom" id="floatingZoomLeft">
+                  <button type="button" class="floating-zoom-btn" onclick="zoomKlineChart('in','left')" title="放大走势图（减少根数）">➕</button>
+                  <button type="button" class="floating-zoom-btn" onclick="zoomKlineChart('out','left')" title="缩小走势图（增加根数）">➖</button>
+                </div>
+              </div>
+              <div class="chart-toast-host" role="status" aria-live="polite"></div>
+            </div>
+
+            <!-- ==================== 面板二：K线图维度 ==================== -->
+            <div class="chart-panel" id="chartPanelRight">
+              <div class="chart-panel-head">
+                <span class="chart-panel-title">📊 K线图维度</span>
+                <div class="segmented-control" id="klineGroupControl">
+                  <button type="button" class="seg-btn active" data-group="daily" onclick="switchKlineGroup('daily')" title="每根K线＝1个交易日">📊 日线图</button>
+                  <button type="button" class="seg-btn" data-group="weekly" onclick="switchKlineGroup('weekly')" title="每根K线＝1个自然周（由真实日K聚合）">📈 周线图</button>
+                  <button type="button" class="seg-btn" data-group="quarterly" onclick="switchKlineGroup('quarterly')" title="每根K线＝1个自然季度（由真实日K聚合）">🗓️ 季线图</button>
+                </div>
+                <button type="button" class="chart-panel-close" onclick="hideChartPanel('right')" title="收起K线图（分时图将占满整行）">✕</button>
+              </div>
+
+              <div class="chart-panel-toolzone" id="chartToolzoneRight">
+              <div class="chart-panel-toolbar">
+                <!-- 需求REQ-035: 二级 Tab（视窗根数 30/60/120/180 天|周|季）由 JS 随颗粒度动态渲染 -->
+                <div class="segmented-control" id="klineCountControl"></div>
+                <!-- 需求REQ-039: 分组标题栏「压力线」 -->
+                <div class="chart-tool-group">
+                <span class="chart-group-title">压力线</span>
+                <div class="segmented-control" id="autoLinesCountControl_right">
+                  <span class="chart-tool-label">🤖 自动线:</span>
+                  <button type="button" class="seg-btn active" data-count="0" onclick="setAutoLinesCount(0,'right')">关</button>
+                  <button type="button" class="seg-btn" data-count="1" onclick="setAutoLinesCount(1,'right')">1根</button>
+                  <button type="button" class="seg-btn" data-count="2" onclick="setAutoLinesCount(2,'right')">2根</button>
+                  <button type="button" class="seg-btn" data-count="3" onclick="setAutoLinesCount(3,'right')">3根</button>
+                  <button type="button" class="seg-btn" data-count="4" onclick="setAutoLinesCount(4,'right')">4根</button>
+                </div>
+                </div>
+                <!-- 需求REQ-039: 分组标题栏「缠论相关」；需求REQ-040: 三类买卖点开关 -->
+                <div class="chart-tool-group">
+                <span class="chart-group-title" title="缠论相关：买卖点默认按缠论定义自动标记第 1/2/3 类买点与卖点（可在下方按钮临时关闭）">缠论相关</span>
+                <div class="chart-draw-toolbox">
+                  <button type="button" id="btnChanlunDraw_right" class="btn-draw-tool" onclick="toggleChanlunDraw('right')" title="本图独立生效：依据[REQ-007]标准绘制包含关系合并、顶底分型、画笔与三类买卖点标记">☯️ 缠论画线</button>
+                  <button type="button" class="btn-draw-tool" onclick="openChanlunScopeModal()" title="查看缠论自动画笔与三类买卖点的技术原理与实战适用范围指南">📖 适用范围</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsBuy1_right" data-bs="buy1" onclick="toggleChartBsLevel('buy',1,'right')" title="第一类买点：下跌趋势（两个同向且不重叠的连续中枢）中，最后一个中枢的离开段出现趋势背驰（创新低且MACD绝对柱面积缩小）（选「买点1」即同时显示第 1~1 类，由后端严格按缠论定义识别，识别不到即显示未获取）">买点1</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsBuy2_right" data-bs="buy2" onclick="toggleChartBsLevel('buy',2,'right')" title="第二类买点：第一类买点之后的第一次回调不创新低（回调低点不破第一类买点低点）（选「买点2」即同时显示第 1~2 类，由后端严格按缠论定义识别，识别不到即显示未获取）">买点2</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsBuy3_right" data-bs="buy3" onclick="toggleChartBsLevel('buy',3,'right')" title="第三类买点：次级别向上离开中枢后回调不重新回到中枢区间（回调低点 > 中枢上沿 ZG）（选「买点3」即同时显示第 1~3 类，由后端严格按缠论定义识别，识别不到即显示未获取）">买点3</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsSell1_right" data-bs="sell1" onclick="toggleChartBsLevel('sell',1,'right')" title="第一类卖点：上涨趋势（两个同向且不重叠的连续中枢）中，最后一个中枢的离开段出现趋势背驰（创新高且MACD绝对柱面积缩小）（选「卖点1」即同时显示第 1~1 类，由后端严格按缠论定义识别，识别不到即显示未获取）">卖点1</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsSell2_right" data-bs="sell2" onclick="toggleChartBsLevel('sell',2,'right')" title="第二类卖点：第一类卖点之后的第一次反弹不创新高（反弹高点不破第一类卖点高点）（选「卖点2」即同时显示第 1~2 类，由后端严格按缠论定义识别，识别不到即显示未获取）">卖点2</button>
+                  <button type="button" class="btn-draw-tool bs-level active" id="btnBsSell3_right" data-bs="sell3" onclick="toggleChartBsLevel('sell',3,'right')" title="第三类卖点：次级别向下离开中枢后反抽不重新回到中枢区间（反抽高点 < 中枢下沿 ZD）（选「卖点3」即同时显示第 1~3 类，由后端严格按缠论定义识别，识别不到即显示未获取）">卖点3</button>
+                </div>
+                </div>
+                <!-- 第一性原理买卖点 (方法1: AMT拍卖理论 / 方法8: 努力与结果) -->
+                <div class="chart-tool-group first-principles-group">
+                <span class="chart-group-title" title="第一性原理买卖点：基于拍卖市场理论(AMT)价值区拒绝与威科夫努力与结果定律(Effort vs Result)">第一性原理</span>
+                <div class="chart-draw-toolbox">
+                  <button type="button" id="btnAmtDraw_right" class="btn-draw-tool fp-btn amt active" onclick="toggleAmtDraw('right')" title="拍卖市场理论 (AMT)：绘制70%成交量价值区(VAH/VAL/POC)，识别假跌破/假突破的价值区边缘拒绝买卖点">🏛️ 拍卖价值区</button>
+                  <button type="button" id="btnEffortDraw_right" class="btn-draw-tool fp-btn effort active" onclick="toggleEffortDraw('right')" title="威科夫努力与结果 (Effort vs Result)：识别天量极窄实体(底部被动吸收买点 / 高位滞涨派发卖点)">⚡ 努力与结果</button>
+                  <button type="button" class="btn-draw-tool help" onclick="openFirstPrinciplesModal()" title="查看方法1(AMT)与方法8(努力与结果)微观物理逻辑及格式塔操作指南">💡 微观原理</button>
+                </div>
+                </div>
+                <div class="chart-draw-toolbox">
+                  <button type="button" id="btnOverlayIntraday" class="btn-draw-tool" onclick="toggleOverlayIntraday('right')" title="把当日分时折线与日K叠加在同一价格轴上对比（分时横向铺满，时间轴与日K不对应）">🔀 重合当日分时</button>
+                  <button type="button" id="btnToggleHLine_right" class="btn-draw-tool" onclick="toggleDrawHLineMode('right')" title="本图独立生效：开启后在图上点击即可放置水平辅助线">📏 画水平线</button>
+                  <button type="button" class="btn-draw-tool danger" onclick="clearAllChartDrawLines('right')" title="只清除本图（K线图）的全部画线模型，不影响左侧分时图">🧹 清除本图全部</button>
+                </div>
+                <div class="kline-date-control-bar" id="klineDateRangeBar">
+                  <span>区间:</span>
+                  <button type="button" class="seg-btn" onclick="if(appState.activeDetailStock) openStockDetail(appState.activeDetailStock.code, true)">刷新历史</button>
+                  <input type="date" id="klineStartDate" class="kline-date-input" onchange="applyKlineCustomDateRange()">
+                  <span>~</span>
+                  <input type="date" id="klineEndDate" class="kline-date-input" onchange="applyKlineCustomDateRange()">
+                </div>
+              </div>
+
+              <div id="chartLayerPanelRight" class="chart-layer-panel" role="group" aria-label="K线图画线图层管理"></div>
+              </div>
+              <div class="chart-stage-container" style="position: relative;">
+                <div id="chartSvgContainerRight" class="chart-svg-host"></div>
+                <!-- 需求2: 格式塔交互，+-按钮紧邻放在K线图旁边浮动悬挂 -->
+                <div class="chart-floating-zoom" id="floatingZoomRight">
+                  <button type="button" class="floating-zoom-btn" onclick="zoomKlineChart('in','right')" title="放大K线（减少根数，细节更清晰）">➕</button>
+                  <button type="button" class="floating-zoom-btn" onclick="zoomKlineChart('out','right')" title="缩小K线（增加根数，看更多走势）">➖</button>
+                </div>
+              </div>
+              <div class="chart-toast-host" role="status" aria-live="polite"></div>
+            </div>
           </div>
         </div>
+
+        <!-- 需求1 & 需求4: 按照格式塔对称与居中原则，将换手率/成交额/成交量合并联动控制条左右居中放置在幅图正下方 -->
+        <div class="subplot-global-bar" style="margin-top: 0.6rem; display: flex; align-items: center; justify-content: center; position: relative; background: rgba(7, 13, 30, 0.75); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 0.5rem 1.2rem; min-height: 44px;">
+          <!-- 左右居中核心控制器 -->
+          <div style="display: flex; align-items: center; justify-content: center; gap: 0.8rem; flex-wrap: wrap;">
+            <span style="font-size: 0.86rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 4px;">
+              📉 幅图联动:
+            </span>
+            <div class="segmented-control" id="chartSubPlotControlUnified">
+              <button type="button" class="seg-btn" data-subplot="vol" onclick="switchChartSubplot('vol')">📊 成交量(手)</button>
+              <button type="button" class="seg-btn active" data-subplot="amt" onclick="switchChartSubplot('amt')">💰 成交额(亿元)</button>
+              <button type="button" class="seg-btn" data-subplot="turnover_rate" onclick="switchChartSubplot('turnover_rate')">🔄 换手率(%)</button>
+            </div>
+            <span style="font-size: 0.76rem; color: var(--text-muted);">（单点切换，分时与K线同步联动）</span>
+          </div>
+          <!-- 需求1: 幅图总和指标固定居右展示 -->
+          <div id="chartSubplotSummaryTotal" class="subplot-summary-right" style="position: absolute; right: 1.2rem; font-size: 0.84rem; font-family: monospace; display: flex; align-items: center; gap: 0.5rem;">
+            <span style="color: #94a3b8;">幅图总和:</span>
+            <span id="chartSubplotSummaryVal" style="font-weight: 700; color: #f59e0b;">--</span>
+          </div>
+        </div>
+
+        <!-- 需求4: 缠论图层图例（随当前K线颗粒度更新） -->
+        <div id="chanlunLegend" class="chanlun-legend" hidden></div>
       </section>
 
       <!-- 盘口行情指标与量化诊断网格 -->
@@ -2011,7 +2121,8 @@
         <button type="button" class="modal-dim-tab" data-dim="profile" onclick="switchDetailDimension('profile')">🏢 公司资料</button>
         <button type="button" class="modal-dim-tab" data-dim="shareholders" onclick="switchDetailDimension('shareholders')">👥 股东研究</button>
         <button type="button" class="modal-dim-tab" data-dim="finance" onclick="switchDetailDimension('finance')">📊 财务分析</button>
-        <button type="button" class="modal-dim-tab" data-dim="block" onclick="switchDetailDimension('block')">🤝 资本运作</button>
+        <button type="button" class="modal-dim-tab" data-dim="block" onclick="switchDetailDimension('block')">💼 大宗交易</button>
+        <button type="button" class="modal-dim-tab" data-dim="capital" onclick="switchDetailDimension('capital')">🤝 资本运作</button>
         <button type="button" class="modal-dim-tab" data-dim="dividend" onclick="switchDetailDimension('dividend')">💰 分红融资</button>
       </div>
 
@@ -2153,12 +2264,34 @@
           </div>
         </div>
 
-        <!-- 维度 5: 资本运作 (大宗交易独立面板) -->
+        <!-- 维度 5: 大宗交易独立面板 -->
         <div id="paneBlock" class="detail-view-pane hidden">
           <div class="finance-analysis-card">
-            <div style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 0.6rem; display: flex; justify-content: space-between;">
-              <span>深交所 / 上交所官方大宗交易系统成交穿透，重点识别<strong>机构席位动向</strong>与<strong>折溢价异动</strong></span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.5rem;">
+              <div>
+                <span style="font-weight: 700; font-size: 0.98rem; color: #f8fafc;">💼 大宗交易成交明细与主力穿透</span>
+                <span style="font-size: 0.82rem; color: var(--text-secondary); margin-left: 0.5rem;">深交所/上交所官方大宗交易系统成交直连</span>
+              </div>
               <span id="blockTradeSourceTag" class="tag-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">官方交易所接口直连</span>
+            </div>
+            <!-- 大宗交易核心指标看板 -->
+            <div class="block-summary-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.6rem; margin-bottom: 1rem;">
+              <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 0.6rem 0.8rem;">
+                <div style="font-size: 0.75rem; color: var(--text-muted);">累计记录笔数</div>
+                <div id="blockSummaryTotalCount" style="font-size: 1.1rem; font-weight: 700; color: #38bdf8; margin-top: 2px;">--</div>
+              </div>
+              <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 0.6rem 0.8rem;">
+                <div style="font-size: 0.75rem; color: var(--text-muted);">累计成交金额</div>
+                <div id="blockSummaryTotalAmount" style="font-size: 1.1rem; font-weight: 700; color: #f59e0b; margin-top: 2px;">-- 万元</div>
+              </div>
+              <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 0.6rem 0.8rem;">
+                <div style="font-size: 0.75rem; color: var(--text-muted);">平均折溢价率</div>
+                <div id="blockSummaryAvgPremium" style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-top: 2px;">--%</div>
+              </div>
+              <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 0.6rem 0.8rem;">
+                <div style="font-size: 0.75rem; color: var(--text-muted);">机构席位买入频次</div>
+                <div id="blockSummaryOrgBuyCount" style="font-size: 1.1rem; font-weight: 700; color: #10b981; margin-top: 2px;">-- 笔</div>
+              </div>
             </div>
             <div class="finance-table-box">
               <table class="fin-data-table">
@@ -2175,6 +2308,21 @@
                 </thead>
                 <tbody id="finTableBodyBlock"></tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 维度 5.5: 资本运作独立面板 (股权质押、增减持等) -->
+        <div id="paneCapital" class="detail-view-pane hidden">
+          <div class="finance-analysis-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+              <span style="font-weight: 700; font-size: 0.98rem; color: #f8fafc;">🤝 资本运作与股权结构异动</span>
+              <span class="tag-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc;">重大资产运作</span>
+            </div>
+            <div style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.7; padding: 1.2rem; background: rgba(15, 23, 42, 0.5); border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+              <p>📌 <b>运作全景提示</b>：大宗交易已独立升格至一级 Tab「💼 大宗交易」以支持深度席位穿透与折溢价分析。</p>
+              <p style="margin-top: 0.5rem;">本面板汇集上市公司重大资产重组、定向增发、控制权变更及战略投资等资本运作事件，数据与交易所信披同步。</p>
+              <div id="capitalEventsSummary" style="margin-top: 0.8rem; color: #94a3b8; font-size: 0.82rem;">暂无未决重大重组事项。</div>
             </div>
           </div>
         </div>
@@ -2423,6 +2571,52 @@ S_area(P) = Σ amount(d)   for d in (T \ D)</pre>
     </div>
   </div>
 
-  <script src="/web/app.js?v=5.0.0"></script>
+  <!-- 第一性原理技术买卖点及格式塔操作指南模态弹窗 -->
+  <div id="firstPrinciplesModal" class="fp-modal-overlay" style="display: none;" onclick="if(event.target===this) closeFirstPrinciplesModal()">
+    <div class="fp-modal-card" role="dialog" aria-labelledby="fpModalTitle">
+      <div class="fp-modal-header">
+        <span class="fp-modal-title" id="fpModalTitle">
+          <span>🔬 第一性原理技术买卖点体系与格式塔交互指南</span>
+        </span>
+        <button type="button" class="btn btn-secondary" onclick="closeFirstPrinciplesModal()" style="padding: 0.2rem 0.6rem; font-size: 0.85rem;">✕ 关闭</button>
+      </div>
+      <div class="fp-modal-body">
+        <div class="fp-principle-block amt">
+          <h4>
+            <span>🏛️ 方法一：拍卖市场理论 (Auction Market Theory, AMT)</span>
+            <span class="fp-tag amt">价值区边缘拒绝模型</span>
+          </h4>
+          <p><b>1. 微观物理机制：</b>市场本质是促进双向交易的拍卖机构。约 <b>70% 成交量</b> 聚集在公允价值区（Value Area，由 VAH 上沿、VAL 下沿和 POC 峰值组成）。当价格跌破 VAL 时属于低价探索，若低位无法激发更多卖单挂单，反而遭遇大量被动限价买单快速吞噬，价格会被瞬间拉回 VAL 内部（留下长下影针）。这在物理上证明市场各方<b>「拒绝低价 (Rejection)」</b>，当前价值区仍被公认，形成极高胜率的折价买点（AMT买）。反之，冲破 VAH 遇阻回落则构成溢价卖点（AMT卖）。</p>
+          <p><b>2. K线图表现：</b>以半透明微光紫色色块展示 Value Area 范围，金黄色虚线标出最大成交量 POC。出现边缘拒绝时在对应蜡烛标注 <code>🏛️AMT买</code> 或 <code>🏛️AMT卖</code>。</p>
+        </div>
+
+        <div class="fp-principle-block effort">
+          <h4>
+            <span>⚡ 方法八：威科夫努力与结果定律 (Wyckoff Law of Effort vs. Result)</span>
+            <span class="fp-tag effort">动力学吸收停顿模型</span>
+          </h4>
+          <p><b>1. 微观物理机制：</b>成交量是资金投入的能量（努力 Effort），K 线实体跨度是产生的价格位移（结果 Result）。在常态下大努力必产生大位移。如果在下跌途中出现<b>单日天量（大于20日均量1.7倍以上）</b>，但 K 线实体却极其狭窄或收出十字星（结果极小），物理上必然存在<b>极其庞大的隐匿被动限价买单（冰山单）硬生生阻截并吃光了全市场的恐慌砸盘</b>！这标志着空头动能耗尽、主力建仓吸收完毕，随后企稳即触发 <code>⚡吸收买</code>。反之，高位天量长上影滞涨则触发 <code>⚡滞涨卖</code>。</p>
+          <p><b>2. K线图表现：</b>异动 K 线周围带金黄色微光光晕，副图对应成交量柱标记高亮 <code>⚡</code> 符号，主图买卖点标注 <code>⚡吸收买</code> 或 <code>⚡滞涨卖</code>。</p>
+        </div>
+
+        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 0.9rem 1.1rem; margin-top: 1rem;">
+          <h5 style="margin: 0 0 0.5rem; color: #38bdf8; font-size: 0.92rem;">🎯 格式塔 (Gestalt) 交互原则设计说明</h5>
+          <ul style="margin: 0; padding-left: 1.2rem; font-size: 0.85rem; color: #94a3b8; line-height: 1.7;">
+            <li><b style="color: #cbd5e1;">接近性原则 (Proximity)：</b>操作按钮紧邻图表主视图右上方工具栏，与缠论分析并列，符合用户自然的视觉浏览与操作路径。</li>
+            <li><b style="color: #cbd5e1;">闭合性原则 (Closure)：</b>价值区采用半透明背景色块将 VAH 到 VAL 区域自然封包成一个视觉容器，让投资者第一眼感知公允价值边界，无需繁杂多余的辅助线。</li>
+            <li><b style="color: #cbd5e1;">图底关系原则 (Figure-Ground)：</b>价值区半透明置底（底图 Ground），蜡烛线与买卖点标记清晰浮于上层（前景 Figure），层次井然，零视觉干扰。</li>
+            <li><b style="color: #cbd5e1;">共同命运原则 (Common Fate)：</b>点击操作按钮时，对应指标的色块、参考线、主图买卖点徽章与副图异动量柱联动切换展示或隐藏，反馈符合第一直觉。</li>
+          </ul>
+        </div>
+      </div>
+      <div style="padding: 0.9rem 1.4rem; background: rgba(15, 23, 42, 0.95); border-top: 1px solid rgba(51, 65, 85, 0.6); display: flex; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeFirstPrinciplesModal()" style="background: rgba(168, 85, 247, 0.25); border-color: #a855f7; color: #f3e8ff;">已掌握微观原理与交互操作</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 需求REQ-053: 通用工具模块（纯函数，无副作用）必须先于 app.js 加载；两者同为经典脚本，全局函数语义不变 -->
+  <script src="/web/modules/util.js?v=5.6.0"></script>
+  <script src="/web/app.js?v=5.6.0-r12"></script>
 </body>
 </html>

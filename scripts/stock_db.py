@@ -481,7 +481,9 @@ def load_all_stocks_from_db() -> List[Dict[str, Any]]:
             d["high"] = d["high_p"]
             d["low"] = d["low_p"]
             from scripts.verified_quotes import clean_legacy_stock
-            result.append(clean_legacy_stock(d))
+            # 名单标记位来自 stocks_master（来源由 config/constituents.json 的
+            # verified_source/as_of 背书），必须保留，否则筛选恒 0（见 clean_legacy_stock 文档）。
+            result.append(clean_legacy_stock(d, keep_constituent=True))
         return result
 
 

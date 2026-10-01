@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-24T15:04:18",
+  "entry": {
+    "type": "web",
+    "url": "http://127.0.0.1:8888/",
+    "bind": "127.0.0.1:8888 (loopback only)"
+  },
+  "api_version": {
+    "version": "v5.4.1",
+    "info": {
+      "version": "v5.4.1",
+      "app_name": "A股多维量化筛选器",
+      "subtitle": "DSH Stock Web",
+      "release_date": "2026-09-24",
+      "description": "R09.1 补丁（v5.4.1，承接 v5.4.0 的 R09 批次）：① 首屏副图档位口径统一——左右面板的副图控件合并为唯一「幅图联动」控件后，首屏两图统一默认「成交额」，与控件高亮一致（此前「当日分时＝成交量」会造成「高亮成交额 / 左图显示成交量」自相矛盾）；用户一旦手动选择，档位不再被颗粒度或子Tab切换改写（原 REQ-037 的手动选择保护不变）；② 安全默认收紧——服务端默认只绑定本机回环 127.0.0.1（此前默认 0.0.0.0，对局域网开放且无鉴权），确需其它设备访问时用 DSH_STOCK_HOST=0.0.0.0 显式放开；启动日志会如实标注当前暴露面（回环 / 已放开），保活脚本与看门狗同口径；③ 运维加固——server.log / watchdog.log 在保活启动时按大小轮转（默认 ≥5MB 切分，保留最近 3 份，可用 DSH_STOCK_LOG_MAX_KB 调整），避免单文件无限增长；④ 测试资产归档——R05 历史快照脚本从 tests/ 移入 docs/verification/2026-09-20-r05/browser_r05_verify.snapshot.js，避免其过时断言被误当回归门禁；⑤ 本补丁不含任何数据口径变更，零数据库写入。"
+    }
+  },
+  "api_status": {
+    "status": "running",
+    "service": "DSH Stock Web Server",
+    "version": "v5.4.1",
+    "pid": 87757,
+    "port": 8888,
+    "uptime_seconds": 714,
+    "stock_count": 4601,
+    "csi50_count": 0,
+    "csi100_count": 0,
+    "db_path": "/Users/linqiyu/Documents/DSH/DSH股票/data/stock_database.db",
+    "snapshot_date": "2026-09-23",
+    "snapshot_source": "baseline",
+    "quote_date": "2026-09-24",
+    "quote_datetime": {
+      "raw": "20260924145223",
+      "date": "2026-09-24",
+      "time": "14:52",
+      "datetime": "2026-09-24 14:52",
+      "display": "2026年9月24日 14:52",
+      "precision": "minute",
+      "source": "quote_snapshot"
+    },
+    "baseline": {
+      "id": 13,
+      "task_id": "crawl_1790170972",
+      "crawl_date": "2026-09-23",
+      "raw_crawl_date": "2026-09-23 21:43:39",
+      "status": "成功(真实行情全量)",
+      "fingerprint": "bfeb57ac24bca040",
+      "target_scope": "已收录A股",
+      "total_items": 4601,
+      "updated_items": 4601,
+      "skipped_items": 0,
+      "details": "完成模式: full, 处理: 4601 只, 更新: 4601 只, 幂等跳过: 0 只",
+      "is_baseline": true
+    },
+    "current_time": "2026-09-24 15:04:18"
+  },
+  "listener": "python3.1 87757 linqiyu    4u  IPv4 0x3db90e42fe038f51      0t0  TCP 127.0.0.1:8888 (LISTEN)",
+  "pid_files": {
+    "server": "87757",
+    "watchdog": "87777"
+  }
+}

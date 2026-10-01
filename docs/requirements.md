@@ -1,10 +1,10 @@
 # DSH 股票量化与自选监控工程需求台账 (Requirements Ledger)
 
 > ### 🏷️ **版本信息与实施追踪**
-> - **当前系统实施总版本**：`v5.0.0`（**已交付**／R04 全批）
+> - **当前系统实施总版本**：`v5.6.0`（**已交付**／R11 stockper 权威调研与抓取 Agent + R12 会话与产品全域管控纳管对齐；权威来源 `config/version.json`）
 > - **维护工程**：DSH 股票监控与量化分析系统 (DSH Stock)
-> - **最后更新日期**：2026-09-20
-> - **版本状态**：`[Release 稳定生效 / R03 四批全部交付（v4.6.0~v4.9.1）；REQ-021 功能已交付但因持仓底册为空而处于门禁关闭状态；R04（REQ-022~026）v5.0.0 已交付并完成真机浏览器验收（37/37 PASS，个股 + 指数双路径）]`
+> - **最后更新日期**：2026-10-02
+> - **版本状态**：`[Release 稳定生效 / R03 四批全部交付（v4.6.0~v4.9.1）；REQ-021 功能已交付但因持仓底册为空而处于门禁关闭状态；R04（REQ-022~026）v5.0.0 已交付；R05（REQ-027~032）v5.0.0 已交付，台账条目已于 2026-09-24 依代码与测试实证回填（REQ-033 明确作废）；R06（REQ-034~036）v5.1.0 已交付（真机 39/39 PASS）；R07（REQ-037~040）v5.2.0 已交付（真机 44/44 PASS）；R08（REQ-041~045）v5.3.0 已交付（真机 40/40 PASS）；R09（REQ-046~048）v5.4.0 已交付（Python 228 PASS · JS 6 套 PASS · 真机 28/28 PASS）；R09.1 补丁（REQ-037 修订 + REQ-049 回环绑定 + REQ-050 日志轮转 + REQ-051 快照归档）v5.4.1 已交付；R10（REQ-052 数据库非破坏归档 + REQ-053 前端模块化拆分第一步）v5.5.0 已交付（Python 260 PASS · 静态 7 套 PASS · 真机 R10 15/15 · R09 28/28 · R08 40/40 · R07 44/44 · R06 39/39 全绿）；R11（REQ-055 stockper 权威调研与真实抓取 Agent + 物理执行层落地审计）v5.6.0 已交付（Python 291→311 PASS · 静态 8 套 PASS · 真机 R11 25/25 PASS）；R12（REQ-056 会话与产品全域管控纳管对齐）v5.6.0 已交付（主会话命名 9/9 合规 · 会话转录定位器与标题存储分片读取修复 · 工作树清零入库）]`
 
 本文档是本工程唯一的**独立核心需求管理台账**。任何规则与代码的变更必须在此溯源记录。
 
@@ -521,3 +521,426 @@
 - 静态回归：`python3 -m unittest discover -s tests` **183 项 PASS**（新增 `test_r04_intraday_chanlun.py` 6 项）；`node tests/test_r04_chart_viewport.js` / `test_chart_integrity.js` / `test_layer_interaction.js` / `test_detail_requests.js` 全 PASS。
 - 真机浏览器：`node tests/browser_r04_verify.js` **37/37 PASS**（个股 + 指数双路径；含分时禁缩放、指数 200 根与几何不变、成交额副图与指数副图估算标注），证据 `docs/verification/2026-09-20-r04/`（7 张截图 + `browser-report.json` + 验证记录 README）。
 - R03 既有浏览器回归同步按 REQ-025 修订断言后 `node tests/browser_r03_verify.js` **20/20 PASS**。
+
+
+---
+
+## R06 批次（v5.1.0）：K线图双维度双图 —— 分时图 / 日线图 / 周线图 / 季线图
+
+> **需求来源**：用户 2026-09-23 直接指令（原始表述见下 R06-原始需求）。
+> **设计取舍**：用户对 5 个待澄清点逐项裁决 —— ① 档位由「20/60/120/180」统一改为「30/60/120/180」；② 重合图采用方案A（日K背景 + 当日分时折线叠加，共用价格轴）；③ 允许缩放到「全部」根数，槽宽可小于 1px，蜡烛按最小宽度绘制、只求可辨轮廓；④ 双图采用左右布局；⑤ 「当日分时」保留为分时维度的子 Tab。
+
+### REQ-034: K线图两级 Tab 与「分时图 / K线图」双维度并存
+
+| 项目 | 内容 |
+| :--- | :--- |
+| **需求描述** | K线图必须提供两级 Tab。一级 Tab＝「分时图 / 日线图 / 周线图 / 季线图」；分时图维度下的二级 Tab＝「当日分时 / 5分K线 / 1分K线」，日线图维度下＝「30天K线 / 60天K线 / 120天K线 / 180天K线」，周线图＝「30周 / 60周 / 120周 / 180周」，季线图＝「30季 / 60季 / 120季 / 180季」。分时图为**一个独立维度**，日线图/周线图/季线图为**另一个维度**；两个维度可以同时打开，两个图同时在画面上左右并排，且各自的画线工具单独生效。 |
+| **颗粒度口径** | 分时维度以 Tab 对应的时间颗粒度为 1 根K线（5分K线每根＝5分钟真实区间、1分K线每根＝1分钟真实区间）；当日分时为固定全景（09:30–15:00，不参与缩放）。K线维度以日/周/季为颗粒度。 |
+| **状态** | `[ACTIVE]` |
+| **验收要点** | ① 一级 Tab 三项集合正确；② 二级 Tab 文案随一级 Tab 切换单位（天/周/季）；③ `showChartPanel('left'/'right')` 后两图左右并排且同一行；④ 在一个图上画水平线/开自动线，另一个图的状态与 DOM 均不受影响；⑤ 一个图的颗粒度切换不改变另一个图的颗粒度；⑥ 不允许两个图同时收起（至少保留一个，单图时占满整行）。 |
+
+### REQ-035: 缩放只控制「画面显示多少根K线」——下限 30 根、上限为全部
+
+| 项目 | 内容 |
+| :--- | :--- |
+| **需求描述** | 放大缩小**只能**控制画面显示多少根K线，最低 30 根，最多为该颗粒度「全部」可用根数；真实根数不足以填满视窗时，从左侧起绘、右侧留白，绝不拉伸槽宽、绝不补足根数。 |
+| **实现口径** | 视窗根数 N ∈ [30, max(30, C)]（C＝该颗粒度真实可用根数）；槽宽 = 绘图区内宽 / N；实绘根数 = min(N, C)；`N > C` 时右侧留白并在图上标注「（不足，右侧留白）」。滚轮仅改 N，绘图区左缘与宽度恒定。 |
+| **剔除的旧口径** | REQ-029「标准视窗固定 200 根、缩放下限 5 根、不足 200 根按标准槽宽留白」仅对**指数详情页**继续生效；个股详情页由本需求取代。 |
+| **状态** | `[ACTIVE]` |
+| **验收要点** | ① 滚轮放大到极限＝30 根（不再继续放大）；② 缩小到极限＝该颗粒度全部可用根数（600519 日线实测 6009 根，不再是 200 根）；③ 区间内仅 10 根真实日K时实绘 10 根、占用 31.9%、图上标注「视窗 30 根 · 实绘 10 根（不足，右侧留白）」；④ 缩放前后绘图区 730px @x=65 恒定。 |
+
+### REQ-036: 重合图（方案A）—— 日K背景 + 当日分时折线叠加，共用价格轴
+
+| 项目 | 内容 |
+| :--- | :--- |
+| **需求描述** | 在日线图维度下可一键调出「重合当日分时」：以日K为背景，把当日分时折线叠加在同一张图上，两者共用同一价格轴。 |
+| **实现口径** | 分时折线横向铺满整个绘图区（X 从绘图区左缘到右缘），价格轴范围同时容纳日K与分时（含昨收）；图上必须显式标注「时间轴与日K不对应，仅价格轴对齐」；当日分时不可得时如实提示原因，不得以任何方式伪造。 |
+| **状态** | `[ACTIVE]` |
+| **验收要点** | ① 开关只在日线图上可用（切到周线/季线自动关闭）；② 叠加折线几何范围实测 X 65~795 与绘图区完全一致；③ 图上存在时间轴不对应的显式标注；④ 无当日分时时显示如实提示。 |
+
+### R06 原始需求（用户原文要点）
+1. K线图增加 Tap 分组：分时图（Tap：5分K线、1分K线）、日线图（Tap：20天/60天/120天/180天K线）、周线图（Tap：20周…）、季线图（Tap：20季…）；
+2. 分时图以 Tap 对应的时间颗粒度为 1 根K线；日线图以日线为时间颗粒度，周线图以周线，季线图以季线；
+3. 放大缩小只能控制画面有多少根线，最低 30，最多为全部；如果不够线就右边留白；
+4. 分时图为一个维度；日线图、周线图、季线图为另一个维度；可以同时打开分时图与日线图（2 个图都在画面上并且画线工具都单独生效）；还可以调出分时图与日线图的重合图；
+5. 实施约束（用户原话）：「记得当前已有的数据不要去脏掉」——本轮**零数据库写入**，周线/季线聚合全部在浏览器内存中由真实日K现场计算。
+
+### R06 实施影响面（已逐项落实）
+| 文件 | 实际改动 |
+| :--- | :--- |
+| `web/app.js` | 新增 `MIN_PANEL_BARS=30`、`KLINE_COUNT_TIERS=[30,60,120,180]`、`MINUTE_SUBTABS`、`KLINE_GROUPS`、`createPanelChartState`、`chartPanels`（left/right 双面板状态）、`PANEL_SLOTS`、`panelBySlot` / `panelPeriodKey` / `panelIsTimeline` / `aggregateBarsForGroup`（ISO 周与自然季聚合）/ `panelAvailableBars` / `panelEffectiveCount` / `panelWindowBars` / `syncPanelToAppState` / `persistPanelFromAppState` / `withChartPanel`；重写 `renderActiveStockChart` → 按槽位渲染 `renderChartPanel`；新增 `switchMinuteSub` / `switchKlineGroup` / `switchKlineCount` / `showAllKlineBars` / `toggleOverlayIntraday` / `showChartPanel` / `hideChartPanel` / `toggleChartPanel`；`generateDailyKlineSVG` / `generateTimelineSVG` / `bindChartCrosshair` / `bindChartZoomAndDrawing` / `handleChartLineClick` / `bringChartLineToFront` / `renderLineLayerPanel` / `setAutoLinesCount` / `toggleDrawHLineMode` / `toggleChanlunDraw` / `clearChartLayer` / `switchChartSubplot` 全部改为**按面板槽位**工作；分钟K线请求上限提升到 800 根；分钟K线横轴改为精确到分钟；修复「渲染 → 请求 → 渲染」自触发的微任务死循环（分钟K线与分时缠论各加一道幂等闸门） |
+| `web/index.html` | 图表区重构为 `#chartPanelRow`（`single-panel` / `dual-panel`）双面板结构：左＝分时维度（`#minuteSubControl` 三个子Tab + 独立副图/自动线/画线工具 + `#chartLayerPanelLeft` + `#chartSvgContainerLeft`），右＝K线维度（`#klineGroupControl` 一级Tab + `#klineCountControl` 动态二级Tab + 独立工具条 + `#btnOverlayIntraday` 重合开关 + `#chartLayerPanelRight` + `#chartSvgContainerRight`）；新增 `#btnAddMinutePanel` / `#btnAddKlinePanel` 调出按钮；版本徽标与脚本缓存版本同步至 `v5.1.0` |
+| `web/style.css` | 新增 `.chart-panel-header` / `.chart-dual-hint` / `.chart-open-btn` / `.chart-panel-row(.single-panel/.dual-panel)` / `.chart-panel` / `.chart-panel-head` / `.chart-panel-toolbar` / `.chart-tool-label` / `.chart-svg-host`（`svg{width:100%;height:auto}` 自适应）与窄屏纵向堆叠断点 |
+| `scripts/real_chart_engine.py` | 分钟K线白名单收敛为 `m1/m5/m15/m30` 并新增 `MINUTE_KLINE_MAX_LIMIT = 800`（实测 `limit=1600` 会被上游降级为 320 根，800 根可完整取回） |
+| `scripts/stock_web_server.py` | 分钟K线接口错误文案与 `m1` 支持口径对齐 |
+| `tests/` 新增 | `browser_r06_verify.js`（真机 36 项：两级 Tab / 颗粒度与聚合口径 / 缩放上下限 / 不足留白 / 双图并存 / 画线独立 / 重合图 / 面板收起保护） |
+| `tests/` 修订 | `test_detail_requests.js`、`test_layer_interaction.js` 按面板槽位架构补桩（`PANEL_SLOTS` / `chartPanels` / `withChartPanel` 等）；`test_r04_chart_viewport.js` 个股视窗断言改写为 REQ-035 口径，指数 200 根口径断言原样保留 |
+| `config/version.json` | 版本升至 `v5.1.0`，描述同步为 R06 口径 |
+
+### R05 台账（REQ-027 ~ REQ-033，v5.0.0）—— 2026-09-24 依代码与测试实证回填
+
+> **回填口径声明（如实登记）**：R05 交付当时未写入台账条目。本批由**代码引用点 + 当时留存的测试断言 + 现行行为实测**三处交叉实证回填（引用位置与断言逐条列明），**不臆造当时未落地的意图**；凡无法实证者一律标注为「无实证」而非补写。
+
+| 编号 | 需求名称 | 实现口径（含代码引用点） | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-027 | 周期 Tab 重构：新增 5/15/30 分K线、移除 5天/10天K线 | 个股与指数周期 Tab 同口径调整（`web/app.js` `switchChartPeriod` 及周期映射表、`web/index.html` 周期 Tab 按钮）。真机断言 6 项：Tab 集合含 `kline5m/kline15m/kline30m`、不含 5天/10天，个股与指数同步。 | `[ACTIVE]` |
+| REQ-028 | 5/15/30 分钟K线按需拉取，个股与指数共用同一实现 | `web/app.js`「按需拉取分钟K线（5/15/30 分钟），个股与指数共用同一实现」；每根为**真实时间区间**（开/收/高/低/量），取回根数不足基准时**右侧留白、不拉伸、不补造**；失败或无数据一律如实提示，绝不伪造分钟K线。真机断言 6 项。 | `[ACTIVE]` |
+| REQ-029 | 各 K 线周期默认根数「铺满绘图区不留白」＋ 压力线按当前窗口测算 | `web/app.js` `KLINE_PERIOD_BASE_COUNT` 一类基准表（20→20、60→60、120→120、180→180；「全部」与分钟K线＝标准 200 根）；压力线与其指标一律按**当前显示窗口**测算，放大缩小随之变动；指数切片同口径（缩放上限严格 200 根）。真机断言 9 项。 | `[ACTIVE]` |
+| REQ-030 | 辅助线交易面积与未交汇天数按「当前显示窗口」计算 | `computeTradeArea`（`web/app.js`，注释「需求REQ-030: 计算辅助线的交易面积（窗口口径）」）：交易面积＝窗口内总成交额 − 交汇金额（**剔除该线自身交汇的交易日**）；未交汇天数随窗口给出且非负；从未交汇时显示「未交汇」而**不是 0**。真机断言 6 项。 | `[ACTIVE]` |
+| REQ-031 | 窗口内总成交额（亿）＝图上所有交易日成交额之和 | `computeWindowTotalAmount`（`web/app.js` 注释「需求REQ-031: 当前显示窗口内的总成交额」）：随放大缩小变动，**标注估算根数**，与图内标注、指标说明弹窗、面板同源展示（同一函数产出）。真机断言 4 项：天数与窗口根数一致、20 日之和严格小于 60 日之和、与独立手算一致。 | `[ACTIVE]` |
+| REQ-032 | 指数成交额「来源未披露即如实不可得」，绝不以推测值充当 | `web/app.js` 注释「需求REQ-032: 指数成交额口径（执行阻塞点，已与需求方确认）」：指数成交额只采信来源原始披露值，`点位×成交量` 的兜底估算与全市场成交额**不是同一量纲**，一律不得充当真实成交额；未披露时如实显示「不可得」。「!」指标说明弹窗同步窗口口径。真机断言 3 项。**R09 复核时发现该口径未贯彻到副图四维分布/刻度/交易面积（出现 3,943,379.8亿），已按 BUG-005 修复并补静态+真机断言。** | `[ACTIVE]` |
+| REQ-033 | （空号，明确作废） | R05 规划中的第 7 项未落地，其职能已被 R06 的「双维度双图面板」模型（REQ-034/035）覆盖；编号**不回收、不再分配**，避免与历史引用混淆。 | `[DEPRECATED]` |
+
+**R05 实证来源**：
+- 代码引用点：`web/app.js` 中 `REQ-027`~`REQ-032` 共 20 处行内注释（注释即实现归属），已逐条核对所在函数与现行行为一致。
+- 测试断言：`docs/verification/2026-09-20-r05/browser_r05_verify.snapshot.js`（R05 历史快照，已从 `tests/` 归档）对 REQ-027（6 项）/ REQ-028（6 项）/ REQ-029（9 项）/ REQ-030（6 项）/ REQ-031（4 项）/ REQ-032（3 项）逐项断言。
+- **口径演进声明**：该脚本中「个股周期 Tab 与个股固定 200 根视窗」的断言建立在**已被取代**的旧口径上（现行 = REQ-034/035 双图面板：K线维度二级 Tab 30/60/120/180、视窗下限 30 根、上限＝该颗粒度全部可用根数）；文件头已声明其为 R05 历史快照，**不作为现行回归判据**，现行回归见 `tests/browser_r06_verify.js` / `browser_r07_verify.js`。
+- **记录完整性**：`docs/verification/2026-09-20-r05/` 仅存 1 张截图（`01-preset-20-60-all.png`），**无报告、无 README**，属 R05 当时的证据留存缺失（如实登记，不补造）；R05 的行为正确性由上述代码引用点与现行真机回归共同承载。
+- **历史快照脚本的现行运行记录**（2026-09-24 实测，不删断言、只如实登记）：`node docs/verification/2026-09-20-r05/browser_r05_verify.snapshot.js` → 通过 **9 项**、失败 **11 项**（全部集中在已被 REQ-034/035 取代的旧个股口径：个股周期 Tab 集合、`kline20/60/120/180/all` 固定根数），并在后续步骤因操作旧单面板 DOM 抛 `TypeError` 中断；该结果**不构成产品回归**（文件头自 R06 起即声明其为历史快照）。原始记录与处置建议见 `docs/verification/2026-09-24-r09/r05-snapshot/README.md`。
+
+### R06 验证证据
+- 静态回归：`python3 -m unittest discover -s tests -p "test_*.py"` **183 项 PASS**；`node tests/test_chart_integrity.js` / `test_detail_requests.js` / `test_layer_interaction.js` / `test_r04_chart_viewport.js` 全 PASS。
+- 真机浏览器：`DSH_BASE=http://127.0.0.1:8899 node tests/browser_r06_verify.js` **36/36 PASS**，证据 `docs/verification/2026-09-23-r06/`（6 张截图 + `browser-report.json` + `README.md`）。
+- 数据安全：本轮**未对 `data/stock_database.db` 做任何写入、迁移或重建**；周线/季线为前端内存聚合。
+
+---
+
+## R07 批次（v5.2.0）：副图默认口径・工具区固定高度・画线分组・缠论三类买卖点
+
+### R07 原始需求（用户原文要点）
+1. 所有K线图默认是在成交额 tap；
+2. 工具区间要单独占一个固定高度区间（不足的地方可以有适当留白），这样好让K线图在同一高度进行对比；
+3. 自动线前面新增分组标题栏：压力线；
+4. 缠论画线前面新增分组标题栏：缠论相关；该分组新增买点1、2、3（如果选3就同时画出买点123）与卖点1、2、3（同理），买卖点**必须严格依据缠论理论**得出；
+5. 用户对四个澄清点的裁决：① 分组标题栏「压力线」落在**工具条内**（自动线控件之前）；② 买卖点开关落在**工具条「缠论相关」分组内**（6 个按钮）；③ 默认成交额覆盖**所有K线形态图**（日/周/季 + 5分/1分K线 + 指数K线），当日分时保持成交量；④ 工具区采用**固定高度**（不足留白、超出内部滚动，两图绝对同高）。
+
+### R07 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-037 | K线形态图默认副图为成交额 | `createPanelChartState` 按维度取默认档位：K线维度＝`amt`、分时维度＝`vol`；`panelDefaultSubplot` / `applyDefaultSubplot` 在「用户未手动选过」时按颗粒度自动套用（当日分时＝成交量、5分/1分K线＝成交额）；`switchChartSubplot` 置 `subplotTouched=true` 后不再自动改写；`resetAllChartLayers` 复位回本颗粒度默认档位。指数K线原本即成交金额副图，未改动。成交额仍走既有三级口径（真实 `amount_yi` → 来源 `amount/1e8` → 均价×成交量兜底并标注「含估算」），来源未披露时如实提示，不以 0 或推测值填充。 | `[ACTIVE]` |
+| REQ-038 | 双图工具区固定高度对齐 | 面板内新增 `.chart-panel-toolzone` 包裹「工具条 + 图层管理面板」；双图模式（`.dual-panel`）下高度固定为 `var(--chart-toolzone-h)`（默认 500px，实测内容高度约 460px，故留白约 40px），`overflow-y:auto` 兜底滚动；单图模式不固定。因两面板同处一行且 SVG 高度由宽度决定，图表区顶部因此绝对同高。 | `[ACTIVE]` |
+| REQ-039 | 画线工具分组标题栏 | 工具条内新增 `.chart-group-title`「压力线」（位于「🤖 自动线 关/1根/2根/3根/4根」控件之前）与「缠论相关」（位于「☯️ 缠论画线」按钮之前）；用 `.chart-tool-group` 把标题与其控件包为整体并 `flex-wrap:nowrap`，保证标题不被换行甩到上一行行尾（窄屏 ≤1180px 允许组内换行）。 | `[ACTIVE]` |
+| REQ-040 | 缠论三类买卖点图层 | 工具条「缠论相关」分组内新增 6 个等级开关：买点1/2/3、卖点1/2/3；**等级累积**（选 3 即同时画出第 1、2、3 类），买、卖各自独立，且按面板隔离。后端 `build_buy_sell_points` 严格按缠论定义识别，前端只按开关渲染并标注可核对的判定依据。 | `[ACTIVE]` |
+
+### REQ-040 缠论判定口径（验收依据，不得放宽）
+| 标记 | 判定定义（本工程实现口径） |
+| :--- | :--- |
+| 第一类买点 | **趋势**（两个同向且互不重叠的连续中枢，后一中枢完全位于前一中枢下方）中，**最后一个中枢的离开段**相对该中枢的**进入段**出现趋势背驰：价格创新低 **且** MACD 绝对柱面积缩小。项目 `RULES` 已声明「笔背离 ≠ 完整趋势背驰」，故**禁止**用单笔背离冒充第一类买点。 |
+| 第二类买点 | 第一类买点之后的**第一次次级别回调**（第一笔向下笔）**不创新低**（回调低点 > 第一类买点低点）。 |
+| 第三类买点 | 中枢结束后**向上离开中枢**，随后的**回调不重新回到中枢区间**（回调低点 > 中枢上沿 ZG）。 |
+| 第一类卖点 | 对称：上涨趋势（后一中枢完全位于前一中枢上方）中最后一个中枢的离开段创新高且 MACD 面积缩小。 |
+| 第二类卖点 | 第一类卖点之后第一次反弹不创新高。 |
+| 第三类卖点 | 向下离开中枢后反抽不回中枢（反抽高点 < 中枢下沿 ZD）。 |
+
+**诚信与可复算约束**：判定只使用该点及其之前的数据（**无未来函数**，截断重算后历史点位逐条一致）；点位价格必须等于该根K线的**最低价**（买点）/**最高价**（卖点），绝不凭空生成价格；识别不到即为 0，按钮上如实标注识别数量，未获取缠论分析的颗粒度（周线/季线/分钟K线）标注「未获取」并**不渲染任何标记**；每个标记的悬停提示必须给出判定依据（中枢上下沿、进出段价格、MACD 面积等）。
+
+### R07 实施影响面
+| 文件 | 实际改动 |
+| :--- | :--- |
+| `scripts/chanlun_analysis.py` | 新增 `BS_LABELS`、`build_buy_sell_points`（三类买卖点）与 `_first_pen_from` / `_last_pen_before` / `_worse` 辅助；`RULES` 新增 `buy_sell` 说明（既有键与 `version` 均未改动）；`analyze_bars` 在**不改动既有字段**的前提下新增 `buy_sell_points` 与 `counts` 中 `buy_sell_points`、`buy1`~`sell3` 七个键 |
+| `web/app.js` | 新增 `panelDefaultSubplot` / `applyDefaultSubplot`（REQ-037）、`toggleChartBsLevel` / `panelBsAvailability` / `chartBsLevelActive`（REQ-040）；面板状态新增 `bsBuyLevel` / `bsSellLevel` / `subplotTouched` 并纳入 `syncPanelToAppState` / `persistPanelFromAppState`；`syncPanelToolbar` 同步副图档位、买卖点等级高亮与诚实计数提示；`generateChanlunOverlaySVG` 拆分为「结构层（由 `showChanlunDraw` 控制）」与「买卖点层（由等级开关独立控制）」，新增三角标记 + 类别文本 + 判定依据 `<title>`；时间线与日K两处覆盖层调用条件同步放宽为 `showChanlunDraw || 买卖点等级开启`；修复等级解析缺陷（`'sell1'.slice(3)` 得到 `'l1'`，曾导致**全部卖点被误判为无效等级而永不渲染**） |
+| `web/index.html` | 两个面板的工具条分别包入 `.chart-panel-toolzone`；新增 4 个 `.chart-group-title`（每面板「压力线」「缠论相关」）；每个面板新增 6 个买卖点按钮（`btnBsBuy1_left`~`btnBsSell3_right`，含完整缠论依据 title）；右面板副图首屏静态高亮改为「成交额(亿元)」；版本徽标与脚本缓存版本升至 `v5.2.0` |
+| `web/style.css` | 新增 `--chart-toolzone-h`（默认 500px）、`.chart-panel-toolzone`（双图模式固定高度 + 内部滚动 + 细滚动条）、`.chart-tool-group`、`.chart-group-title`、`.bs-level` 激活/空态样式 |
+| `tests/` 新增 | `test_r07_buy_sell_points.py`（22 项：结构完整性、点位真实性、缠论定义逐类独立复核、无未来函数截断一致性、反滥发、向后兼容、纯函数）+ `tests/fixtures/r07_real_daily_slice.json`（茅台 2017-12-08~2021-03-25 共 800 根**真实**日K离线切片）+ `browser_r07_verify.js`（真机 39 项） |
+| `tests/` 修订 | `test_r02_integrity.py`（`counts` 断言改为「既有五键为子集 + 新增七键齐全」）、`test_chart_integrity.js`（结构层开关 + 新增买卖点独立渲染/等级/依据断言）、`test_r04_chart_viewport.js`（分时缠论结构层需开启总开关；改用 `vm.runInContext` 赋值）、`test_detail_requests.js`（补 `panelDefaultSubplot` 桩） |
+| `config/version.json` | 版本升至 `v5.2.0`，描述同步为 R07 口径 |
+
+### R07 验证证据
+- 静态回归：`python3 -m unittest discover -s tests -p "test_*.py"` **205 项 PASS**（其中 R07 买卖点单测 22 项）；`node tests/test_chart_integrity.js` / `test_detail_requests.js` / `test_layer_interaction.js` / `test_r04_chart_viewport.js` 全 PASS。
+- 真机浏览器（端口 8888）：`node tests/browser_r07_verify.js` **39/39 PASS**，控制台错误 0；R06 脚本回归 **36/36 PASS**（旧需求未被破坏）。证据 `docs/verification/2026-09-23-r07/`（4 张截图 + `browser-report.json` + `README.md`）。
+- 实测数据：贵州茅台全量 6010 根日K识别出 82 个买卖点（第一类买点 6 / 第二类买点 2 / 第三类买点 30 / 第一类卖点 15 / 第二类卖点 9 / 第三类卖点 20）；区间 2008-09-01~2010-01-31 覆盖六类共 7 个点，图上标记与后端返回逐类一致。
+- 数据安全：本轮**未对 `data/stock_database.db` 做任何写入、迁移或重建**；买卖点由后端基于已获取的真实日K现场计算，前端不落库。
+
+---
+
+## R08 批次（v5.3.0）：缠论买卖点全图自动标记・周季成交额按日线相加・分时Tab精简・默认双图
+
+### R08 原始需求（用户原文要点）
+1. 缠论相关的买点 1、2、3 和卖点 1、2、3 需要**自动标记在 K 线图上**，要根据缠论理论得出这些买卖点；
+2. 周线图如果没有获取到对应的成交额，就用日线图对应时间的成交额**相加**获取；
+3. 季线图如果没有获取到对应的成交额，就用日线图对应时间的成交额**相加**获取；
+4. 分时图的 Tap **移除掉 1 分 K 线 Tap**；
+5. 默认就是显示**分时图和日线图 2 个 K 线图**，无需点击添加。
+
+### 用户裁决记录（实施前逐条确认，避免歧义）
+| 待澄清点 | 用户裁决 |
+| :--- | :--- |
+| 买卖点自动标记的覆盖范围 | **全部图都标记**（日线图 / 周线图 / 季线图 / 当日分时 / 5分K线），因此需要新增「任意K线序列 → 缠论判定」的后端能力 |
+| 周/季成交额相加时，日线自身也是估算值（均价×成交量）怎么办 | **一并累加**，并在图上标注「含估算 N 根日线」 |
+| 「自动标记」的默认等级 | **六类全开**（买点 1/2/3 + 卖点 1/2/3），工具栏 6 个按钮保留为显隐开关 |
+
+### R08 现状差异（改动依据，均为本仓库既有实现的事实）
+| 项 | 改动前 | 改动后 |
+| :--- | :--- | :--- |
+| 买卖点开关 | `bsBuyLevel/bsSellLevel` 默认 `0`，需手动点击才显示 | 默认 `DEFAULT_BS_LEVEL = 3`（六类自动标记） |
+| 买卖点数据源 | 仅日线（`stock.chanlun`）与当日分时（`intraday-chanlun` 端点）；周/季/5分K线恒为 `null`，按钮提示「不做缠论判定」 | 五类图都有判定：新增 `POST /api/chanlun/bars` 纯计算端点，周/季/5分K线由前端提交真实K线序列现场判定 |
+| 周/季成交额 | `aggregateBarsForGroup` 只累加原始 `amount_yi`，日线来源未披露时聚合成 `null` | 逐日走与日线图完全相同的解析口径（真实值 → `amount/1e8` → 均价×成交量）后相加，并标注含估算根数 |
+| 分时子 Tab | 当日分时 / 5分K线 / **1分K线** | 当日分时 / 5分K线 |
+| 默认面板 | `chartPanels.left.visible = false`，需点「➕ 调出分时图」 | 左右两面板默认 `true`，进入详情即双图并排 |
+
+### R08 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-041 | 缠论六类买卖点全图默认自动标记 | 覆盖日线图 / 周线图 / 季线图 / 当日分时 / 5分K线；默认等级 3（买点1/2/3 + 卖点1/2/3 全开），6 个按钮保留为显隐开关。周/季/5分K线的判定由前端把**真实K线序列**提交给新增的 `POST /api/chanlun/bars`，后端 `build_chanlun_from_bars` 复用同一套 `analyze_bars` 现场计算（不落库、不新增第二套算法）。每张图标注「自动标记买卖点（X级别）：1买 n · 2买 n · 3买 n · 1卖 n · 2卖 n · 3卖 n」，每个三角标记的悬停提示同时给出**级别**与**判定依据**。 | `[ACTIVE]` |
+| REQ-042 | 周线图成交额＝区间内日线成交额逐日相加 | `aggregateBarsForGroup` 对区间内每根日线先走 `resolveKlineAmount`（真实 `amount_yi` → 来源 `amount/1e8` → 均价×成交量兜底），再求和；新增字段 `amount_derived` / `amount_derived_days` / `amount_missing_days` / `amounts_summed`。图上标注「📐 成交额＝区间内日线成交额逐日相加，含估算 N 根日线（均价×成交量），覆盖不完整·M 根日线成交额不可得未计入」。一根都不可得时为 `null`（绝不以 0 充当成交额）。 | `[ACTIVE]` |
+| REQ-043 | 季线图成交额＝区间内日线成交额逐日相加 | 与 REQ-042 同一实现、同一分桶函数、同一标注，仅分桶键改为自然季度。 | `[ACTIVE]` |
+| REQ-044 | 分时维度移除「1分K线」Tab | `MINUTE_SUBTABS` 只保留「当日分时 / 5分K线」；删除 `index.html` 中 `data-sub="m1"` 按钮与相关文案；`switchMinuteSub('m1')` 因映射缺失被拒绝（不再切换）；旧键 `klinem1` 的兼容入口回落到 5分K线。**后端 m1 抓取能力保留**（仅移除前端入口，不影响既有接口）。 | `[ACTIVE]` |
+| REQ-045 | 默认显示「分时图 + 日线图」双图 | `chartPanels.left.visible = true`（右侧本就为 `true`），首屏 `#chartPanelRow` 静态类改为 `dual-panel`，「➕ 调出」按钮首屏 `hidden`（收起后仍可点出）。面板可见性**不写 localStorage**，每次进入详情页都回到双图默认态。 | `[ACTIVE]` |
+
+### REQ-041 缠论判定口径（沿用 REQ-040 定义，本批不放宽）
+三类买卖点判定表与 R07「REQ-040 缠论判定口径」完全一致（第一类＝趋势背驰；第二类＝第一类之后首次回抽不创新极值；第三类＝离开中枢后回抽不回中枢区间）。
+
+**本批新增的诚信约束**：
+1. **级别不得冒充**：`/api/chanlun/bars` 只接受 `weekly` / `quarterly` / `m5` 三个级别，返回必须带 `level` 与 `level_note`（含「不可与日线信号混读」），级别非法一律 400。
+2. **输入必须真实**：价格缺失/非数值、日期重复或乱序、OHLC 区间自相矛盾、根数超过 20000 一律拒绝；前端在价格不完整时**不提交**请求。
+3. **不落库、不缓存**：该端点是纯计算；周/季聚合仍在浏览器内存中完成（延续 R06「零数据库写入」）。
+4. **识别不到即 0**：季线根数少（实测茅台 101 根季K 识别出 0 个买卖点）时如实显示 0 与「未识别」，不补造；未获取时不渲染任何标记。
+5. **无未来函数**：截断重算后历史点位逐条一致（周线序列 100 根前逐条比对）。
+6. **点位落在真实极值**：买点价＝该根最低价、卖点价＝该根最高价（逐点断言）。
+
+### R08 实施影响面
+| 文件 | 实际改动 |
+| :--- | :--- |
+| `scripts/stock_web_server.py` | 新增 `CHANLUN_BARS_MAX` / `CHANLUN_LEVEL_NOTES` / `build_chanlun_from_bars()` 与 `POST /api/chanlun/bars` 路由（校验失败返回 400 与真实原因） |
+| `web/app.js` | 新增 `DEFAULT_BS_LEVEL=3`、`panelChanlunCacheKey` / `buildPanelChanlunPayload` / `loadPanelChanlun` / `chanlunLevelLabel` / `chanlunBsSummaryText` / `CHANLUN_LEVEL_LABELS` / `CHANLUN_BS_TYPE_ORDER`；`panelChanlunAnalysis` 扩展为五类颗粒度；`aggregateBarsForGroup` 成交额改为逐日解析后相加并记录估算/缺失根数；`generateDailyKlineSVG` 新增聚合口径标注与买卖点摘要标注（并把「估算警示」改为右对齐，修掉与「总成交额」同位置重叠的既有缺陷）；`generateTimelineSVG` 新增分时买卖点摘要标注；`generateChanlunOverlaySVG` 增加级别参数并写入标记悬停提示；`MINUTE_SUBTABS` 移除 m1、旧键 `klinem1` 回落 m5；`chartPanels.left.visible = true`；`appState` / `createPanelChartState` / `resetAllChartLayers` 的买卖点等级默认值与复位值改为 `DEFAULT_BS_LEVEL` |
+| `web/index.html` | 删除 1分K线 按钮并更新分时面板文案；`#chartPanelRow` 首屏改为 `dual-panel`；两个「调出」按钮首屏 `hidden`；12 个买卖点按钮首屏加 `active`；「缠论相关」分组标题补充默认口径说明；版本徽标与脚本缓存版本升至 `v5.3.0` |
+| `config/version.json` | 版本升至 `v5.3.0`，描述同步为 R08 口径 |
+| `tests/` 新增 | `test_r08_chanlun_bars.py`（13 项：级别白名单、输入校验 6 类拒绝路径、级别标注、与 `analyze_bars` 逐字段同源、点位落在真实极值、截断无未来函数、周线与日线结果互不相同、季线如实为 0）＋ `test_r08_chart.js`（前端静态：子Tab集合、默认双图、默认等级、级别标签、缓存键、聚合口径与图上标注、提交载荷构造）＋ `browser_r08_verify.js`（真机 36 项） |
+| `tests/` 修订 | `test_detail_requests.js` 补 `DEFAULT_BS_LEVEL` 沙箱常量（`resetAllChartLayers` 现引用该常量） |
+
+### R08 验证证据
+- 静态回归：`python3 -m unittest discover -s tests -p "test_*.py"` **218 项 PASS**（新增 `test_r08_chanlun_bars.py` 13 项）；`node tests/test_chart_integrity.js` / `test_detail_requests.js` / `test_layer_interaction.js` / `test_r04_chart_viewport.js` / `test_r08_chart.js` 全 PASS。
+- 真机浏览器（端口 8888）：`node tests/browser_r08_verify.js` **40/40 PASS**，控制台错误 0；证据 `docs/verification/2026-09-23-r08/`（6 张截图 + `browser-report.json` + `README.md`）。
+- 实测数据（贵州茅台 sh600519，全程零点击「调出」按钮）：
+  - 日线图：日K 6010 根、日线买卖点 82 个（沿用 R07 判定），默认视窗内标记数与后端逐类一致；
+  - 周线图：提交 1265 根真实周K 现场判定，识别 11 个买卖点（3买 6 / 1卖 2 / 2卖 1 / 3卖 2）；缩放到「全部 1265 根」后图上标记 **11 个并与后端逐类一致**；
+  - 季线图：提交 101 根真实季K，识别 0 个（根数少、缠论成笔条件不满足，如实显示 0，不补造）；
+  - 5分K线：提交 800 根真实分钟K，识别 7 个买卖点（1买 1 / 2买 1 / 3买 1 / 3卖 4）；缩放到「全部 800 根」后图上标记 **7 个并与后端逐类一致**；
+  - 当日分时：识别 3 个买卖点（卖3 2 / 买1 1），并标注「分时级别」。
+- 周/季成交额证据：页面内**独立重算**（按同一分桶口径逐日 `resolveKlineAmount` 求和）与实现结果逐根比对 —— 周线 1265 根、季线 101 根**全部一致**（含估算日线 6010 根、缺失 0 根）；图上标注按当前视窗统计（周线默认视窗 30 根时显示「含估算 143 根日线」，缩放到全部时显示「含估算 6010 根日线」）。
+- 旧批次真机回归：`node tests/browser_r06_verify.js` **35/35 PASS**、`node tests/browser_r07_verify.js` **41/41 PASS**，控制台错误 0 —— 两脚本中 **9 处因 REQ-041/044/045 演进而过时的断言已按新口径更新**（测试意图不变，逐条对照见 `docs/verification/2026-09-23-r06/README.md` 与 `-r07/README.md` 的「R08 后的口径修订」；其中 REQ-039 的「行差」断言原为左面板隐藏时的假通过，已改为「垂直中心线差 < 1px 且垂直区间有重叠」）。
+- 数据安全：本轮**未对 `data/stock_database.db` 做任何写入、迁移或重建**；周/季聚合与缠论判定全部为前端内存 + 后端纯计算，不落库、不落缓存。单元测试中涉及数据库的用例均通过 `patch.object(stock_db, "DB_PATH", 临时路径)` 指向隔离临时库（见 `tests/test_r03_data_center.py` 头部声明），不触碰产品库；数据库文件在 git 工作树中自 R04 起即为未提交修改状态（服务运行期的行情缓存写入属既有常态，非本批引入）。
+
+### R08 顺带修复的真实缺陷（如实登记）
+1. **分钟K线的缠论标记整体错位**：`generateChanlunOverlaySVG` 的键函数原先只取 `date` 字段，而分钟K线的键是 `date`＋`time` 两个字段 —— 同一天的全部分钟K线被折叠成同一个键，缠论端点与买卖点无法定位、`offset` 退化为 0。已改为「日期＋时间」合成键，并补「视窗末尾对齐」的 `offset` 兜底；修复后 5分K线标记与后端逐类一致（修复前两者无法对齐，已在真机验证中暴露）。
+2. **图上两段成交额文字重叠**：「其中 N 根成交额为估算」与「总成交额」原画在同一坐标，已把估算警示改为右对齐，两段文字分列左右。
+3. **当日分时买卖点摘要缺失**：分时图原先没有「级别 + 六类计数」摘要，已与 K 线图统一补上（位于「☯️ 缠论（分时级别…）」总开关文字下方一行）。
+
+### R08 遗留说明（如实登记）
+- 分钟K线的 `m1` 抓取能力在后端保留（`real_chart_engine` 白名单未改动），仅按用户指令移除前端入口；如需彻底下线需另行确认。
+- K 线图默认视窗为 30 根，因此默认视图内可能恰好没有买卖点（例如周线 30 根内无点、季线全区间 0 个）；点击「180天K线」或缩放到「全部」即可看到该颗粒度全历史的买卖点 —— 图上会随视窗实时更新六类计数。
+
+---
+
+## R09 批次（v5.4.0，2026-09-24 交付）：行情时间精度 + 副图表头排版
+
+### R09 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-046 | 顶栏「行情日期」精确到分 | 后端新增 `parse_quote_timestamp()` / `current_quote_datetime()`：从**来源真实行情时间戳**（`stock_quotes.timestamp`，14 位 `YYYYMMDDHHMMSS`）解析出精确到分的时间，随 `resolve_data_caliber()` 一并暴露为 `quote_datetime = {raw, date, time, datetime, display, precision, source}`，并在 `GET /api/status`、`POST /api/filter` 的 `stats`、基准切换接口中返回。前端 `formatQuoteMoment()` / `updateDataValidityDateBadge()` 渲染为「📅 行情日期: 2026年9月24日 13:18」。**降级铁律**：来源只给到日（8 位）时 `precision='day'`、界面只显示日期、绝不补造时刻；完全拿不到时显示「📅 行情日期未获取」，绝不用本地时钟或基准批次日期冒充。基准批次日期仍由 `snapshot_date` 独立暴露（REQ-017 不变）。 | `[ACTIVE]` |
+| REQ-047 | 副图标题与统计概要「平铺」排布，设计上不重叠 | 新增 `estimateSvgTextWidth()`（CJK 1em / ASCII 0.6em / 全角标点 0.9em，含 1.05 安全系数）与 `layoutSubplotHeader()`：标题与每个统计项按**实测宽度逐项定位**（各自独立 `x`），间距 12px；越出绘图区右缘时先压缩到 6px，仍放不下则换行（默认最多 3 行），并按行数压缩副图柱高（`sh - 10 - (rows-1)*12`，下限 20px）。个股日K副图（成交额/成交量/换手率）、当日分时副图、大盘指数副图**全部**改由该排布器输出，标题不再单独绘制（避免双标题）。「估算口径」后缀（REQ-025）与「不可得」提示同样走该排布器。 | `[ACTIVE]` |
+| REQ-048 | 本批交付必须符合工程管控机制 | 需求条目（REQ-046/047/048）写入本台账并与测试双向绑定；新增 Python 单测 10 项、前端静态用例 1 套（`tests/test_r09_subplot_header.js`）、真机浏览器验证脚本 1 套（`tests/browser_r09_verify.js`，28 项）；真机证据落 `docs/verification/2026-09-24-r09/`；`config/version.json` 升 `v5.4.0` 并同步 `web/index.html` 脚本缓存版本与 `README.md`；本轮**零数据库写入**。 | `[ACTIVE]` |
+
+### REQ-046 数据链路与降级口径（验收依据）
+
+| 场景 | 来源形态 | `precision` | 界面显示 |
+| :--- | :--- | :--- | :--- |
+| 实时/历史快照（腾讯公开行情） | `20260924131808` | `minute` | 📅 行情日期: 2026年9月24日 13:18 |
+| 来源仅给交易日 | `20260923` | `day` | 📅 行情日期: 2026年9月23日（无 HH:MM） |
+| 带秒 / 带分隔符 | `2026-09-23 15:34:59` | `minute` | 📅 行情日期: 2026年9月23日 15:34（秒被截断） |
+| 空 / 不可解析 | `null` / `bad` | —— | 📅 行情日期未获取（title 说明不以本地时钟冒充） |
+
+**禁止事项**：不得用 `datetime.now()`（服务器本地时钟）、`snapshot_date`（数据库基准批次日期）或任何推测值填充 `quote_datetime`；`quote_datetime` 与 `snapshot_date` 必须分别暴露、互不覆盖。
+
+### REQ-047 排版口径（验收依据）
+
+1. **不允许重叠**：同一行内任意两段文字的横向包围盒交集必须为 0（真机用 `getBBox()` 实测，非估算）。
+2. **不允许越界**：表头文字右缘不得超出副图绘图区右缘（真机同时校验）。
+3. **不允许丢项**：标题 + 5 个统计项（总和/平均/地量(最小)/天量(最大)/中位数）必须全部渲染；极窄容器下换行而不是叠画或丢弃（`dropped` 计数可观测）。
+4. **不允许双标题**：标题只由排布器输出一次，模板中原先的独立标题行已删除。
+5. **口径后缀不丢**：成交额档标题必须保留 `（含估算：均价×成交量）`（REQ-025 / R04 验收口径）。
+
+### R09 实施影响面
+
+| 文件 | 实际改动 |
+| :--- | :--- |
+| `scripts/stock_web_server.py` | 新增 `parse_quote_timestamp()` / `current_quote_datetime()`；`resolve_data_caliber()` 增补 `quote_datetime` 字段；`GET /api/status`、`POST /api/filter`（`stats`）、`POST /api/crawler/baseline` 三处响应同步暴露 |
+| `web/app.js` | 新增 `formatQuoteMoment()` / `updateDataValidityDateBadge()`（重写，精确到分 + 降级 + 未获取）、`estimateSvgTextWidth()` / `layoutSubplotHeader()`、`indexDisclosedAmountSamples()`；`generateDailyKlineSVG()` / `generateTimelineSVG()` / 指数 K 线图三处副图表头改为平铺排布；修正 `computeWindowTotalAmount().totalAmountYi` 字段名误用（「总和」恒为 `--`）；删除从未渲染且字段名错误的 `subSumBadge` 死代码；`computeTradeArea()` / `attachTradeAreaToLines()` 新增 `disclosedOnly` 口径并修正「全区间不可得时以 0.00亿 冒充面积为 0」；指数副图刻度与交易面积改为只采信来源原始披露成交额 |
+| `web/index.html` | 脚本缓存版本随版本号升级（`app.js?v=5.4.0`） |
+| `config/version.json` | 版本升 `v5.4.0`，描述同步 R09 口径 |
+| `tests/` 新增 | `test_r09_quote_datetime.py`（10 项：14/12/8 位与带分隔符解析、不可解析返回 None、取最新时间戳、无快照返回 None、caliber 同时暴露 quote_datetime 与 snapshot_date）；`test_r09_subplot_header.js`（徽标四种形态 + 三档副图零重叠 + 换行兜底不丢项 + 真实 SVG 表头零重叠 + 总和口径 + 指数成交额只采信来源披露 + 交易面积不以 0 冒充）；`browser_r09_verify.js`（真机 28 项：徽标与接口逐字一致、三类副图含指数用 `getBBox()` 实测零重叠与不越界、指数不可得如实标注、控制台零错误） |
+
+### R09 验证证据
+
+- 静态回归：`python3 -m unittest discover -s tests -p "test_*.py"` **228 项 PASS**（本轮新增 `test_r09_quote_datetime.py` 10 项）；`node tests/test_chart_integrity.js` / `test_detail_requests.js` / `test_layer_interaction.js` / `test_r04_chart_viewport.js` / `test_r08_chart.js` / `test_r09_subplot_header.js` **6 套全 PASS**。
+- 真机浏览器（端口 8888，headless Chrome 148）：`node tests/browser_r09_verify.js` **28/28 PASS**，控制台错误 0；证据 `docs/verification/2026-09-24-r09/`（7 张截图 + `browser-report.json` + `README.md`）。
+- 实测数据（真实来源，非构造）：
+  - 顶栏徽标 `📅 行情日期: 2026年9月24日 13:18`，与 `GET /api/status → quote_datetime.display` **逐字一致**，`raw=20260924131808`；行情来源说明同步为「来源时间 2026-09-24 13:18」；
+  - 贵州茅台 sh600519 日K副图三档表头右缘分别 733.5 / 633.6 / 585.8（绘图区右缘 855），`getBBox()` 实测重叠 **0 处**；成交额档标题为 `副图：成交额（含估算：均价×成交量）`，`总和: 1098.74亿（含估算）`（30 根全部为估算样本，已显式标注）；
+  - 当日分时副图三档 `getBBox()` 实测重叠 **0 处**；
+  - 大盘指数 sh000001 全部K线：表头 `💰 副图: 成交金额 (亿元) + 当前来源未披露该指数成交额，四维分布不可得（不以点位×成交量推测值充当）`，副图刻度显示「不可得」（此前为量纲错误的 `3943379.8亿`），重叠 0 处；`总成交额: 5700.54亿 (1个交易日)` 仅取来源实时快照并显式说明历史日不参与求和。
+- 数据安全：本轮**未对 `data/stock_database.db` 做任何写入、迁移或重建**；`quote_datetime` 为内存快照读取 + 纯解析，副图排布为纯前端计算。
+
+### R09 顺带修复的真实缺陷（如实登记）
+
+1. **「总和」恒显示 `--`**：副图成交额档与表格汇总读取的是不存在的字段 `windowAmount.totalYi`，而 `computeWindowTotalAmount()` 返回的字段是 `totalAmountYi` —— 成交额明明可得却长期显示 `--`。已按同一解析口径改为读取 `totalAmountYi`，并在含估算样本时显式追加「（含估算）」。
+2. **指数副图出现量纲错误的天文数字**：指数来源未披露成交额时，四维分布/副图刻度/交易面积原先把「指数点位 × 成分股成交量」的兜底估算值当成交额使用，实测得到 `3,943,379.8亿`（与真实全市场成交额相差数千倍）。已按 REQ-032 新增 `indexDisclosedAmountSamples()` 与 `computeTradeArea(..., {disclosedOnly:true})`，估算值整段剔除，改为如实标注「四维分布不可得」、刻度显示「不可得」、交易面积显示「未交汇」。
+3. **「不可得」被当作 0 展示**：`computeTradeArea()` 在整段区间一段可用成交额都没有时仍返回 `0.00亿`，与「面积为 0」是截然不同的结论。现改为返回 `null` 并给出原因，由 `formatTradeArea()` 统一显示「未交汇」。
+4. **副图标题与统计项重叠**（本批 REQ-047 的根因）：标题 `<text x="m.left+8">` 与统计项固定起点 `m.left+92` 硬编码并存，标题一旦带上「（含估算：均价×成交量）」后缀（宽约 180px）即与「总和」实质性叠字。现改为按实测宽度逐项定位的流式排布，并删除模板中重复的独立标题行。
+
+### R09 附表：REQ-037 口径修订（幅图控件合并为「唯一联动控件」）
+
+| 项 | R07 当时的口径 | R09 复核后的现行口径（代码实证） |
+| :--- | :--- | :--- |
+| 控件形态 | 左右面板各有独立控件 `chartSubPlotControlLeft` / `chartSubPlotControlRight` | 合并为**唯一**的「📉 幅图联动」控件 `#chartSubPlotControlUnified`（页面仅 1 个 `[data-subplot]` 控件容器） |
+| 切换语义 | 按面板独立；`switchChartSubplot(sub, slot)` 可只改单侧 | `switchChartSubplot(subplot, slot='both')` **一次切换两图同步**（`PANEL_SLOTS.forEach` 写入并重渲染），控件自带文案「（单点切换，分时与K线同步联动）」 |
+| 默认档位 | K线形态图＝成交额；当日分时＝成交量（按维度自动取默认） | **未变**：`createPanelChartState(dimension)` 仍按维度取默认（kline→`amt`、minute→`vol`），`applyDefaultSubplot` 在 `subplotTouched=false` 时套用 |
+| 手动选择保护 | 手选后不被颗粒度/子Tab切换改写 | **未变**：`switchChartSubplot` 置 `subplotTouched=true`，此后颗粒度与子Tab切换均不改写 |
+| 真机断言 | 6 项（各面板独立读控件） | 9 项，改为读统一控件 + 断言两图渲染一致（`tests/browser_r07_verify.js`，44/44 PASS） |
+
+**首屏一致性观察项 → 已在 v5.4.1 落定（REQ-037 修订）**：原不一致（控件高亮成交额 / 左图显示成交量）已按「统一首屏默认档位」处置 —— `panelDefaultSubplot` 与 `createPanelChartState` 均取 `amt`，首屏两图与唯一控件高亮一致；用户手动选择后仍不被改写。真机断言见 `tests/browser_r07_verify.js`「首屏两图与统一控件高亮一致＝成交额」。
+
+### R09 遗留说明（如实登记）
+
+- 本批**已完成**的收口（同一会话内一并实施）：R05 台账条目（REQ-027~032）回填 + REQ-033 明确作废；`docs/operations/product-entry.json` 同步至 `v5.4.0`（含变更摘要、门禁快照与真机证据）；`browser_r06_verify.js`（39/39）与 `browser_r07_verify.js`（44/44）探针按「实测几何 + 真实交互入口」修订完毕，六套真机回归全绿。
+- **仍未处理**（如实登记，留待后续优化）：`scripts/ensure_server.sh` 默认以 `0.0.0.0` 暴露且无鉴权（本机自用场景可接受，改为 `127.0.0.1` 需产品方确认是否影响其它设备访问）；`server.log` 无轮转、产品库 58MB 未定期归档；`web/app.js`（8700+ 行）与 `stock_web_server.py` 单文件体量偏大。
+- **新登记的观察项**：统一「幅图联动」控件静态高亮为「成交额」，而当日分时面板在用户未手动选择前按其本维度默认渲染「成交量」——两者在**首屏未点选时不一致**（点选任档位后两图立即同步）。已作为 REQ-037 口径修订如实登记，是否统一首屏默认档位需产品方决定。
+
+---
+
+## R09.1 补丁批次（v5.4.1，2026-09-24）：收口四项已登记遗留项
+
+> 本批为承接 R09（v5.4.0）的**收口补丁**：把 R09 台账「遗留说明」中逐条登记的四项一次性实施完毕，无新增数据口径、零数据库写入。
+
+### R09.1 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-037（修订） | 首屏副图档位口径统一 | 副图控件合并为唯一「幅图联动」控件后，`panelDefaultSubplot` 与 `createPanelChartState` 的默认档位统一为 `amt`（K线图与当日分时首屏一致），与控件高亮一致；`applyDefaultSubplot` 仅在 `subplotTouched=false` 时生效，用户手动选择后仍不被颗粒度/子Tab切换改写（原 REQ-037 保护不变）。 | `[ACTIVE]` |
+| REQ-049 | 服务端默认仅绑定本机回环（安全默认） | `resolve_bind_host()`：优先级 `DSH_STOCK_HOST` 环境变量 > `--host` 参数 > 默认 `127.0.0.1`；启动横幅如实打印绑定地址与暴露面（回环＝「仅本机回环，局域网不可达」／非回环＝「⚠️ 已放开到非回环地址，局域网可达且当前无鉴权」）；`scripts/ensure_server.sh` 与 `scripts/watchdog.py` 同口径传参。**默认值变更**：历史默认 `0.0.0.0` → 现默认 `127.0.0.1`。 | `[ACTIVE]` |
+| REQ-050 | 运行日志按大小轮转 | `scripts/ensure_server.sh` 的 `rotate_log()`：保活启动时对 `server.log` / `watchdog.log` 检查大小，`≥ DSH_STOCK_LOG_MAX_KB`（默认 5120KB）即滚动为 `.1`（原 `.1→.2`、`.2→.3`，最多保留 3 份历史），并在输出中如实提示轮转动作与轮转前大小。 | `[ACTIVE]` |
+| REQ-051 | R05 历史快照脚本归档 | `tests/browser_r05_verify.js` → `docs/verification/2026-09-20-r05/browser_r05_verify.snapshot.js`（连同运行记录 `docs/verification/2026-09-24-r09/r05-snapshot/README.md` 与截图），`tests/` 下不再存在该文件，避免其基于旧口径的断言被误当回归门禁。 | `[ACTIVE]` |
+
+### R09.1 验证证据
+
+- 静态回归：Python **246 项 PASS**（228 + 本批新增 18）；前端静态套件 **6 套全 PASS**（`test_r09_subplot_header.js` 增补 REQ-037 修订断言）。
+- 真机回归（全部重跑）：**R09 28/28 · R08 40/40 · R07 44/44 · R06 39/39 PASS**，控制台错误 0。
+- REQ-037 修订实测：首屏统一控件高亮 = 左（当日分时）面板渲染 `副图：成交额` = 右（K线）面板渲染 `副图：成交额`（R07 断言「首屏两图与统一控件高亮一致＝成交额」）；手动切换后两图同步且不被颗粒度切换改写。
+- REQ-049 实测：`lsof -nP -iTCP:8888 -sTCP:LISTEN` → `TCP 127.0.0.1:8888 (LISTEN)`（此前为 `*:8888`）；`http://127.0.0.1:8888/` 与全部真机脚本（均走回环）不受影响；`DSH_STOCK_HOST=0.0.0.0` 可显式放开（函数级单测覆盖三种优先级）。
+- REQ-050 实测：`rotate_log()` 以 `DSH_STOCK_LOG_MAX_KB` 注入小阈值后真实触发轮转（`server.log` → `server.log.1`，历史份数不超过 3）。
+- REQ-051 实测：`tests/` 下已无 `browser_r05_verify.js`；归档副本可从 `docs/verification/2026-09-20-r05/` 复跑。
+- 数据安全：本轮**未对 `data/stock_database.db` 做任何写入、迁移或重建**。
+
+### R09.1 口径观察项（如实登记，未擅自改产品）
+
+**当日分时「成交额」副图表头在存在缺量额分时点时降级为兜底说明**：收盘后 15:00 快照行的 `volume=0 / amount_yi=null`（只带 `cumulative_amount_yi`）使成交额口径的「完整性」判据不成立，表头改为输出 `当前来源未提供完整量额` 而非 5 项统计概要 —— **不以部分数据拼出总和**，符合红线，属诚实降级而非错误数据。R09 真机断言已按「两种合法口径」双分支接受（5 项统计 或 该兜底说明），并强制标题唯一、零重叠、不越界。可选一行级改良（**未实施，待产品方决定**）：把 `volume === 0 && amount_yi == null` 的收盘快照行视作「无成交」不计入完整性判据（成交量口径目前对同一行是计入的，两者取舍属产品语义）。证据：`docs/verification/2026-09-24-r09-1/README.md`。
+
+### R09.1 遗留说明
+
+- 服务端**仍无鉴权**：绑回环后局域网不可达，本机自用风险已收敛；若日后需要多设备访问，应同时引入鉴权（当前未实现，属功能缺口而非配置项）。
+- `web/app.js`（8700+ 行）与 `scripts/stock_web_server.py`（1800+ 行）单文件体量问题未动（拆分为独立优化项，需单独评估回归面）。
+- 产品库 58MB 未做归档/VACUUM（需产品方确认归档策略与保留窗口）。
+
+---
+
+## R10 批次（v5.5.0，2026-09-24）：工程加固（数据库归档 + 前端模块化拆分第一步）
+
+> 本批为**工程加固批次**：不含任何行情/指标数据口径变更，也不改变任何页面行为；
+> 目标是把我接手时登记的两项最大维护风险（产品库无归档机制、`web/app.js` 单文件 8756 行）落地第一步。
+
+### R10 原始需求（来源：R09.1 台账「遗留说明」+ 交接文档「后续优化切入点」）
+
+1. 产品库 58MB 长期无归档/体检机制，一旦损坏没有任何可比对的干净副本；
+2. `web/app.js` 单文件 8756 行是最大维护成本源，需按模块拆分（无构建步骤，用 `<script>` 顺序加载）。
+
+### R10 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-052 | 本地数据库非破坏性归档与体检（CLI `db-archive`） | 新增 `scripts/db_maintenance.py` 与 CLI 子命令 `db-archive`：源库一律 `file:...?mode=ro` 只读打开（SQLite 内核保证写不进去）；归档走在线备份 API（WAL 下对运行中的服务端安全）；归档件自动 `integrity_check` 并**逐表核对行数**；`--compact` 用 `VACUUM INTO` 另写紧凑副本（源库字节不变）；每个归档写 `.manifest.json`（源库哈希/行数/完整性/说明）；清理仅在显式 `--keep N`（N>0）时发生，默认只增不删。 | `[ACTIVE]` |
+| REQ-054 | 版本单一权威在运行期即时生效（BUG-006 修复） | `config/version.json` 逐请求按 `mtime+size` 失效重读；`/api/version`、`/api/status`、`/api/filter_schema`、导出包、大盘/宏观接口与启动横幅一律走 `current_version()`；`APP_VERSION` 仅作启动日志初始值；文件缺失/JSON 损坏时回退上一次已知值不抛异常。修复前：升版后接口与页面仍显示旧版本，直到手工重启（真机复现见 `docs/problem-log/BUG-006-*.md`）。 | `[ACTIVE]` |
+| REQ-053 | 前端模块化拆分第一步：纯函数外置为 `web/modules/util.js` | 从 `web/app.js` **原样迁出** 10 个纯函数（`escapeActionText` / `escapeHtml` / `roundTo` / `formatStatVal` / `formatVolume` / `formatAmountYi` / `formatReal` / `estimateSvgTextWidth` / `layoutSubplotHeader` / `formatQuoteMoment`），`web/app.js` 8756 → 8612 行；`web/index.html` 按 `util.js → app.js` 顺序加载（两者都是经典脚本，函数声明共享全局作用域，**调用点零改动**）；模块内禁止 DOM/状态访问与顶层副作用；测试装载统一走 `tests/load_web_sources.js`，套件与页面同构。 | `[ACTIVE]` |
+| REQ-055 | 新增 A 股信息权威调研与抓取 Agent `stockper` | 新增独立智能体 `stockper`：负责调研 A 股五大核心信息（大宗交易、十大流通股东占比、分红、K线图、财务报表）的公开获取渠道与权威度；输出完整公开渠道名称、抓取接口、抓取信息、有效性、风险点、优势劣势及同类横向对比矩阵；内置快速问询决策能力与真实数据获取调度引擎（CLI、Python 模块及 DSH Skill），支持问询即时推荐最权威抓取路径并直接负责抓取返回真实数据。 | `[ACTIVE]` |
+
+### R10 影响面
+
+| 面 | 变化 |
+| :--- | :--- |
+| 前端运行时 | 页面多加载 1 个静态 JS（约 6KB），首屏时序不变（util.js 无顶层副作用） |
+| CLI | 子命令 16 → **17**（新增 `db-archive`），既有子命令参数与输出不变 |
+| 数据 | **零写入、零迁移、零重建**；归档为只读快照，产物落 `data/backups/db-archive/` |
+| 版本 | v5.4.1 → **v5.5.0**；`config/version.json` 成为运行期即时生效的权威（BUG-006 修复） |
+| 测试 | Python 246 → **266**（新增 `test_r10_db_maintenance.py` 14 项、`test_r10_version_authority.py` 6 项）；静态套件 6 → **7**（新增 `test_r10_module_split.js`）；真机套件 4 → **5**（新增 `browser_r10_verify.js` 15 项） |
+
+### R10 验证证据
+
+- 静态回归：Python **266 项 PASS**；前端静态套件 **7 套全 PASS**（含模块拆分契约套件：迁出函数唯一性、纯函数约束、脚本顺序、行为黄金值逐字一致）。
+- 真机回归（全量重跑）：**R10 15/15 · R09 28/28 · R08 40/40 · R07 44/44 · R06 39/39 PASS**，控制台错误 0。
+- REQ-052 真实产品库实测：源库 `data/stock_database.db` 60,362,752 B / 13 表 / 28,575 行 / `integrity_check=ok` / 561 空闲页 → 归档件 57.57MB（integrity ok、行数逐表一致）+ 紧凑副本 54.92MB（VACUUM INTO，省 2.65MB），**源库哈希归档前后一致**，`/api/status` 归档期间与之后均 running。
+- REQ-054 实测：重启加载新代码后 `/api/version` = v5.5.0；**就地改写 `config/version.json` 描述、进程不动**，0.3 秒后接口即返回新描述；`/api/status.version` 同步为 v5.5.0（6 项单测覆盖热生效、缓存复用、文件缺失/损坏回退与静态契约）。
+- REQ-053 真实页面实测：`/web/modules/util.js` HTTP 200 + `application/javascript`；脚本顺序 `util.js → app.js`；10 个迁出函数在页面窗口全部可用且可真实调用；拆分后真实个股日K副图表头照常渲染（`副图：成交额（含估算：均价×成交量）` · 统计项 5 个）；控制台零错误。
+- 证据目录：`docs/verification/2026-09-24-r10/`。
+
+### R10 遗留说明
+
+- **拆分只完成了第一步**：`web/app.js` 仍有 8612 行、`scripts/stock_web_server.py` 1820 行。后续可继续按「图表引擎 / 详情页 / 数据中心 / 缠论图层」切分，每切一块都必须过 R06~R10 五套真机回归。
+- 归档目录默认只增不删（`data/backups/db-archive/`）；若需滚动保留，请显式使用 `--keep N`（清理只针对本工具命名规则内的文件）。产品库自身的 VACUUM 仍**不做**（红线：不迁移/不重建产品库），只提供紧凑副本供离线使用。
+- 鉴权仍未实现（依赖 REQ-049 的回环绑定收敛风险）；如需多设备访问必须另行设计鉴权。
+
+---
+
+## R11 批次（v5.6.0，2026-09-24）：新增股票权威调研与数据抓取 Agent「stockper」
+
+> 本批为**智能体赋能与数据溯源调研批次**：
+> 针对 A 股核心信息获取渠道的多源、权威度、反爬风险与工程落差，新增专用 Agent `stockper`；
+> 具备调研比对矩阵、快速问询推荐，以及对 5 大维度（大宗交易、十大流通股东占比、分红、K线图、财务报表）的真实抓取执行能力。
+
+### R11 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-055 | 新增 A 股信息权威调研与抓取 Agent `stockper` | ① 新增 `docs/stockper_data_sources_survey.md`：详尽调研大宗交易、十大流通股东占比、分红、K线图、财务报表在官方交易所（上交所/深交所/巨潮）、主流金融门户（东方财富/同花顺/腾讯/新浪）与开源量化接口（AkShare/Tushare）的名称、接口、有效性、风险点、优势劣势及同类对比矩阵；<br>② 新增 `scripts/stockper_agent.py`：实现 `StockperAgent` 核心类与 CLI 交互（`survey`、`compare`、`ask`、`fetch`）；快速问答提供渠道与接口建议，`fetch` 能够真实调度获取对应维度的真实数据；<br>③ 注册 `skills/stockper_skill.json` 与 `skills/SKILL_STOCKPER.md`，并在 DSH 宿主中注册该技能；<br>④ 配套单元测试 `tests/test_stockper_agent.py` 确保权威决策与真实抓取 100% 通过。 | `[ACTIVE]` |
+
+### R11 验证证据（2026-10-01 物理执行层落地审计）
+
+- 物理层判定：55 条需求逐条对账，✅ 触达 41 / ⚠️ 部分 13 / ❌ 未触达 1（REQ-033 明确作废空号，符合预期）；报告 `docs/audit/2026-10-01-physical-layer-audit.md`；
+- 本轮修复 6 处物理断层：告警下发链路端到端打通（回环 HTTPS 真实收包 + 16 项测试）、告警冷却判定前移、stockper 宿主技能真实注册并被 `skill` 工具装载、中证成分股筛选由恒 0 恢复真实出数（A50=49 / A100=93）、宏观模块接入三个真实来源（指数 6 / 商品 5 / 快讯 10，`status=available`）、死代码与口径偏差取证登记；
+- 静态回归：Python **311 PASS**（skipped 2）· 前端静态 **8 套全 PASS** · 真机 **R11 25/25 PASS**（控制台 0 异常）；
+- 关闭门收敛至 2 项，均需人工输入：① 飞书/钉钉真实 Webhook 密钥（链路本身已物理验证）② 真实持仓底册 + `portfolio_verified=true`。
+
+---
+
+## R12 批次（v5.6.0，2026-10-02）：会话与产品全域管控纳管对齐
+
+> 本批为**管控机制纳管批次**（需求原文：「根据最新的管控机制对当前工程文件夹下的会话以及产品做调整优化，确保所有都按管控机制流程走」）。
+> 目标是把本工程「会话」与「产品」两侧**全部纳入 DSH 全域管控机制流程**，并把导致纳管流程**空转**的载体缺陷修掉——
+> 判据一律以可复跑命令为准，不采信自述。
+
+### R12 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-056 | 会话与产品全域管控纳管对齐 | ① **会话纳管**：本工程工作区全部主会话纳入 `[分类编号][难度分] 8字概述` 命名规范，不合规者经宿主 `session/rename` RPC 实改名并回读验证（9/9 主会话合规；3 条子会话由宿主 subagent routing 托管，`agent-busy` 拒改，如实登记为宿主限制）；会话来源合规按 REQ-096 口径精准扫描，退休形态 `source.kind="plugin"` **0 命中**，落盘会话均为合规形态 `plugin:<插件名>`；<br>② **会话载体缺陷修复**：`scripts/lib/auto_naming.mjs` 与 `scripts/session_naming_audit.mjs` 原**硬编码**旧转录文件名 `session.jsonl.zstd`，而宿主实际落盘 `session.v4.jsonl.zstd` → `sessionCwd()` / `firstUserMessage()` 恒返回 null、存量审计 `unreadable` 全量；`readSessionStore()` 只读已不存在的单文件 `session_projcache.json`，而宿主已改为按会话分片 `session_projcache/sessions/<sid>.json` → 看门狗「读不到会话存储」一条都不巡。三处一并收敛到权威定位器 `lib/session_transcript.mjs#findTranscript()` 与双布局兼容读取；<br>③ **产品纳管**：本工程待提交变更全部入库推送（工作树清零），需求台账登记 REQ-055/REQ-056 并把运行期版本权威 `config/version.json` 与台账、入口登记 `docs/operations/product-entry.json` 对齐至 `v5.6.0`；<br>④ **日志卫生**：`.gitignore` 补齐 `*.log.*`，堵住轮转日志 `server.log.1` / `watchdog.log.1` 被误入库的泄漏口。 | `[ACTIVE]` |
+
+### R12 实测证据（均可复跑）
+
+| 判据 | 命令 | 实测结果 |
+| :--- | :--- | :--- |
+| 会话命名合规（本工程） | `node scripts/session_naming_audit.mjs --json` | 主会话 9/9 合规、0 不合规；`unreadable` 由 **102 → 0** |
+| 自动命名链路通电 | `node scripts/naming_watchdog.mjs`（dry-run） | 由「检查 **0** 条」恢复为「检查 **22** · 跳过 14 · 失败 0」 |
+| 会话转录定位 | `sessionCwd()` / `firstUserMessage()` 实调用 | 由全 `NULL` 恢复为真实 `cwd` + 首条用户消息 |
+| 会话来源合规 | 逐帧解压本工程 12 个会话转录 | 退休 `kind:"plugin"` **0 命中**；合规 `plugin:hindsight` / `plugin:heartbeat` |
+| 本工程管控入口留痕 | `./scripts/control.sh selfcheck` | 四入口实跑并写入 `.dsh-control/run-audit.jsonl` |
+| 全域覆盖 | `./scripts/control.sh scope` | DSH股票 **4/4**（入口在位 / 文档引用可达 / 运行留痕 / 台账含版本） |
+| 产品回归 | `python3 -m unittest discover -s tests -p "test_*.py"` + 8 套前端静态 | Python **311 PASS**（skipped 2）· 静态 **8/8 PASS** |
+
+### R12 如实登记的判定边界（不美化）
+
+1. **子会话不可改名**：本工程 3 条子会话（`54cf0cdd` / `cfc36201` / `d7d76c1d`）由宿主 subagent routing 托管，调用 `session.rename` 返回 `agent-busy`，直接改写存储会被运行时回滚 —— 属**宿主限制**，非未整改，已在审计器中显式标注 `子会话·宿主限制不可改名`。
+2. **本工程入口的看板口径**：`./scripts/control.sh check` 为薄壳转发，其 `PROJECT_ROOT` 解析为**全局规则仓库自身**（`control_gates.sh` 第 25 行 `SCRIPT_DIR/..`），故 G1/G2/G3/G4 实测的是**全局仓库**的骨架/结构/台账/冗余，**不是本工程**：本工程曾有 86 项未提交变更而看板仍报「0 未提交变更」。本轮已把本工程工作树清零（真实合规），但**入口口径缺陷本身未改**（属全局机制改动，需另行立项），如实登记不冒充已修。
+3. **未复跑真机套件**：本轮未改前端渲染与接口契约，未重跑 `browser_r06~r11`（需服务端在跑，且 R11 证据已在案 `docs/verification/2026-10-01-r11/`）；Python 与静态套件已全量复跑。
+4. **版本号递增依据**：`v5.6.0` 承接 R11 批次（REQ-055 已实现并测试通过，此前台账已写 v5.6.0 而 `config/version.json` 仍为 v5.5.0，属**版本孤岛**），本轮一并归位；行情口径**零变更**。
+

@@ -5,19 +5,190 @@
     "form": "web+CLI"
   },
   "requirements": {
-    "id": "REQ-008/009v2/010/011/012/013",
-    "version": "v4.5.0",
-    "previous": "v4.4.0"
+    "current": "REQ-055 / REQ-056",
+    "current_version": "v5.6.0",
+    "previous": "REQ-052 / REQ-053 / REQ-054",
+    "previous_version": "v5.5.0",
+    "previous_id": "REQ-052,REQ-053,REQ-054",
+    "range": "REQ-001 ~ REQ-056"
   },
-  "version": "v4.5.0",
-  "built_at": "2026-09-20T06:42:09.031861+00:00",
+  "version": "v5.6.0",
+  "built_at": "2026-10-02",
   "source": {
     "vcs": "git",
-    "revision": "a0cd26fe9d4d5fb9d12c921e344a0c2e67f7b565",
-    "dirty": true,
-    "fingerprints": "docs/verification/2026-09-20-r02/source-fingerprints.json"
+    "revision": "PENDING-COMMIT-BACKFILL",
+    "dirty": false,
+    "dirty_note": "R05~R12 全部批次已于本次入库（工作树清零）；修订号在提交后回填，见紧随其后的回填提交",
+    "fingerprints": "docs/verification/2026-09-24-r09/source-fingerprints.json"
   },
   "classification": "latest-verified",
+  "change_summary": {
+    "v5.6.0": {
+      "delivered_at": "2026-10-02",
+      "batch": "R11 stockper 权威调研与抓取 Agent + R12 会话与产品全域管控纳管对齐（行情口径零变更）",
+      "changes": [
+        "REQ-055：新增 `stockper` 权威信息调研与真实抓取 Agent（大宗交易 / 十大流通股东 / 分红 / K线 / 财务报表五维），含 `scripts/stockper_agent.py`、`skills/stockper_skill.json`、`docs/stockper_data_sources_survey.md` 与宿主技能注册（`skill` 工具已真实装载）",
+        "R11 物理执行层落地审计：55 条需求逐条对账（✅41 / ⚠️13 / ❌1 作废空号），报告 `docs/audit/2026-10-01-physical-layer-audit.md`；修复 6 处物理断层（告警端到端链路、冷却前移、成分股真实出数、宏观三源接入等）",
+        "REQ-056：会话与产品全域管控纳管对齐 —— 本工程主会话命名 9/9 合规；修复会话转录定位器（v4 文件名硬编码）与标题存储分片读取（单文件已不存在）两处载体缺陷，自动命名链路自「检查 0 条」恢复为「检查 22 条」；会话来源退休形态 `kind:\"plugin\"` 0 命中",
+        "REQ-056：工程待提交变更全部入库推送（工作树清零）；`config/version.json`、台账、入口登记三方版本归位 `v5.6.0`（修复台账已写 v5.6.0 而权威仍为 v5.5.0 的版本孤岛）；`.gitignore` 补齐 `*.log.*` 堵住轮转日志误入库",
+        "测试资产：Python 266 → **311 项**、前端静态 7 → **8 套**、真机新增 `browser_r11_verify.js` 25 项",
+        "数据口径变更：无（零行情口径变更）"
+      ],
+      "entry": {
+        "web": {
+          "url": "http://127.0.0.1:8888/",
+          "verified": true,
+          "note": "仅监听 127.0.0.1:8888（回环）；`/api/version` 与页面徽标同源，版本改动运行期即时生效（REQ-054）"
+        },
+        "cli": {
+          "command": "python3 scripts/dsh_stock_cli.py status ｜ python3 scripts/dsh_stock_cli.py db-archive --help",
+          "verified": true
+        }
+      },
+      "verification_gates": {
+        "python_unittest": "311 PASS (skipped 2)",
+        "js_static_suites": "8/8 PASS",
+        "browser_r11": "25/25 PASS",
+        "console_errors": 0
+      },
+      "evidence": {
+        "dir": "docs/verification/2026-10-01-r11/",
+        "physical_layer_audit": "docs/audit/2026-10-01-physical-layer-audit.md",
+        "governance_alignment": "docs/audit/2026-10-02-session-product-alignment.md"
+      }
+    },
+    "v5.5.0": {
+      "delivered_at": "2026-09-24",
+      "batch": "R10 工程加固（无行情口径变更）",
+      "changes": [
+        "REQ-052：新增 CLI 子命令 db-archive —— 源库只读打开（mode=ro）+ 在线备份 API 生成一致性快照，归档自动 integrity_check 与逐表行数核对，可选 VACUUM INTO 紧凑副本，附 .manifest.json；默认只增不删，--keep N 才清理",
+        "REQ-053：前端模块化拆分第一步 —— 10 个纯函数从 web/app.js（8756 行）外置到 web/modules/util.js（167 行），页面按 util.js → app.js 顺序加载，调用点零改动、行为逐字一致",
+        "REQ-054：config/version.json 成为运行期即时生效的唯一版本权威（逐请求按 mtime+size 失效重读），修复 BUG-006（此前升版后接口与页面仍显示旧版本，必须重启）",
+        "测试资产：Python 266 项（新增 20 项）、JS 静态 7 套、真机 5 套（新增 browser_r10_verify.js 15 项）",
+        "数据口径变更：无（零数据库写入/迁移/重建）"
+      ],
+      "entry": {
+        "web": {
+          "url": "http://127.0.0.1:8888/",
+          "verified": true,
+          "note": "仅监听 127.0.0.1:8888（回环）；页面标题实测【v5.5.0】"
+        },
+        "cli": {
+          "command": "python3 scripts/dsh_stock_cli.py status ｜ python3 scripts/dsh_stock_cli.py db-archive --help",
+          "verified": true
+        }
+      },
+      "verification_gates": {
+        "python_unittest": "266 PASS",
+        "js_static_suites": "7/7 PASS",
+        "browser_r10": "15/15 PASS",
+        "browser_r09": "28/28 PASS",
+        "browser_r08": "40/40 PASS",
+        "browser_r07": "44/44 PASS",
+        "browser_r06": "39/39 PASS",
+        "console_errors": 0
+      },
+      "evidence": {
+        "dir": "docs/verification/2026-09-24-r10/",
+        "live_entry": "docs/verification/2026-09-24-r10/live-entry.json",
+        "ops_evidence": "docs/verification/2026-09-24-r10/ops-evidence.txt",
+        "source_fingerprints": "docs/verification/2026-09-24-r10/source-fingerprints.json",
+        "screenshot": "docs/verification/2026-09-24-r10/01-util-module-live-page.png",
+        "bug_log": "docs/problem-log/BUG-006-version-authority-not-live-at-runtime.md"
+      }
+    },
+    "v5.4.1": {
+      "delivered_at": "2026-09-24",
+      "batch": "R09.1 收口补丁",
+      "changes": [
+        "REQ-037 口径修订：首屏两图副图档位统一为「成交额」，与唯一「幅图联动」控件高亮一致（消除「高亮成交额 / 左图显示成交量」的自相矛盾）；手动选择保护不变",
+        "REQ-049：服务端默认仅绑定本机回环 127.0.0.1（原默认 0.0.0.0，局域网可达且无鉴权）；DSH_STOCK_HOST / --host 可显式放开；启动日志如实标注暴露面；保活脚本与看门狗同口径",
+        "REQ-050：server.log / watchdog.log 保活启动时按大小轮转（默认 ≥5MB，保留 3 份，DSH_STOCK_LOG_MAX_KB 可调）",
+        "REQ-051：R05 历史快照脚本从 tests/ 归档到 docs/verification/2026-09-20-r05/，避免过时断言被误当回归门禁",
+        "测试探针口径统一：R08/R09 的版本断言改为「与 /api/version 一致」，R09 当日分时成交额表头断言接受两种合法口径",
+        "数据口径变更：无（零数据库写入）"
+      ],
+      "entry": {
+        "web": {
+          "url": "http://127.0.0.1:8888/",
+          "verified": true,
+          "note": "仅本机回环监听；局域网访问需 DSH_STOCK_HOST=0.0.0.0 显式放开"
+        },
+        "cli": {
+          "command": "python3 scripts/dsh_stock_cli.py status",
+          "verified": true
+        }
+      },
+      "verification_gates": {
+        "python_unittest": "246 PASS",
+        "js_static_suites": "6/6 PASS",
+        "browser_r09": "28/28 PASS",
+        "browser_r08": "40/40 PASS",
+        "browser_r07": "44/44 PASS",
+        "browser_r06": "39/39 PASS",
+        "console_errors": 0
+      },
+      "evidence": {
+        "dir": "docs/verification/2026-09-24-r09-1/",
+        "live_entry": "docs/verification/2026-09-24-r09-1/live-entry.json",
+        "cli_status": "docs/verification/2026-09-24-r09-1/cli-status.txt",
+        "ops_evidence": "docs/verification/2026-09-24-r09-1/ops-evidence.txt",
+        "source_fingerprints": "docs/verification/2026-09-24-r09-1/source-fingerprints.json"
+      }
+    },
+    "v5.4.0": {
+      "delivered_at": "2026-09-24",
+      "batch": "R09",
+      "changes": [
+        "REQ-046：顶栏「行情日期」徽标精确到分，取自来源真实时间戳（14 位原始值保留在 title 便于核对）；来源只到日则只显示日，完全拿不到显示「未获取」，绝不以本地时钟冒充",
+        "REQ-047：副图标题与统计概要按实测文本宽度平铺布局，任意标题长度零重叠；空间不足时换行并按行压缩柱高（应用于个股日K / 当日分时 / 大盘指数三处副图）",
+        "REQ-048：R09 批次回归与证据（真机 28/28）",
+        "顺带修复（BUG-005）：副图「总和」不再恒为 --；指数成交额不再输出 3943379.8亿 这类量纲错误数字（改为如实「不可得」）；交易面积不再以 0.00亿 冒充面积为 0；不可得一律不写 0"
+      ],
+      "entry": {
+        "web": {
+          "url": "http://127.0.0.1:8888/",
+          "verified": true
+        },
+        "cli": {
+          "command": "python3 scripts/dsh_stock_cli.py status",
+          "verified": true
+        }
+      },
+      "verification_gates": {
+        "python_unittest": "228 PASS",
+        "js_static_suites": "6/6 PASS",
+        "browser_r09": "28/28 PASS",
+        "browser_r08": "40/40 PASS",
+        "browser_r07": "44/44 PASS",
+        "browser_r06": "39/39 PASS",
+        "console_errors": 0
+      },
+      "evidence": {
+        "dir": "docs/verification/2026-09-24-r09/",
+        "live_entry": "docs/verification/2026-09-24-r09/live-entry.json",
+        "cli_status": "docs/verification/2026-09-24-r09/cli-status.txt",
+        "source_fingerprints": "docs/verification/2026-09-24-r09/source-fingerprints.json",
+        "r06_rerun": "docs/verification/2026-09-24-r09/r06-rerun/",
+        "r07_rerun": "docs/verification/2026-09-24-r09/r07-rerun/",
+        "r05_snapshot": "docs/verification/2026-09-24-r09/r05-snapshot/"
+      }
+    },
+    "v5.3.0": {
+      "delivered_at": "2026-09-23",
+      "batch": "R08",
+      "changes": [
+        "REQ-041：缠论 1/2/3 类买卖点按级别自动标记到 K 线图上（级别白名单 + 与 analyze_bars 逐字段同源 + 无未来函数）",
+        "REQ-042：周线成交额缺失时按对应区间日线成交额相加补齐",
+        "REQ-043：季线成交额缺失时按对应区间日线成交额相加补齐",
+        "REQ-044：分时图 Tab 移除 1 分 K 线入口",
+        "REQ-045：默认展示「当日分时 + 日K」双图，无需手动添加"
+      ],
+      "evidence": {
+        "dir": "docs/verification/2026-09-23-r08/"
+      }
+    }
+  },
   "entries": [
     {
       "id": "primary",
@@ -25,23 +196,57 @@
       "platform": "local web/macOS",
       "target": "http://127.0.0.1:8888/",
       "verification_status": "passed",
-      "verified_at": "2026-09-20T06:55:49.779379+00:00",
-      "evidence": "docs/verification/2026-09-20-r02/live-entry.json"
+      "verified_at": "2026-09-24T16:09:41+08:00",
+      "evidence": "docs/verification/2026-09-24-r10/live-entry.json",
+      "extra_evidence": [
+        "docs/verification/2026-09-24-r10/README.md",
+        "docs/verification/2026-09-24-r10/ops-evidence.txt",
+        "docs/verification/2026-09-24-r10/source-fingerprints.json"
+      ],
+      "note": "v5.6.0 复核：仅监听 127.0.0.1:8888（回环）；页面徽标与 /api/version 同源；版本改动运行期即时生效"
     },
     {
       "id": "cli",
       "kind": "cli",
       "platform": "Python3/macOS",
-      "target": "python3 scripts/dsh_stock_cli.py status",
+      "target": "python3 scripts/dsh_stock_cli.py status ｜ db-archive",
       "verification_status": "passed",
-      "verified_at": "2026-09-20T06:55:49.779379+00:00",
-      "evidence": "docs/verification/2026-09-20-r02/cli-status.txt"
+      "verified_at": "2026-09-24T16:09:41+08:00",
+      "evidence": "docs/verification/2026-09-24-r10/ops-evidence.txt"
     }
   ],
+  "verification_gates": {
+    "python_unittest": "311 PASS (skipped 2)",
+    "js_static_suites": "8/8 PASS",
+    "browser_r11": "25/25 PASS",
+    "browser_r10": "15/15 PASS",
+    "browser_r09": "28/28 PASS",
+    "browser_r08": "40/40 PASS",
+    "browser_r07": "44/44 PASS",
+    "browser_r06": "39/39 PASS",
+    "console_errors": 0
+  },
   "stable_fallback": {
     "version": "v4.4.0",
     "target": "data/backups/r02-v4.4.0",
     "note": "独立可运行回退，仅供审计旧行为；包含旧数据问题，不作为当前产品",
     "evidence": "docs/baselines/2026-09-20/rollback.json"
+  },
+  "updated_at": "2026-10-02",
+  "revision": "PENDING-COMMIT-BACKFILL",
+  "verification_dir": "docs/verification/2026-10-01-r11/",
+  "fingerprints": {
+    "captured_at": "2026-09-24T16:09:09+08:00",
+    "file": "docs/verification/2026-09-24-r10/source-fingerprints.json",
+    "count": 63,
+    "sample": {
+      "config/version.json": "8921883eb49be9564f982eb3dea511a396d4594488e76a5fcf079c5bad840abd",
+      "web/app.js": "9abcd8eaf3c394c9c7d535eb66dd9012fb4cfbbe933838c37f84d5478f5877c3",
+      "web/modules/util.js": "42c1f3bca248fa31a4ce1ec7f3f402571378418ee872e9d824fc05fed19f7589",
+      "web/index.html": "88992e2ba5e775397959163cdcb0967fe3a3055e97fa1fdba8de28cc80b02c21",
+      "scripts/stock_web_server.py": "6bffca03a52d1b3b08d10087120722eaac489591dec1524880e32a6a1b0faaa4",
+      "scripts/db_maintenance.py": "a777c7c8f0fd964a59fc585f930c517ebd79c8bb344aa13482f6b24e794267be",
+      "scripts/dsh_stock_cli.py": "73ceccd54415e63124ba97bd5987f49cd8378bae9e64a7da10d926629e8d8094"
+    }
   }
 }

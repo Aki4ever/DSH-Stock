@@ -1,0 +1,213 @@
+{
+  "requirement": "REQ-034/035/036",
+  "base": "http://127.0.0.1:8888",
+  "total": 39,
+  "failed": 0,
+  "results": [
+    {
+      "name": "headless Chrome 已就绪",
+      "ok": true,
+      "detail": "Chrome/148.0.7778.96"
+    },
+    {
+      "name": "页面加载成功",
+      "ok": true,
+      "detail": "【v5.4.0】A股多维量化筛选器 - DSH Stock Web"
+    },
+    {
+      "name": "REQ-034 一级 Tab＝日线图/周线图/季线图",
+      "ok": true,
+      "detail": "📊 日线图 | 📈 周线图 | 🗓️ 季线图"
+    },
+    {
+      "name": "REQ-034 二级 Tab＝30/60/120/180天K线（默认日线颗粒度）",
+      "ok": true,
+      "detail": "30天K线 | 60天K线 | 120天K线 | 180天K线"
+    },
+    {
+      "name": "REQ-044 分时维度子 Tab＝当日分时/5分K线（1分K线入口已移除）",
+      "ok": true,
+      "detail": "⏱️ 当日分时 | 🕔 5分K线"
+    },
+    {
+      "name": "个股详情已加载真实历史",
+      "ok": true,
+      "detail": "贵州茅台 · 日K 6011 根 · 当日分时 216 点"
+    },
+    {
+      "name": "REQ-035 日线图·30天K线：实绘 30 根日K",
+      "ok": true,
+      "detail": "实绘 30 根 · 视窗 30 根 · 实绘 30 根"
+    },
+    {
+      "name": "REQ-047 绘图区几何实测有效（画布宽 / 绘图区左缘 / 绘图区宽）",
+      "ok": true,
+      "detail": "画布 920 · 绘图区 65~855（宽 790）"
+    },
+    {
+      "name": "REQ-034 颗粒度标注＝日线图（每根＝1个交易日）",
+      "ok": true,
+      "detail": "日线图 · 每根＝1个交易日"
+    },
+    {
+      "name": "REQ-035 周线图·30周K线：实绘 30 根周K",
+      "ok": true,
+      "detail": "实绘 30 根 · 视窗 30 根 · 实绘 30 根"
+    },
+    {
+      "name": "REQ-034 颗粒度标注＝周线图（每根＝1个自然周，由真实日K聚合）",
+      "ok": true,
+      "detail": "周线图 · 每根＝1个自然周（由真实日K聚合）"
+    },
+    {
+      "name": "REQ-034 二级 Tab 文案随颗粒度变为「30周K线」(单位随一级 Tab 变化)",
+      "ok": true,
+      "detail": "30周K线 | 60周K线 | 120周K线 | 180周K线"
+    },
+    {
+      "name": "REQ-034 周K聚合口径正确（开＝区间首日开/收＝末日收/高＝区间最高/低＝区间最低）",
+      "ok": true,
+      "detail": "末周 2026-09-24（含 4 个交易日）：开 1259/1259 高 1271.5/1271.5 低 1231.05/1231.05 收 1238.88/1238.88"
+    },
+    {
+      "name": "REQ-034 周线图末根收盘＝最后一根日K收盘（同一标的、同一真实来源）",
+      "ok": true,
+      "detail": "周 1238.88 / 日 1238.88"
+    },
+    {
+      "name": "REQ-035 季线图·30季K线：实绘 30 根季K",
+      "ok": true,
+      "detail": "实绘 30 根 · 视窗 30 根 · 实绘 30 根"
+    },
+    {
+      "name": "REQ-034 颗粒度标注＝季线图（每根＝1个自然季度，由真实日K聚合）",
+      "ok": true,
+      "detail": "季线图 · 每根＝1个自然季度（由真实日K聚合）"
+    },
+    {
+      "name": "REQ-035 缩放交互入口＝浮动 ➕/➖ 按钮（滚轮缩放已按需求移除）",
+      "ok": true,
+      "detail": "按钮 2 个：放大K线（减少根数，细节更清晰） | 缩小K线（增加根数，看更多走势）"
+    },
+    {
+      "name": "REQ-035 滚轮事件不再改变视窗根数（缩放只由按钮驱动）",
+      "ok": true,
+      "detail": "180 → 180"
+    },
+    {
+      "name": "REQ-035 放大到极限＝30 根（下限硬约束，不再继续放大）",
+      "ok": true,
+      "detail": "实绘 30 根 · 面板视窗 30 根 · 视窗 30 根 · 实绘 30 根"
+    },
+    {
+      "name": "REQ-035 缩小一步：视窗根数增加（➖ 按钮驱动的真实缩放）",
+      "ok": true,
+      "detail": "30 → 35"
+    },
+    {
+      "name": "REQ-035 缩小到极限＝该颗粒度全部可用根数（不再固定 200 根）",
+      "ok": true,
+      "detail": "实绘 6011 根 / 面板视窗 6011 根 / 全部 6011 根"
+    },
+    {
+      "name": "REQ-035 缩放只改根数：绘图区左缘与宽度恒定",
+      "ok": true,
+      "detail": "首测 画布920 绘图区 65~855(宽790) · 现测 画布920 绘图区 65~855(宽790)"
+    },
+    {
+      "name": "REQ-035 区间内仅 10 根真实日K（视窗下限 30）：实绘 10 根 + 右侧留白（不拉伸、不补足）",
+      "ok": true,
+      "detail": "实绘 10 根 · 占用 31.8% · 视窗 30 根 · 实绘 10 根（不足，右侧留白）"
+    },
+    {
+      "name": "REQ-035 留白口径下视窗根数仍为下限 30 根",
+      "ok": true,
+      "detail": "视窗 30 根 · 实绘 10 根（不足，右侧留白）"
+    },
+    {
+      "name": "REQ-035 清空日期区间后恢复整段K线",
+      "ok": true,
+      "detail": "实绘 30 根"
+    },
+    {
+      "name": "REQ-034 分时图与K线图同屏（左右并排、同一行）",
+      "ok": true,
+      "detail": "左 714px @121 ｜ 右 714px @845 ｜ class=chart-panel-row dual-panel"
+    },
+    {
+      "name": "REQ-034 分时维度·5分K线：每根＝5分钟区间，视窗 30 根",
+      "ok": true,
+      "detail": "实绘 30 根 · 5分K线 · 每根＝5分钟真实区间"
+    },
+    {
+      "name": "REQ-034 5分K线相邻两根时间间隔＝5 分钟（真实区间，非插值）",
+      "ok": true,
+      "detail": "间隔 5 分钟（跨午休/隔日属正常）"
+    },
+    {
+      "name": "REQ-044 调用已移除的 1分K线 不生效（左侧保持 5分K线）",
+      "ok": true,
+      "detail": "实绘 30 根 · 5分K线 · 每根＝5分钟真实区间"
+    },
+    {
+      "name": "REQ-034 在分时图（左）画水平线：左图 1 条、右图 0 条（画线互不影响）",
+      "ok": true,
+      "detail": "{\"left\":1,\"right\":0,\"leftDom\":1,\"rightDom\":0,\"leftMode\":true,\"rightMode\":false}"
+    },
+    {
+      "name": "REQ-034 自动画线只在本图生效（右图自动线，左图手动画线保留且不受影响）",
+      "ok": true,
+      "detail": "{\"rightAuto\":2,\"leftAuto\":0,\"leftTotal\":1}"
+    },
+    {
+      "name": "REQ-034 切换K线图颗粒度不影响分时图（左侧仍为 5分K线）",
+      "ok": true,
+      "detail": "{\"leftPeriod\":\"klinem5\",\"rightPeriod\":\"klineweekly\",\"leftCount\":30,\"rightCount\":30}"
+    },
+    {
+      "name": "REQ-036 重合图可调出：有当日分时则叠加折线，无分时则如实提示不可用",
+      "ok": true,
+      "detail": "当日分时 216 点 · overlay=true · 🔀 重合图：当日分时折线（横向铺满，时间轴与日K不对应，仅价格轴对齐） 3卖第三类卖点"
+    },
+    {
+      "name": "REQ-036 重合图显式标注「时间轴与日K不对应」",
+      "ok": true,
+      "detail": "🔀 重合图：当日分时折线（横向铺满，时间轴与日K不对应，仅价格轴对齐） 3卖第三类卖点"
+    },
+    {
+      "name": "REQ-036 重合图分时折线横向铺满绘图区（方案A口径）",
+      "ok": true,
+      "detail": "折线 X 65~855（绘图区 65~855）"
+    },
+    {
+      "name": "REQ-034 收起分时图后 K 线图占满整行",
+      "ok": true,
+      "detail": "{\"cls\":\"chart-panel-row single-panel\",\"lHidden\":true,\"rw\":1437}"
+    },
+    {
+      "name": "REQ-034 不允许两个图同时收起（至少保留一个）",
+      "ok": true,
+      "detail": "右侧面板 hidden=false"
+    },
+    {
+      "name": "回归：指数页周期 Tab 未被破坏",
+      "ok": true,
+      "detail": "timeline,kline5m,kline15m,kline30m,kline20,kline60,kline120,kline180,all"
+    },
+    {
+      "name": "页面无 JS 运行错误",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "shots": [
+    "docs/verification/2026-09-24-r09/r06-rerun/01-quarterly-30.png",
+    "docs/verification/2026-09-24-r09/r06-rerun/02-daily-zoom-all.png",
+    "docs/verification/2026-09-24-r09/r06-rerun/03-ten-bars-right-padding.png",
+    "docs/verification/2026-09-24-r09/r06-rerun/04-dual-panel.png",
+    "docs/verification/2026-09-24-r09/r06-rerun/05-independent-drawing.png",
+    "docs/verification/2026-09-24-r09/r06-rerun/06-overlay-intraday.png"
+  ],
+  "batch": "R09 regression (v5.4.0)",
+  "note": "R09 探针修订后的重跑报告；R06 交付时的 36/36 结论见 README 上方表格"
+}

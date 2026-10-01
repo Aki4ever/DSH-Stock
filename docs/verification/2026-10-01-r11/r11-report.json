@@ -1,0 +1,133 @@
+{
+  "base": "http://127.0.0.1:8888",
+  "pass": 25,
+  "fail": 0,
+  "results": [
+    {
+      "name": "headless Chrome 已就绪",
+      "ok": true,
+      "detail": "Chrome/148.0.7778.96"
+    },
+    {
+      "name": "真实页面已加载",
+      "ok": true,
+      "detail": "【v5.5.0】A股多维量化筛选器 - DSH Stock Web"
+    },
+    {
+      "name": "接口：csi50 命中数 > 0（修复前为 0）",
+      "ok": true,
+      "detail": "matched=49"
+    },
+    {
+      "name": "接口：csi100 命中数 > 0（修复前为 0）",
+      "ok": true,
+      "detail": "matched=93"
+    },
+    {
+      "name": "DOM：#constituentControl 存在",
+      "ok": true,
+      "detail": "3 个按钮"
+    },
+    {
+      "name": "DOM：中证A50 按钮不再 disabled",
+      "ok": true,
+      "detail": "中证A50"
+    },
+    {
+      "name": "DOM：中证A100 按钮不再 disabled",
+      "ok": true,
+      "detail": "中证A100"
+    },
+    {
+      "name": "DOM：按钮文案已更口径为 中证A50/A100",
+      "ok": true,
+      "detail": "中证A50 / 中证A100"
+    },
+    {
+      "name": "交互：点击中证A50 后 appState.constituent === \"csi50\"",
+      "ok": true,
+      "detail": "clicked={\"ok\":true,\"active\":true} state=csi50"
+    },
+    {
+      "name": "交互：点击后股票表格真实渲染出数据行",
+      "ok": true,
+      "detail": "rows=49"
+    },
+    {
+      "name": "接口：宏观 status=available 且无错误",
+      "ok": true,
+      "detail": "status=available errors=0"
+    },
+    {
+      "name": "DOM：宏观视图已切到前台",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "DOM：总评分不再是「未获取」",
+      "ok": true,
+      "detail": "score=+56.22"
+    },
+    {
+      "name": "DOM：页面分数与 /api/macro/world 同源一致（±1 分内，行情微动）",
+      "ok": true,
+      "detail": "dom=+56.22 api=56.22"
+    },
+    {
+      "name": "DOM：情绪标签是真实情绪词",
+      "ok": true,
+      "detail": "sentiment=中性偏暖"
+    },
+    {
+      "name": "DOM：事件数 > 0",
+      "ok": true,
+      "detail": "count=1"
+    },
+    {
+      "name": "DOM：商品卡片真的渲染出真实卡片",
+      "ok": true,
+      "detail": "cards=5 names=纽约黄金,纽约原油,布伦特原油,纽约白银,伦敦铜"
+    },
+    {
+      "name": "DOM：商品面板不得出现渲染崩溃兜底文案",
+      "ok": true,
+      "detail": "纽约黄金\n        美元/盎司\n      \n      \n        4,202.775\n        \n"
+    },
+    {
+      "name": "DOM：商品名称与接口一致（真实商品名）",
+      "ok": true,
+      "detail": "纽约黄金,纽约原油,布伦特原油,纽约白银,伦敦铜"
+    },
+    {
+      "name": "DOM：事件卡片真的渲染出真实标题",
+      "ok": true,
+      "detail": "cards=1 titles=财政部部长蓝佛安：要研究制定针对性强的增量政策 更加注重扩大国内有效需求"
+    },
+    {
+      "name": "DOM：评分依据为真实口径（不再写死「不生成宏观分数」）",
+      "ok": true,
+      "detail": "评分依据: 50 + 全球指数与商品真实涨跌幅均值(%) × 10（夹取 0~100）"
+    },
+    {
+      "name": "DOM：国内要闻徽标显示真实件数（不是「未获取」）",
+      "ok": true,
+      "detail": "1件政经要闻"
+    },
+    {
+      "name": "DOM：事件面板不得出现渲染崩溃兜底文案",
+      "ok": true,
+      "detail": "🇨🇳 国内\n          《求是》\n          \n            A股量化冲击: 未获取\n  "
+    },
+    {
+      "name": "截图已落盘",
+      "ok": true,
+      "detail": "/tmp/r11shots/r11-macro-and-constituents.png"
+    },
+    {
+      "name": "控制台零未捕获异常",
+      "ok": true,
+      "detail": "0 条"
+    }
+  ],
+  "consoleErrors": []
+}

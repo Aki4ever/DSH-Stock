@@ -1,10 +1,11 @@
 # DSH 股票量化监控与投资组合分析工程 (DSH Stock)
 
 > ### 🏷️ **版本信息与实施追踪**
-> - **当前系统实施总版本**：`v4.5.0`
+> - **当前系统实施总版本**：`v5.6.0`（R11 stockper 权威调研与抓取 Agent + R12 会话与产品全域管控纳管对齐，权威来源 `config/version.json`，运行期即时生效）
 > - **维护团队**：DSH 量化生态与智能体工程组
-> - **最后更新日期**：2026-09-20
+> - **最后更新日期**：2026-10-02
 > - **版本状态**：`[Release 稳定生效]`
+> - **接手入口**：先读 [`docs/handoff/README.md`](docs/handoff/README.md)（产品是什么／怎么跑／已知偏差／优化切入点）
 
 ---
 
@@ -21,7 +22,7 @@
 >   - 接口契约：提供 `python3 scripts/dsh_stock_cli.py <quote|list|analyze|portfolio|chart|report|status>` 命令行。
 >   - 数据流转：实时对接腾讯/新浪公开金融接口（失败明确未获取，产品禁止Mock回退），零依赖纯 Python 标准库驱动，自动渲染独立 SVG 矢量图表并输出 Markdown 研报。
 >   - 原生可视化呈现：在 DSH Web 终端呈现 ANSI 彩色涨跌表与进度条，在会话尾部输出可直接点击的 SVG 走势图与研报路径。
-> - 📈 **预期效能增益**：实现秒级获取行情与多空量化体检，告别繁重的商业炒股软件等待，零外部三方依赖安装，单测 0.6 秒全量绿灯，大幅提升投资决策与风险预警效率。
+> - 📈 **预期效能增益**：实现秒级获取行情与多空量化体检，告别繁重的商业炒股软件等待，零外部三方依赖安装，266 项单测 17 秒全量绿灯，大幅提升投资决策与风险预警效率。
 
 ---
 
@@ -132,12 +133,14 @@ python3 scripts/dsh_stock_cli.py status
 ```bash
 python3 -m unittest discover -s tests -p "test_*.py" -v
 ```
-> **当前门禁状态**：58 个 Python 测试通过；另有两组 JavaScript 完整性验证，详见本版验收记录。
+> **当前门禁状态（2026-09-24 实测，全部全绿）**：Python 单测 **266 项 PASS**；前端静态套件 **7 套全 PASS**；真机验收 **R10 15/15 · R09 28/28 · R08 40/40 · R07 44/44 · R06 39/39**；服务端默认仅监听 `127.0.0.1:8888`（`DSH_STOCK_HOST=0.0.0.0` 可放开），`server.log` 超 5MB 自动轮转。R06/R07 探针漂移、R05 台账缺口、入口记录落后均已收口（详见 [`docs/handoff/README.md`](docs/handoff/README.md)）。
 
 
-## v4.5.0 当前入口和基线
+## v5.6.0 当前入口与接手入口
 
-本地网页：[打开产品](http://127.0.0.1:8888/)。[入口版本记录](docs/operations/product-entry.json)、[整体基线与回退](docs/baselines/2026-09-20/README.md)、[真实来源与未覆盖字段](docs/baselines/2026-09-20/data-sources.md)、[需求台账](docs/requirements.md)、[本地验证](docs/verification/2026-09-20-r02/README.md)。
+- 产品入口（本地网页）：[打开产品](http://127.0.0.1:8888/)｜保活命令：`bash scripts/ensure_server.sh`｜停止：`bash scripts/stop_server.sh`
+- 接手文档：[接手与对接总览](docs/handoff/README.md)｜[当前真实架构](docs/handoff/architecture-current.md)｜[二次开发与优化指南](docs/handoff/optimization-guide.md)｜[产品文案包](docs/handoff/product-copy.md)
+- 台账与基线：[需求台账](docs/requirements.md)、[入口版本记录](docs/operations/product-entry.json)、[整体基线与回退](docs/baselines/2026-09-20/README.md)、[真实来源与未覆盖字段](docs/baselines/2026-09-20/data-sources.md)、[本地验证（R09）](docs/verification/2026-09-24-r09/README.md)、[R08](docs/verification/2026-09-23-r08/README.md)
 
 ```sh
 python3 scripts/dsh_stock_cli.py status

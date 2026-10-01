@@ -32,12 +32,26 @@ def fetch_quotes(codes):
     return result
 
 
-def clean_legacy_stock(row):
+def clean_legacy_stock(row, keep_constituent=False):
+    """
+    把「旧版未验证行情」相关字段一律置空（REQ-012 禁止无来源数据冒充）。
+
+    `keep_constituent`（默认 False，保持原有行为不变）：
+        默认把 `is_csi50/is_csi100` 置空并标 `constituent_status='unverified'`，因为
+        **行情行**携带的成分标记属未核验来源。
+        但 `stock_db.load_all_stocks_from_db()` 读的是 **stocks_master 的名单标记位**，
+        其来源由 `config/constituents.json` 的 `verified_source/as_of` 背书（未核验时名单
+        不会被加载、也不会写回该列），属已核验口径；该调用点传 `keep_constituent=True`，
+        修掉「名单已核验却在内存里被清空」造成的恒 0 死功能。
+    """
     row=dict(row)
     for key in ['ipo_date','listing_years','dividend_count','dividend_total_amount','top10_hold_pct','top10_circ_hold_pct','report_date','avg_daily_amount','profit_years']:
         row[key]=None
     for key in list(FIELDS)+['turnover','turnover_yi','change_val','open_p','high_p','low_p']:row[key]=None
-    row['is_csi50']=None;row['is_csi100']=None;row['constituent_status']='unverified';
+    if keep_constituent:
+        row['constituent_status']='verified' if (row.get('is_csi50') or row.get('is_csi100')) else 'not_listed'
+    else:
+        row['is_csi50']=None;row['is_csi100']=None;row['constituent_status']='unverified';
     row['timestamp']=None;row['quote_meta']=meta(None,'unavailable','旧数据未验证，待重新获取')
     cached=cache_get('quote:v2:'+row['code'])
     if cached:

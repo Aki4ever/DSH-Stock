@@ -5,7 +5,10 @@ RULES = {'version':'1.0', 'pen':'合并K线顶底分型交替，中心间距>=4�
          'segment':'反向笔特征序列去包含后分型；至少三笔；缺口分型待反向特征分型确认',
          'pivot':'连续三笔价格区间的严格交集；笔级中枢，不冒充线段级中枢',
          'divergence':'相邻同向笔价格创新极值且MACD绝对柱面积缩小；笔背离，不等于完整趋势背驰',
-         'ma_entanglement':'MA5/10/20极差÷三均线均值<=1%，连续>=3根；周期、阈值可配置'}
+         'ma_entanglement':'MA5/10/20极差÷三均线均值<=1%，连续>=3根；周期、阈值可配置',
+         'buy_sell':'第一类＝趋势（两个同向且不重叠的连续中枢）中最后一个中枢离开段出现趋势背驰（创新极值且MACD面积缩小）；'
+                    '第二类＝第一类之后首次次级别回抽不创新极值；第三类＝离开中枢后回抽不重新回到中枢区间（买点回抽低点>ZG，卖点反抽高点<ZD）。'
+                    '全部判定只使用该点及其之前的数据，不使用未来函数'}
 
 
 def build_pens(fractals, processed, bars, macd):
@@ -99,6 +102,111 @@ def build_divergences(pens):
     return out
 
 
+BS_LABELS = {'buy1': '第一类买点', 'buy2': '第二类买点', 'buy3': '第三类买点',
+             'sell1': '第一类卖点', 'sell2': '第二类卖点', 'sell3': '第三类卖点'}
+
+
+def _first_pen_from(pens, index, direction=None):
+    """定位从 index 起（含）的第一笔同向笔；仅向后取用，不含任何未来判定。"""
+    for p in pens:
+        if p['start_index'] < index: continue
+        if direction is not None and p['direction'] != direction: continue
+        return p
+    return None
+
+
+def _last_pen_before(pens, index, direction):
+    """定位 end_index <= index 的最后一笔同向笔（＝进入后续中枢的那一段）。"""
+    found = None
+    for p in pens:
+        if p['end_index'] <= index and p['direction'] == direction:
+            found = p
+    return found
+
+
+def _worse(states):
+    return 'provisional' if any(s == 'provisional' for s in states) else 'confirmed'
+
+
+def build_buy_sell_points(pens, pivots):
+    """需求REQ-040: 缠论三类买卖点（严格遵循缠论定义，只使用判定点及其之前的数据）。
+
+    - 第一类买点/卖点：**趋势**（两个同向且互不重叠的连续中枢）中，最后一个中枢的离开段
+      相对该中枢的进入段出现**趋势背驰**（价格创新极值 + MACD 绝对柱面积缩小）。
+      注意：本项目 RULES 已声明「笔背离 ≠ 完整趋势背驰」，因此这里必须要求趋势结构，
+      不使用单笔背离直接冒充第一类买卖点。
+    - 第二类买点/卖点：第一类买卖点之后的**第一次次级别回抽/反弹不创新极值**。
+    - 第三类买点/卖点：次级别走势**离开中枢**后，回抽不重新回到中枢区间
+      （买点：回抽低点 > 中枢上沿 ZG；卖点：反抽高点 < 中枢下沿 ZD）。
+    """
+    out = []
+    seen = set()
+
+    def push(kind, index, time, price, reason, status):
+        key = (kind, int(index))
+        if key in seen: return
+        seen.add(key)
+        out.append({'type': kind, 'label': BS_LABELS[kind], 'index': int(index), 'time': time,
+                    'price': round(float(price), 4), 'reason': reason, 'status': status})
+
+    # ---------- 第一类买卖点：趋势 + 趋势背驰 ----------
+    for k in range(1, len(pivots)):
+        prev, last = pivots[k - 1], pivots[k]
+        down_trend = last['zg'] < prev['zd']          # 后一中枢完全位于前一中枢下方 → 下跌趋势
+        up_trend = last['zd'] > prev['zg']            # 后一中枢完全位于前一中枢上方 → 上涨趋势
+        if not (down_trend or up_trend): continue
+        direction = -1 if down_trend else 1
+        leave = _first_pen_from(pens, last['end_index'], direction)
+        if not leave: continue
+        enter = _last_pen_before(pens, last['start_index'], direction)
+        if not enter or enter['macd_area'] <= 0: continue
+        made_extreme = leave['end_price'] < enter['end_price'] if down_trend else leave['end_price'] > enter['end_price']
+        if not made_extreme or leave['macd_area'] >= enter['macd_area']: continue
+        kind = 'buy1' if down_trend else 'sell1'
+        trend_word = '下跌' if down_trend else '上涨'
+        reason = (f"{trend_word}趋势：中枢 ¥{prev['zd']:.2f}~¥{prev['zg']:.2f} → ¥{last['zd']:.2f}~¥{last['zg']:.2f}（不重叠）；"
+                  f"离开段{'创新低' if down_trend else '创新高'} ¥{leave['end_price']:.2f}，"
+                  f"MACD面积 {enter['macd_area']:.2f} → {leave['macd_area']:.2f}（力度衰竭＝趋势背驰）")
+        push(kind, leave['end_index'], leave['end_time'], leave['end_price'], reason,
+             _worse([prev['status'], last['status'], leave['status'], enter['status']]))
+
+    # ---------- 第二类买卖点：第一类之后首次次级别回抽不创新极值 ----------
+    for first in [p for p in list(out) if p['type'] in ('buy1', 'sell1')]:
+        direction = -1 if first['type'] == 'buy1' else 1
+        back = _first_pen_from(pens, first['index'], direction)
+        if not back: continue
+        held = back['end_price'] > first['price'] if direction == -1 else back['end_price'] < first['price']
+        if not held: continue
+        kind = 'buy2' if direction == -1 else 'sell2'
+        reason = (f"{BS_LABELS[first['type']]}（{first['time']} ¥{first['price']:.2f}）之后的第一次"
+                  f"{'回调' if direction == -1 else '反弹'}收于 ¥{back['end_price']:.2f}，"
+                  f"{'未创新低' if direction == -1 else '未创新高'}（不破 ¥{first['price']:.2f}）")
+        push(kind, back['end_index'], back['end_time'], back['end_price'], reason,
+             _worse([first['status'], back['status']]))
+
+    # ---------- 第三类买卖点：离开中枢后回抽不回中枢区间 ----------
+    for c in pivots:
+        up = _first_pen_from(pens, c['end_index'], 1)
+        if up and up['end_price'] > c['zg']:
+            back = _first_pen_from(pens, up['end_index'], -1)
+            if back and back['end_price'] > c['zg']:
+                reason = (f"中枢 ¥{c['zd']:.2f}~¥{c['zg']:.2f} 被向上离开（高点 ¥{up['end_price']:.2f}）；"
+                          f"回调低点 ¥{back['end_price']:.2f} 未回到中枢区间（> ZG ¥{c['zg']:.2f}）")
+                push('buy3', back['end_index'], back['end_time'], back['end_price'], reason,
+                     _worse([c['status'], up['status'], back['status']]))
+        down = _first_pen_from(pens, c['end_index'], -1)
+        if down and down['end_price'] < c['zd']:
+            back = _first_pen_from(pens, down['end_index'], 1)
+            if back and back['end_price'] < c['zd']:
+                reason = (f"中枢 ¥{c['zd']:.2f}~¥{c['zg']:.2f} 被向下离开（低点 ¥{down['end_price']:.2f}）；"
+                          f"反抽高点 ¥{back['end_price']:.2f} 未回到中枢区间（< ZD ¥{c['zd']:.2f}）")
+                push('sell3', back['end_index'], back['end_time'], back['end_price'], reason,
+                     _worse([c['status'], down['status'], back['status']]))
+
+    out.sort(key=lambda p: (p['index'], p['type']))
+    return out
+
+
 def analyze_bars(bars, *, code='', periods=(5,10,20), threshold_pct=1.0, min_bars=3):
     if len(set(periods))<2 or any(type(p)!=int or p<2 or p>250 for p in periods) or not 0<threshold_pct<=20 or not 1<=min_bars<=100:
         raise ValueError('均线参数无效')
@@ -134,6 +242,10 @@ def analyze_bars(bars, *, code='', periods=(5,10,20), threshold_pct=1.0, min_bar
                              'status':'provisional' if i==len(bars) else 'confirmed','bar_count':i-start})
             start=None
     data={'pens':pens,'segments':build_segments(pens),'pivots':build_pivots(pens),'divergences':build_divergences(pens),'ma_entanglements':runs}
+    # 需求REQ-040: 三类买卖点（严格缠论定义）。仅新增字段，既有字段结构与取值完全不变。
+    data['buy_sell_points']=build_buy_sell_points(pens, data['pivots'])
+    counts={k:len(v) for k,v in data.items()}
+    counts.update({t:sum(1 for p in data['buy_sell_points'] if p['type']==t) for t in BS_LABELS})
     return dict(data, code=code, status='available' if len(bars)>=max(periods) else 'insufficient',
-                counts={k:len(v) for k,v in data.items()},rules=RULES,parameters={'ma_periods':list(periods),'threshold_pct':threshold_pct,'min_bars':min_bars},
+                counts=counts,rules=RULES,parameters={'ma_periods':list(periods),'threshold_pct':threshold_pct,'min_bars':min_bars},
                 ma=ma,dates=[b["date"] for b in bars],bar_count=len(bars),computed_on='全部已获取历史；显示窗口不改变判定')

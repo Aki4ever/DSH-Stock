@@ -1,7 +1,8 @@
 const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
-const source = fs.readFileSync('web/app.js', 'utf8');
+const { loadWebSource } = require('./load_web_sources');
+const source = loadWebSource();  // 需求REQ-053: 按页面顺序装载 util.js + app.js
 const elements = new Map();
 const el = () => ({value:'', style:{}, classList:{add(){},remove(){},toggle(){}},textContent:'',innerHTML:''});
 const dom = new Proxy({}, {get(_, key){if(!elements.has(key))elements.set(key,el());return elements.get(key)}});
@@ -16,9 +17,32 @@ const layerEnd = source.indexOf('/**\n * 需求1/2: 智能自动画线算法', l
 vm.runInContext(source.slice(layerBegin, layerEnd), context);
 const resetBegin = source.indexOf('function resetAllChartLayers(');
 vm.runInContext(source.slice(resetBegin, source.indexOf('\n}', resetBegin) + 2), context);
+// 需求REQ-031「换手率统一权威计算」：openStockDetail 载入详情后会用它逐根补齐 turnover_rate，
+// 该函数定义在 openStockDetail 切片之外，必须在沙箱内注入同一份真实实现（断言意图不变，只补依赖）。
+const turnBegin = source.indexOf('function getStockCirculatingShares(');
+const turnEnd = source.indexOf('\n}', source.indexOf('function resolveItemTurnoverRate(')) + 2;
+vm.runInContext(source.slice(turnBegin, turnEnd), context);
 const begin=source.indexOf('async function openStockDetail(');
 const end=source.indexOf('/**\n * 切换财务分析',begin);
 vm.runInContext(source.slice(begin,end),context);
+// 需求REQ-034: 详情加载态改为按「双图面板」逐个刷写，沙箱注入与页面同名的面板表（DOM 取不到时各自静默跳过）
+context.PANEL_SLOTS = ['left', 'right'];
+const panelStub = (slot) => ({
+  slot: slot, containerId: 'chartSvgContainer' + (slot === 'left' ? 'Left' : 'Right'),
+  autoCountControlId: 'autoLinesCountControl_' + slot, hlineBtnId: 'btnToggleHLine_' + slot,
+  st: context.appState
+});
+context.chartPanels = { left: panelStub('left'), right: panelStub('right') };
+context.panelBySlot = (slot) => context.chartPanels[slot] || context.chartPanels.right;
+context.withChartPanel = (slot, fn) => fn(context.panelBySlot(slot));
+context.syncPanelToAppState = () => {};
+context.persistPanelFromAppState = () => {};
+context.renderChartPanel = () => {};
+context.MIN_PANEL_BARS = 30;
+// 需求REQ-041: resetAllChartLayers 复位买卖点等级时会取默认等级常量，沙箱内注入同值常量
+context.DEFAULT_BS_LEVEL = 3;
+// 需求REQ-037: resetAllChartLayers 复位副图时会取本颗粒度的默认档位，沙箱内注入同语义实现
+context.panelDefaultSubplot = () => 'vol';
 function stock(code) {return {code,name:code,market:'上证',market_code:'sh',board:'主板',price:10,prev_close:9,open:9,high:11,low:8,market_cap:1,circulating_cap:1,pe:1,history_meta:{code},daily_bars:[{date:'2026-09-18'}]};}
 const reply = (code, data=stock(code)) => pending.get(code)({ok:true,json:async()=>({data})});
 (async()=>{

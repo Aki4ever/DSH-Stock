@@ -1,0 +1,159 @@
+{
+  "at": "2026-09-24T08:07:42.963Z",
+  "base": "http://127.0.0.1:8888",
+  "total": 28,
+  "passed": 28,
+  "failed": 0,
+  "consoleErrors": [],
+  "shots": [
+    "01-header-minute-badge.png",
+    "02-right-subplot-amt.png",
+    "03-right-subplot-vol.png",
+    "04-right-subplot-turnover.png",
+    "05-timeline-subplot-header.png",
+    "06-index-timeline-header.png",
+    "07-index-kline-subplot-header.png"
+  ],
+  "results": [
+    {
+      "name": "headless Chrome 已就绪",
+      "ok": true,
+      "detail": "Chrome/148.0.7778.96"
+    },
+    {
+      "name": "页面加载成功",
+      "ok": true,
+      "detail": "【v5.5.0】A股多维量化筛选器 - DSH Stock Web"
+    },
+    {
+      "name": "页面版本徽标与 /api/version（config/version.json 唯一权威）一致",
+      "ok": true,
+      "detail": "徽标 v5.5.0 vs 接口 v5.5.0"
+    },
+    {
+      "name": "REQ-046 后端已暴露真实快照时间 quote_datetime",
+      "ok": true,
+      "detail": "2026-09-24 15:58（精度 minute，原始值 20260924155811）"
+    },
+    {
+      "name": "REQ-046 顶栏徽标精确到分（含 HH:MM）",
+      "ok": true,
+      "detail": "📅 行情日期: 2026年9月24日 15:58"
+    },
+    {
+      "name": "REQ-046 徽标时间与后端真实快照时间逐字一致",
+      "ok": true,
+      "detail": "徽标「📅 行情日期: 2026年9月24日 15:58」 vs 接口「2026年9月24日 15:58」"
+    },
+    {
+      "name": "REQ-046 徽标 title 说明精度与来源原始值",
+      "ok": true,
+      "detail": "行情来源的真实快照时间（精确到分）· 原始值 20260924155811"
+    },
+    {
+      "name": "REQ-046 行情来源说明同步到分",
+      "ok": true,
+      "detail": "腾讯证券行情 · 来源时间 2026-09-24 15:58 · 行情为当前已获取快照；日期口径以数据中心「数据库基准」批次为准，未提供历史全市场行情截面"
+    },
+    {
+      "name": "个股详情已加载真实日K",
+      "ok": true,
+      "detail": "贵州茅台 · 日K 6011 根"
+    },
+    {
+      "name": "REQ-047 日K副图(成交额)表头已渲染标题与统计项",
+      "ok": true,
+      "detail": "标题 [\"副图：成交额（含估算：均价×成交量）\"] · 统计项 5 个"
+    },
+    {
+      "name": "REQ-047 日K副图(成交额)真实包围盒零重叠",
+      "ok": true,
+      "detail": "0 处重叠"
+    },
+    {
+      "name": "REQ-047 日K副图(成交额)表头不越出副图绘图区",
+      "ok": true,
+      "detail": "表头右缘 825.9 ≤ 绘图区右缘 855"
+    },
+    {
+      "name": "REQ-047 成交额副图标题保留 REQ-025 兜底口径标注（若来源含估算）",
+      "ok": true,
+      "detail": "含估算标注完整"
+    },
+    {
+      "name": "REQ-047 日K副图(成交量)表头已渲染标题与统计项",
+      "ok": true,
+      "detail": "标题 [\"副图：成交量\"] · 统计项 5 个"
+    },
+    {
+      "name": "REQ-047 日K副图(成交量)真实包围盒零重叠",
+      "ok": true,
+      "detail": "0 处重叠"
+    },
+    {
+      "name": "REQ-047 日K副图(成交量)表头不越出副图绘图区",
+      "ok": true,
+      "detail": "表头右缘 633.6 ≤ 绘图区右缘 855"
+    },
+    {
+      "name": "REQ-047 日K副图(换手率)表头已渲染标题与统计项",
+      "ok": true,
+      "detail": "标题 [\"副图：换手率\"] · 统计项 5 个"
+    },
+    {
+      "name": "REQ-047 日K副图(换手率)真实包围盒零重叠",
+      "ok": true,
+      "detail": "0 处重叠"
+    },
+    {
+      "name": "REQ-047 日K副图(换手率)表头不越出副图绘图区",
+      "ok": true,
+      "detail": "表头右缘 585.8 ≤ 绘图区右缘 855"
+    },
+    {
+      "name": "REQ-047 当日分时副图(vol)真实包围盒零重叠",
+      "ok": true,
+      "detail": "0 处重叠 · 统计项 5 个"
+    },
+    {
+      "name": "REQ-047 当日分时副图(amt)真实包围盒零重叠",
+      "ok": true,
+      "detail": "0 处重叠 · 统计项 5 个"
+    },
+    {
+      "name": "REQ-047 当日分时副图(turnover_rate)真实包围盒零重叠",
+      "ok": true,
+      "detail": "0 处重叠 · 统计项 5 个"
+    },
+    {
+      "name": "REQ-047 指数分时副图标题独立成行（无统计项时也不叠画）",
+      "ok": true,
+      "detail": "标题 [\"💰 副图: 成交金额 (亿元)\"] · 重叠 0 处"
+    },
+    {
+      "name": "REQ-047 指数K线副图表头已渲染标题与统计行",
+      "ok": true,
+      "detail": "标题 [\"💰 副图: 成交金额 (亿元)\"] · 统计行 [\"当前来源未披露该指数成交额，四维分布不可得（不以点位×成交量推测值充当）\"]"
+    },
+    {
+      "name": "REQ-047 指数K线副图表头真实包围盒零重叠",
+      "ok": true,
+      "detail": "0 处重叠"
+    },
+    {
+      "name": "REQ-047 指数K线副图表头不越出绘图区",
+      "ok": true,
+      "detail": "表头右缘 579.8 ≤ 绘图区右缘 1363"
+    },
+    {
+      "name": "REQ-032 指数成交额不可得时不得输出 0.00亿，必须如实标注",
+      "ok": true,
+      "detail": "不可得（不以点位×成交量推测值充当）"
+    },
+    {
+      "name": "控制台无脚本错误",
+      "ok": true,
+      "detail": "0 条"
+    }
+  ]
+}

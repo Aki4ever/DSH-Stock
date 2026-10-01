@@ -1,0 +1,14 @@
+$ lsof -nP -iTCP:8888 -sTCP:LISTEN
+COMMAND     PID    USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+python3.1 87757 linqiyu    4u  IPv4 0x3db90e42fe038f51      0t0  TCP 127.0.0.1:8888 (LISTEN)
+
+$ python3 -c "...resolve_bind_host 三种优先级..."
+默认              : 127.0.0.1
+--host 0.0.0.0    : 0.0.0.0
+DSH_STOCK_HOST 覆盖: 0.0.0.0
+
+$ DSH_STOCK_LOG_MAX_KB=1 bash scripts/ensure_server.sh   # 小阈值真实触发轮转
+35061 server.log
+1234651 server.log.1
+860 watchdog.log
+11146 watchdog.log.1

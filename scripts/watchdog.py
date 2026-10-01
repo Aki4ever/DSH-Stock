@@ -88,8 +88,10 @@ def restart_server():
     env = dict(os.environ)
     env["DSH_STOCK_PORT"] = str(PORT)
     env["DSH_PID_FILE"] = PID_FILE
+    # 需求REQ-049: 与保活入口同口径 —— 默认仅绑定本机回环，DSH_STOCK_HOST 可显式放开
+    bind_host = os.environ.get("DSH_STOCK_HOST", "127.0.0.1").strip() or "127.0.0.1"
     proc = subprocess.Popen(
-        [sys.executable, "-u", SERVER_SCRIPT, "--port", str(PORT)],
+        [sys.executable, "-u", SERVER_SCRIPT, "--port", str(PORT), "--host", bind_host],
         cwd=BASE_DIR,
         stdout=log_file,
         stderr=subprocess.STDOUT,

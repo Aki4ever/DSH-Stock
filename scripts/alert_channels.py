@@ -287,16 +287,36 @@ def notify_hits(hits: List[Dict[str, Any]], channels: Optional[List[str]] = None
 
     for hit in candidates[:max_per_run]:
         key = alert_key_of(hit)
-        text = format_hit_alert(hit)
-        for result in dispatch(text, channels, config, dry_run):
-            channel = result.get("channel", "-")
-            if not force and not dry_run and channel in CHANNEL_LABELS:
+
+        # ---- 冷却判定必须发生在任何网络请求之前（真机实测的物理修正）--------------
+        # 原先写法是「先 dispatch() 发出真实 HTTP，再对结果判冷却」，后果是：冷却期内命中
+        # 同一条结构时**请求已经真的发出去了**，只是结果被丢弃——对已限流的机器人属无谓
+        # 触发，也容易把「冷却去重」误读成「零请求」。此处把冷却前移，冷却期内不构造、
+        # 不发送任何请求。
+        target_channels = channels or [c for c in CHANNEL_LABELS if (config.get(c) or {}).get("webhook")]
+        hot_channels = list(target_channels)
+        if not force and not dry_run:
+            hot_channels = []
+            for channel in target_channels:
+                if channel not in CHANNEL_LABELS:
+                    continue
                 remaining = stock_db.alert_cooldown_remaining(key, channel, cooldown)
                 if remaining > 0:
                     skipped += 1
-                    results.append(dict(result, ok=False, sent=False,
-                                        reason=f"冷却中，剩余 {remaining} 分钟，本次跳过（同一结构不重复告警）"))
-                    continue
+                    results.append({
+                        "channel": channel, "label": CHANNEL_LABELS.get(channel, channel),
+                        "ok": False, "sent": False, "skipped": True, "target_hint": "",
+                        "reason": f"冷却中，剩余 {remaining} 分钟，本次跳过（同一结构不重复告警）",
+                    })
+                else:
+                    hot_channels.append(channel)
+            if not hot_channels:
+                # 所有目标通道都在冷却期：本命中不发送任何请求
+                continue
+
+        text = format_hit_alert(hit)
+        for result in dispatch(text, hot_channels or None, config, dry_run):
+            channel = result.get("channel", "-")
             if not dry_run and channel in CHANNEL_LABELS:
                 stock_db.record_alert_dispatch(
                     key, channel, bool(result.get("ok")), result.get("status_code"),

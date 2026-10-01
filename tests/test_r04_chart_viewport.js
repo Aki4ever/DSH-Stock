@@ -1,7 +1,8 @@
-// R04 (REQ-022/023/024/025/026) 视图口径与辅助线指标回归
+// R04 (REQ-022/023/024/025/026/035) 视图口径与辅助线指标回归
 // 全部为构造数据，只在隔离的 vm 上下文中执行，不触碰产品数据库与浏览器。
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
-const src = fs.readFileSync('web/app.js', 'utf8');
+const { loadWebSource } = require('./load_web_sources');
+const src = loadWebSource();  // 需求REQ-053: 按页面顺序装载 util.js + app.js
 
 function slice(startMarker, endMarker) {
   const a = src.indexOf(startMarker);
@@ -163,7 +164,9 @@ assert.equal(ctx.amountCoverageFlags(realBars).anyDerived, false, '真实成交�
 const blockedBars = [{ date: '2026-09-01', open: 10, close: 10.5, high: 11, low: 9.5, amount_yi: null, volume: null }];
 assert.equal(ctx.calculateAutoSupportResistanceLevels(blockedBars, 10.5, 1).length, 0, '无成交额且无法兜底时仍必须拒绝生成');
 
-// ================= 日K SVG: 30 根必须右侧留白、蜡烛不得铺满 =================
+// ================= REQ-035: 个股面板口径「视窗 N 根 ∈ [30, 全部]」=================
+// 需求REQ-035 取代 REQ-029 的「标准 200 根铺满」口径：指数字段仍走 200 根基准（上方断言保持不变），
+// 个股图表改为「槽宽 ＝ 绘图区内宽 / 本面板视窗根数 N」，N 下限 30、上限为该颗粒度全部可用根数。
 function mkBars(n) {
   const out = [];
   for (let i = 0; i < n; i++) {
@@ -177,21 +180,48 @@ function candleRects(svg) {
     .map(m => ({ x: Number(m[1]), w: Number(m[2]) }));
 }
 // 图上的留白说明文案（避免与源代码注释「右侧留白区段」混淆）
-const PAD_NOTE = /当前显示 \d+ 根（右侧留白）/;
-const svg30 = ctx.generateDailyKlineSVG(mkBars(30), 'vol', W, 440, 270, 110, M, null);
-const rects30 = candleRects(svg30);
-assert.equal(rects30.length, 30, `30 根 K 线必须渲染 30 根蜡烛（实际 ${rects30.length}）`);
-const geo30 = ctx.klineSlotGeometry(W, M, 30);
-const geo200 = ctx.klineSlotGeometry(W, M, 200);
-assert(Math.abs(rects30[0].w - geo30.candleW) < 1e-6, '30 根时蜡烛宽度必须仍取标准槽宽基准，不得拉宽');
-assert(rects30[29].x + rects30[29].w < M.left + 730 * 0.2, '30 根必须聚集在绘图区左侧，右侧必须留白');
-assert(PAD_NOTE.test(svg30), '留白态必须在图上显式说明（当前显示 N 根 / 右侧留白）');
+const PANEL_PAD_NOTE = /视窗 \d+ 根 · 实绘 \d+ 根（不足，右侧留白）/;
+// appState / chartPanels 均以 const 声明在 vm 全局词法作用域中（非 context 属性），
+// 因此必须在该作用域内赋值，宿主侧的 ctx.appState 写入不会影响 vm 内的实现
+function setPanelViewport(count, available) {
+  vm.runInContext(`appState.chartPanelSlot = 'right';
+    chartPanels.right.st.klineCount = ${count}; chartPanels.right.st.availableCount = ${available};`, ctx);
+}
+const renderStock = (bars, subplot = 'vol') =>
+  ctx.generateDailyKlineSVG(bars, subplot, W, 440, 270, 110, M, null, 'right', null, 'klinedaily');
 
-const svg200 = ctx.generateDailyKlineSVG(mkBars(200), 'vol', W, 440, 270, 110, M, null);
+// 视窗 30 根 + 真实 30 根 → 铺满绘图区
+setPanelViewport(30, 30);
+const svg30 = renderStock(mkBars(30));
+const rects30 = candleRects(svg30);
+const geoPanel30 = ctx.klineSlotGeometry(W, M, 30, 30);
+assert.equal(rects30.length, 30, `30 根 K 线必须渲染 30 根蜡烛（实际 ${rects30.length}）`);
+assert(/视窗 30 根 · 实绘 30 根/.test(svg30), '面板必须显式标注视窗根数与实绘根数');
+assert(!PANEL_PAD_NOTE.test(svg30), '视窗 30 根且真实 30 根时不得出现留白说明');
+assert(Math.abs(rects30[0].w - geoPanel30.candleW) < 1e-6, '槽宽基准必须＝绘图区内宽 / 视窗根数(30)');
+assert(Math.abs(geoPanel30.slot - 730 / 30) < 1e-6, '视窗 30 根时槽宽必须＝内宽/30');
+assert(rects30[29].x + rects30[29].w > M.left + 730 * 0.95, '视窗 30 根且真实 30 根必须铺满绘图区');
+
+// 真实根数不足视窗 → 右侧留白（不拉伸、不补足）
+setPanelViewport(30, 10);
+const svg10 = renderStock(mkBars(10));
+const rects10 = candleRects(svg10);
+assert.equal(rects10.length, 10, '实绘根数必须严格等于真实可用根数，禁止补足');
+assert(PANEL_PAD_NOTE.test(svg10), '真实根数不足视窗时必须显式说明「不足，右侧留白」');
+assert(rects10[9].x + rects10[9].w < M.left + 730 * 0.5, '10 根只应占据绘图区左侧约 1/3，右侧留白');
+assert(Math.abs(rects10[0].w - geoPanel30.candleW) < 1e-6, '留白态槽宽必须与满窗槽宽一致，不得因根数不足而拉伸');
+
+// 缩放下限 30 根 / 上限＝全部可用根数
+setPanelViewport(5, 30);
+assert.equal(ctx.currentKlineSlotBasis(), 30, '缩放下限必须是 30 根（请求 5 根也必须按 30 根视窗绘制）');
+setPanelViewport(9999, 200);
+assert.equal(ctx.currentKlineSlotBasis(), 200, '缩放上限必须＝该颗粒度全部可用根数，而非固定 200 根');
+const svg200 = renderStock(mkBars(200));
 const rects200 = candleRects(svg200);
+const geoPanel200 = ctx.klineSlotGeometry(W, M, 200, 200);
 assert.equal(rects200.length, 200, '200 根必须渲染 200 根蜡烛');
-assert(rects200[199].x + rects200[199].w > M.left + 730 * 0.95, '200 根必须铺满绘图区，不得留白');
-assert(!PAD_NOTE.test(svg200), '满 200 根时不得出现留白说明');
+assert(!PANEL_PAD_NOTE.test(svg200), '视窗与真实根数一致时不得出现留白说明');
+assert(rects200[199].x + rects200[199].w > M.left + 730 * 0.95, '全部根数必须铺满绘图区');
 // 主图蜡烛与副图柱必须共用同一槽位与宽度基准：逐根比较矩形左缘（同一 x）
 const subBarRects = Array.from(svg200.matchAll(/<rect x="([\d.eE+-]+)" y="[-\d.eE+]+" width="([\d.eE+-]+)" height="[-\d.eE+]+" fill="#(?:ef4444|10b981)" opacity="0\.85"\/>/g))
   .map(m => ({ x: Number(m[1]), w: Number(m[2]) }));
@@ -199,13 +229,15 @@ assert.equal(subBarRects.length, rects200.length, '副图柱数量必须与蜡�
 const misaligned = subBarRects.filter((r, i) => Math.abs(r.x - rects200[i].x) > 1e-6 || Math.abs(r.w - rects200[i].w) > 1e-6);
 assert.equal(misaligned.length, 0, `副图柱必须与蜡烛逐根严格对齐且同宽（发现 ${misaligned.length} 根错位）`);
 // 蜡烛必须以其槽位中心定位：中心 = 槽中心
-assert(Math.abs((rects200[0].x + rects200[0].w / 2) - geo200.xOf(0)) < 1e-6, '蜡烛必须以标准槽位中心定位');
-assert(Math.abs((rects200[199].x + rects200[199].w / 2) - geo200.xOf(199)) < 1e-6, '末根蜡烛同样必须以标准槽位中心定位');
+assert(Math.abs((rects200[0].x + rects200[0].w / 2) - geoPanel200.xOf(0)) < 1e-6, '蜡烛必须以槽位中心定位');
+assert(Math.abs((rects200[199].x + rects200[199].w / 2) - geoPanel200.xOf(199)) < 1e-6, '末根蜡烛同样必须以槽位中心定位');
 
 // 估算口径必须可辨识：副图标题必须带「含估算」且给出计数提示
-const derivedSvg = ctx.generateDailyKlineSVG(mkBars(30).map(b => Object.assign({}, b, { amount_yi: null, volume: 1000 })), 'amt', W, 440, 270, 110, M, null);
+setPanelViewport(30, 30);
+const derivedSvg = renderStock(mkBars(30).map(b => Object.assign({}, b, { amount_yi: null, volume: 1000 })), 'amt');
 assert(/含估算：均价×成交量/.test(derivedSvg), '估算口径必须在副图标题上显式标注');
 assert(/其中 30 根成交额为估算/.test(derivedSvg), '估算根数必须在图上提示');
+vm.runInContext("appState.chartPanelSlot = null;", ctx);
 
 // ================= REQ-024: 分时级别缠论叠加必须使用 time 基准 =================
 const tlKlines = [];
@@ -220,10 +252,12 @@ const tlAnalysis = {
   pens: [{ start_time: '09:00', end_time: '09:20', start_price: 10, end_price: 10.5, status: 'confirmed' }],
   segments: [], pivots: [], divergences: [], ma_entanglements: []
 };
-ctx.appState.chanlunLayers = {};
+// 需求REQ-040: 结构层由「缠论画线」总开关控制，分时图同样如此（买卖点可独立于该开关显示）。
+// 注意：appState 在 vm 内是词法声明，必须用 runInContext 赋值，直接改 ctx.appState 不生效。
+vm.runInContext("appState.chanlunLayers = {}; appState.showChanlunDraw = true;", ctx);
 const tlSvg = ctx.generateChanlunOverlaySVG(tlKlines, i => 65 + i * 3, p => 200 - p * 5, tlAnalysis);
 assert(/chanlun-pens/.test(tlSvg), '分时级别必须能渲染缠论笔图层');
 assert(!/NaN|undefined/.test(tlSvg), '分时缠论叠加不得出现 NaN/undefined 坐标');
 assert(/x1="65"/.test(tlSvg), '分时笔起点必须映射到分时 K 线自身的 x 槽位');
 
-console.log('PASS: R04 视图口径(200根/右侧留白/槽宽) + 成交额兜底 + 交易面积剔除口径 + 分时缠论 time 基准 (REQ-022/023/024/025/026)');
+console.log('PASS: R04 指数视窗(200根/槽宽) + REQ-035 个股面板视窗(N∈[30,全部]/不足右侧留白) + 成交额兜底 + 交易面积剔除口径 + 分时缠论 time 基准 (REQ-022/023/024/025/026/035)');

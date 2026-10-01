@@ -1,0 +1,46 @@
+{
+  "verified_at": "2026-09-24T06:38:40.751878+00:00",
+  "target": "http://127.0.0.1:8888/",
+  "status": {
+    "status": "running",
+    "service": "DSH Stock Web Server",
+    "version": "v5.4.0",
+    "pid": 74964,
+    "port": 8888,
+    "uptime_seconds": 3999,
+    "stock_count": 4601,
+    "csi50_count": 0,
+    "csi100_count": 0,
+    "db_path": "/Users/linqiyu/Documents/DSH/DSH股票/data/stock_database.db",
+    "snapshot_date": "2026-09-23",
+    "snapshot_source": "baseline",
+    "quote_date": "2026-09-24",
+    "quote_datetime": {
+      "raw": "20260924133201",
+      "date": "2026-09-24",
+      "time": "13:32",
+      "datetime": "2026-09-24 13:32",
+      "display": "2026年9月24日 13:32",
+      "precision": "minute",
+      "source": "quote_snapshot"
+    },
+    "baseline": {
+      "id": 13,
+      "task_id": "crawl_1790170972",
+      "crawl_date": "2026-09-23",
+      "raw_crawl_date": "2026-09-23 21:43:39",
+      "status": "成功(真实行情全量)",
+      "fingerprint": "bfeb57ac24bca040",
+      "target_scope": "已收录A股",
+      "total_items": 4601,
+      "updated_items": 4601,
+      "skipped_items": 0,
+      "details": "完成模式: full, 处理: 4601 只, 更新: 4601 只, 幂等跳过: 0 只",
+      "is_baseline": true
+    },
+    "current_time": "2026-09-24 14:38:40"
+  },
+  "source_revision": "239cced75053d6741a905e4af689c5d7591784e7",
+  "dirty": true,
+  "note": "本机真实运行实例；status 由 GET /api/status 原样回读，未做任何裁剪或构造"
+}

@@ -1,0 +1,218 @@
+{
+  "at": "2026-09-24T08:05:57.903Z",
+  "base": "http://127.0.0.1:8888",
+  "total": 40,
+  "passed": 40,
+  "failed": 0,
+  "consoleErrors": [],
+  "shots": [
+    "01-default-dual-panel.png",
+    "02-weekly-bs.png",
+    "03-quarterly-bs.png",
+    "04-m5-bs.png",
+    "05-timeline-bs.png",
+    "06-level-isolation.png"
+  ],
+  "results": [
+    {
+      "name": "headless Chrome 已就绪",
+      "ok": true,
+      "detail": "Chrome/148.0.7778.96"
+    },
+    {
+      "name": "页面加载成功",
+      "ok": true,
+      "detail": "【v5.5.0】A股多维量化筛选器 - DSH Stock Web"
+    },
+    {
+      "name": "页面版本徽标与 /api/version（config/version.json 唯一权威）一致",
+      "ok": true,
+      "detail": "徽标 v5.5.0 vs 接口 v5.5.0"
+    },
+    {
+      "name": "个股详情已加载真实日K与日线缠论",
+      "ok": true,
+      "detail": "贵州茅台 · 日K 6011 根 · 日线买卖点 82 个"
+    },
+    {
+      "name": "REQ-045 分时图与日线图默认同时可见",
+      "ok": true,
+      "detail": "{\"left\":true,\"right\":true}"
+    },
+    {
+      "name": "REQ-045 首屏即为双图并排布局(dual-panel)",
+      "ok": true,
+      "detail": "dual-panel"
+    },
+    {
+      "name": "REQ-045 「调出分时图/调出K线图」按钮默认隐藏（无需点击添加）",
+      "ok": true,
+      "detail": "{\"addMinuteHidden\":true,\"addKlineHidden\":true}"
+    },
+    {
+      "name": "REQ-045 左侧默认当日分时图、右侧默认日线图",
+      "ok": true,
+      "detail": "left=timeline right=daily"
+    },
+    {
+      "name": "REQ-038 双图同高且左右等宽（未被本批改动破坏）",
+      "ok": true,
+      "detail": "top 405/405 · width 714/714"
+    },
+    {
+      "name": "REQ-044 分时维度只剩「当日分时 / 5分K线」两个子 Tab",
+      "ok": true,
+      "detail": "[\"timeline\",\"m5\"]"
+    },
+    {
+      "name": "REQ-044 页面中不再存在 1分K线 按钮",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "REQ-044 调用已移除的 1分K线 不生效（保持当日分时）",
+      "ok": true,
+      "detail": "当前=timeline"
+    },
+    {
+      "name": "REQ-041 日线图零点击即出现买卖点标记",
+      "ok": true,
+      "detail": "共 1 个"
+    },
+    {
+      "name": "REQ-041 六个买卖点按钮默认全部开启（等级 3）",
+      "ok": true,
+      "detail": "[true,true,true,true,true,true]"
+    },
+    {
+      "name": "REQ-041 图上标注买卖点所属级别与六类计数",
+      "ok": true,
+      "detail": "自动标记买卖点（日线级别）：1买 6 · 2买 2 · 3买 30 · 1卖 15 · 2卖 9 · 3卖 20 副图：成交额（含估算：均价×成交量"
+    },
+    {
+      "name": "REQ-041 日线图：图上标记逐类等于后端真实判定",
+      "ok": true,
+      "detail": "共 1 个 · buy1=0 buy2=1 buy3=0 sell1=0 sell2=0 sell3=0"
+    },
+    {
+      "name": "REQ-041 每个标记的判定依据里写明级别",
+      "ok": true,
+      "detail": "第二类买点｜级别：日线级别 · 2026-08-24 · ¥1270.33 · 已确认｜判定依据：第一类买点（2026-06-29 ¥1151.01）之后的第一次回调收于 ¥127"
+    },
+    {
+      "name": "REQ-041 关闭买卖点按钮后标记消失（按钮仍为显隐开关）",
+      "ok": true,
+      "detail": "关闭后 0 个"
+    },
+    {
+      "name": "REQ-041 重新开启后标记恢复",
+      "ok": true,
+      "detail": "恢复后 1 个（原 1 个）"
+    },
+    {
+      "name": "REQ-041 周线图已由后端现场判定（真实周K序列提交）",
+      "ok": true,
+      "detail": "提交 1265 根周K · 买卖点 11 个"
+    },
+    {
+      "name": "REQ-041 周线图标注为「周线级别」",
+      "ok": true,
+      "detail": "自动标记买卖点（周线级别）：1买 0 · 2买 0 · 3买 6 · 1卖 2 · 2卖 1 · 3卖 2 副图：成交额（含估算：均价×成交量）总和"
+    },
+    {
+      "name": "REQ-041 周线图：图上标记逐类等于后端真实判定",
+      "ok": true,
+      "detail": "共 0 个 · buy1=0 buy2=0 buy3=0 sell1=0 sell2=0 sell3=0"
+    },
+    {
+      "name": "REQ-041 周线图缩放到「全部」后买卖点完整渲染",
+      "ok": true,
+      "detail": "图上 11 个 vs 后端真实判定 11 个"
+    },
+    {
+      "name": "REQ-041 周线图（全部 1265 根）：图上标记逐类等于后端真实判定",
+      "ok": true,
+      "detail": "共 11 个 · buy1=0 buy2=0 buy3=6 sell1=2 sell2=1 sell3=2"
+    },
+    {
+      "name": "REQ-042 周线成交额与「日线逐日相加」独立重算逐根一致",
+      "ok": true,
+      "detail": "比对 1265 根周K 全部一致 · 含估算日线 6011 根 · 缺失 0 根"
+    },
+    {
+      "name": "REQ-042 周线图标注「成交额＝区间内日线成交额逐日相加」",
+      "ok": true,
+      "detail": "含估算 6011 根日线（均价×成交量）"
+    },
+    {
+      "name": "REQ-041 季线图已由后端现场判定",
+      "ok": true,
+      "detail": "提交 101 根季K · 买卖点 0 个"
+    },
+    {
+      "name": "REQ-041 季线图标注为「季线级别」",
+      "ok": true,
+      "detail": "自动标记买卖点（季线级别）：1买 0 · 2买 0 · 3买 0 · 1卖 0 · 2卖 0 · 3卖 0 副图：成交额（含估算：均价×成交量）总和"
+    },
+    {
+      "name": "REQ-041 季线图：图上标记逐类等于后端真实判定",
+      "ok": true,
+      "detail": "共 0 个 · buy1=0 buy2=0 buy3=0 sell1=0 sell2=0 sell3=0"
+    },
+    {
+      "name": "REQ-043 季线成交额与「日线逐日相加」独立重算逐根一致",
+      "ok": true,
+      "detail": "比对 101 根季K 全部一致 · 含估算日线 6011 根 · 缺失 0 根"
+    },
+    {
+      "name": "REQ-043 季线图标注成交额聚合口径",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "REQ-041 5分K线已由后端现场判定",
+      "ok": true,
+      "detail": "{\"analysis\":{\"level\":\"m5\",\"bars\":800,\"total\":10,\"error\":null},\"klineBars\":800}"
+    },
+    {
+      "name": "REQ-041 5分K线图标注为「5分级别」",
+      "ok": true,
+      "detail": "自动标记买卖点（5分级别）：1买 2 · 2买 2 · 3买 1 · 1卖 0 · 2卖 0 · 3卖 5 副图：成交额（含估算：均价×成交量）总和"
+    },
+    {
+      "name": "REQ-041 5分K线图：图上标记逐类等于后端真实判定",
+      "ok": true,
+      "detail": "共 3 个 · buy1=1 buy2=1 buy3=0 sell1=0 sell2=0 sell3=1"
+    },
+    {
+      "name": "REQ-041 5分K线缩放到「全部」后买卖点完整渲染",
+      "ok": true,
+      "detail": "图上 10 个 vs 后端真实判定 10 个"
+    },
+    {
+      "name": "REQ-041 5分K线图（全部 800 根）：图上标记逐类等于后端真实判定",
+      "ok": true,
+      "detail": "共 10 个 · buy1=2 buy2=2 buy3=1 sell1=0 sell2=0 sell3=5"
+    },
+    {
+      "name": "REQ-041 当日分时图标注为「分时级别」",
+      "ok": true,
+      "detail": "自动标记买卖点（分时级别）：1买 0 · 2买 0 · 3买 1 · 1卖 0 · 2卖 0 · 3卖 1 ¥1272.43 +1.69% ¥125"
+    },
+    {
+      "name": "REQ-041 当日分时图：图上标记逐类等于后端真实判定",
+      "ok": true,
+      "detail": "共 2 个 · buy1=0 buy2=0 buy3=1 sell1=0 sell2=0 sell3=1"
+    },
+    {
+      "name": "REQ-041 左右两图各自标注自己的级别（不得串级）",
+      "ok": true,
+      "detail": "{\"left\":\"自动标记买卖点（5分级别）\",\"right\":\"自动标记买卖点（周线级别）\"}"
+    },
+    {
+      "name": "控制台无脚本错误",
+      "ok": true,
+      "detail": "0 条"
+    }
+  ]
+}

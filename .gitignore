@@ -33,6 +33,7 @@ ENV/
 
 # Logs & Temporary Files
 *.log
+*.log.*
 *.tmp
 *.bak
 temp/

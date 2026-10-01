@@ -2,7 +2,26 @@
 
 ## 📌 目录定位
 - **路径**：`docs/`
-- **主要作用**：用于存放与管理项目的核心需求管理台账（`requirements.md`）、架构设计文档（`architecture.md`）及接口规范。
+- **主要作用**：用于存放与管理项目的核心需求管理台账（`requirements.md`）、架构设计文档及接口规范。
+
+---
+
+## 🚪 接手先看这里（2026-09-24 新增）
+
+| 目录/文件 | 用途 | 状态 |
+| :--- | :--- | :--- |
+| `handoff/README.md` | **接手与对接总览**：产品是什么、怎么跑、真实健康度、已知偏差、优化切入点 | 现行 ✅ |
+| `handoff/architecture-current.md` | **当前真实架构**（v5.6.0）：分层、模块地图、API 契约、数据层表结构、缠论口径 | 现行 ✅ |
+| `handoff/optimization-guide.md` | 二次开发配方、测试装载陷阱、踩坑清单、优化路线 | 现行 ✅ |
+| `handoff/product-copy.md` | 产品文案包（各长度介绍、卖点、版本文案、免责声明） | 现行 ✅ |
+| `requirements.md` | 需求台账（REQ-001 ~ REQ-056），功能迭代必须同步 | 现行 ✅（R05 区间已实证回填、REQ-033 作废） |
+| `architecture.md` | 旧版架构（v1.0.0），含已被剔除的 Mock 描述 | **已作废 ⚠️**，改读 `handoff/architecture-current.md` |
+| `knowledge/` | 知识库（缠论教程、技术分析买卖点指南） | 现行 ✅ |
+| `problem-log/` | 历史缺陷台账（BUG-001~006） | 现行 ✅ |
+| `audit/` | 物理执行层落地审计与纳管对齐报告（逐条需求 → 物理动作对账 + 如实缺口清单） | 现行 ✅ |
+| `verification/` | 各批次真机与静态验证证据（截图 + report + README）；最新 `2026-10-01-r11`（v5.6.0 stockper + 物理层补强，含 live-entry / 真实收包 / 源指纹） | 现行 ✅（`2026-09-20-r05` 原始记录不完整，已附归档件） |
+| `baselines/` | 基线与回退口径 | 现行 ✅ |
+| `operations/product-entry.json` | 入口版本记录（最新已核实入口：Web `http://127.0.0.1:8888/` + CLI `status` / `db-archive`，含 v5.6.0/v5.5.0/v5.4.1/v5.4.0/v5.3.0 变更摘要与门禁快照） | 现行 ✅（v5.6.0） |
 
 ---
 

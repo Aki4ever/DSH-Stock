@@ -24,6 +24,12 @@ from scripts.stock_portfolio import build_portfolio_summary, load_config
 from scripts.stock_chart_svg import generate_stock_svg
 from scripts.stock_reporter import generate_daily_report
 from scripts.data_sources import StockDataHub
+from scripts.db_maintenance import (
+    DEFAULT_ARCHIVE_DIR,
+    DEFAULT_DB_PATH,
+    archive_database,
+    inspect_database,
+)
 
 # 终端 ANSI 彩色样式常量
 C_RESET = "\033[0m"
@@ -318,6 +324,45 @@ def cmd_report():
     return 0
 
 
+def cmd_db_archive(db_path, archive_dir, label, compact, keep, as_json):
+    """需求REQ-052: 非破坏性归档本地数据库（只读源库 + 在线备份 API），并核验完整性。"""
+    try:
+        if not compact and keep == 0 and not as_json:
+            before = inspect_database(db_path)
+            print(f"\n{C_CYAN}{C_BOLD}🗄️  DSH 本地数据库体检（只读）:{C_RESET}")
+            print(f"  • 源库      : {before['path']}")
+            print(f"  • 体积      : {before['size_bytes'] / 1048576:.2f} MB（页 {before['page_count']} × {before['page_size']}B，空闲页 {before['freelist_count']}）")
+            print(f"  • 完整性    : integrity_check={before['integrity_check']} ｜ quick_check={before['quick_check']}")
+            print(f"  • 表/总行数 : {before['table_count']} 张 / {before['total_rows']} 行")
+
+        result = archive_database(db_path, archive_dir, label=label, compact=compact, keep=keep)
+
+        if as_json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+
+        print(f"\n{C_GREEN}{C_BOLD}✅ 归档完成（源库零写入）：{C_RESET}")
+        print(f"  • 归档件    : {result['archive']['path']}")
+        print(f"  • 体积/行数 : {result['archive']['size_bytes'] / 1048576:.2f} MB / {result['archive']['total_rows']} 行 · integrity={result['archive']['integrity_check']}")
+        print(f"  • 源库哈希  : {result['source'].get('integrity_check')} → 归档后源库未变更：{result['source_unchanged']}")
+        if result.get('compacted'):
+            c = result['compacted']
+            print(f"  • 紧凑副本  : {c['path']}")
+            print(f"               {c['size_bytes'] / 1048576:.2f} MB（较完整副本省 {c['saved_bytes'] / 1048576:.2f} MB；VACUUM INTO，源库不变）")
+        print(f"  • 清单文件  : {result['manifest']}")
+        if result.get('pruned'):
+            print(f"  • 已清理旧归档 {len(result['pruned'])} 个（--keep {keep}）")
+        elif keep == 0:
+            print("  • 保留策略  : 只增不删（默认）；需要滚动保留请显式加 --keep N")
+        return 0
+    except (FileNotFoundError, ValueError, RuntimeError, OSError) as exc:
+        if as_json:
+            print(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
+        else:
+            print(f"{C_RED}❌ 归档失败：{exc}{C_RESET}", file=sys.stderr)
+        return 2
+
+
 def cmd_status():
     """打印项目健康状态与配置概要"""
     cfg = load_config()
@@ -411,6 +456,15 @@ def main():
     # report 子命令
     subparsers.add_parser("report", help="一键生成每日全盘分析研报 (Markdown) 与全量 SVG 图表")
 
+    # db-archive 子命令 (需求REQ-052: 非破坏性归档与体检)
+    p_arch = subparsers.add_parser("db-archive", help="非破坏性归档本地数据库（只读源库 + 完整性核验）")
+    p_arch.add_argument("--db", default=DEFAULT_DB_PATH, help=f"源库路径（默认 {DEFAULT_DB_PATH}）")
+    p_arch.add_argument("--dir", default=DEFAULT_ARCHIVE_DIR, help="归档目录（默认 data/backups/db-archive）")
+    p_arch.add_argument("--label", default="", help="归档标签（写入文件名与清单）")
+    p_arch.add_argument("--compact", action="store_true", help="额外生成紧凑副本（VACUUM INTO，源库不变）")
+    p_arch.add_argument("--keep", type=int, default=0, help="保留最近 N 份归档（默认 0 = 只增不删）")
+    p_arch.add_argument("--json", action="store_true", help="以 JSON 输出完整结果")
+
     # status 子命令
     subparsers.add_parser("status", help="查看本工程运行基线与配置概况")
 
@@ -478,6 +532,8 @@ def main():
         return cmd_blocktrade(args.code)
     elif args.command == "report":
         return cmd_report()
+    elif args.command == "db-archive":
+        return cmd_db_archive(args.db, args.dir, args.label, args.compact, args.keep, args.json)
     elif args.command == "status":
         return cmd_status()
     else:

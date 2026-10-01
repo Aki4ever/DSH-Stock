@@ -2330,22 +2330,25 @@ body {
   justify-content: center;
 }
 
-/* 浮动摘要信息卡 (严格复刻图1样式) */
+/* 浮动摘要信息卡 (需求3: 就近跟随鼠标，防遮挡) */
 .chart-tooltip-box {
   position: absolute;
-  top: 14px;
-  left: 16px;
+  top: 0;
+  left: 0;
   width: 140px;
   background-color: rgba(15, 23, 42, 0.94);
-  border: 1px solid #334155;
-  border-radius: 4px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 6px;
   padding: 6px 10px;
   font-size: 0.8rem;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 10px rgba(56, 189, 248, 0.15);
   pointer-events: none;
-  z-index: 10;
+  z-index: 99;
   display: none;
+  transition: transform 0.05s ease-out, opacity 0.1s ease;
 }
 
 .chart-tooltip-row {
@@ -3504,3 +3507,349 @@ body {
 .pf-rule.is-info { border-left-color: #38bdf8; background: rgba(56, 189, 248, 0.09); }
 .pf-rule.is-info .pf-rule-id { color: #7dd3fc; }
 .pf-rule.is-disabled { border-left-color: #475569; opacity: 0.5; }
+
+/* ==================================================== */
+/* 需求REQ-034/035/036: 个股详情「双维度双图」          */
+/*   左＝分时图维度（当日分时 / 5分K线 / 1分K线）        */
+/*   右＝K线图维度（日线图 / 周线图 / 季线图 × 30~全部）  */
+/* ==================================================== */
+.chart-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.chart-panel-header-left { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.chart-panel-header-title { font-weight: 700; font-size: 1.05rem; }
+.chart-dual-hint { font-size: 0.74rem; color: #64748b; line-height: 1.5; }
+.chart-panel-header-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.chart-open-btn { border: 1px dashed rgba(56, 189, 248, 0.55); background: rgba(8, 47, 73, 0.6); color: #7dd3fc; font-size: 0.78rem; padding: 0.32rem 0.7rem; border-radius: 8px; cursor: pointer; }
+.chart-open-btn:hover { background: rgba(14, 116, 144, 0.5); color: #e0f2fe; }
+.chart-open-btn[hidden] { display: none; }
+
+.chart-wrapper { align-items: stretch; }
+.chart-panel-row { display: flex; gap: 0.6rem; width: 100%; align-items: flex-start; }
+.chart-panel-row.single-panel .chart-panel { flex: 1 1 100%; }
+.chart-panel-row.dual-panel .chart-panel { flex: 1 1 50%; min-width: 0; }
+.chart-panel { min-width: 0; border: 1px solid rgba(56, 189, 248, 0.16); border-radius: 10px; background: rgba(7, 13, 30, 0.55); padding: 0.5rem; }
+.chart-panel[hidden] { display: none; }
+.chart-panel-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.45rem; }
+.chart-panel-title { font-weight: 700; font-size: 0.9rem; color: #e2e8f0; white-space: nowrap; }
+.chart-panel-close { margin-left: auto; border: 1px solid rgba(148, 163, 184, 0.4); background: transparent; color: #94a3b8; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; font-size: 0.8rem; line-height: 1; }
+.chart-panel-close:hover { color: #f8fafc; border-color: #f87171; }
+.chart-panel-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.45rem; }
+.chart-tool-label { font-size: 0.78rem; color: #94a3b8; margin: 0 0.2rem 0 0.4rem; display: flex; align-items: center; }
+.chart-count-hint { font-size: 0.72rem; color: #64748b; margin-left: 0.35rem; white-space: nowrap; }
+.chart-svg-host { width: 100%; display: flex; justify-content: center; overflow: hidden; }
+.chart-svg-host svg { width: 100%; height: auto; max-width: 100%; }
+.overlay-intraday-layer { pointer-events: none; }
+
+@media (max-width: 1180px) {
+  .chart-panel-row.dual-panel { flex-direction: column; }
+  .chart-panel-row.dual-panel .chart-panel { flex: 1 1 100%; }
+}
+
+/* ============================================================
+   需求REQ-038/039/040 (R07):
+   - 工具区间固定高度：双图模式下两个面板的工具区+图层管理区等高，保证两个K线图从同一高度开始，便于横向对比
+   - 分组标题栏：压力线 / 缠论相关
+   - 缠论三类买卖点开关（买点1-3 / 卖点1-3，选 3 即同时含 1、2）
+   ============================================================ */
+:root { --chart-toolzone-h: 500px; }
+
+.chart-panel-toolzone { width: 100%; min-width: 0; }
+/* 需求REQ-039: 分组容器 —— 标题与其控件作为整体换行，避免标题被单独甩到上一行行尾 */
+/* 组内容不换行：整组一起换行，保证「标题」与它的控件始终同行可见 */
+.chart-tool-group { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: nowrap; min-width: 0; }
+@media (max-width: 1180px) { .chart-tool-group { flex-wrap: wrap; } }
+
+/* 需求REQ-038: 双图模式固定高度（默认 500px，可用 --chart-toolzone-h 调整）；
+   内容不足处留白，内容超出时容器内部滚动，两个面板因此绝对同高 */
+.chart-panel-row.dual-panel .chart-panel-toolzone {
+  height: var(--chart-toolzone-h);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.35) transparent;
+}
+.chart-panel-row.dual-panel .chart-panel-toolzone::-webkit-scrollbar { width: 8px; }
+.chart-panel-row.dual-panel .chart-panel-toolzone::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.35); border-radius: 4px; }
+.chart-panel-row.dual-panel .chart-panel-toolzone::-webkit-scrollbar-track { background: transparent; }
+
+/* 需求REQ-039: 画线工具分组标题栏 */
+.chart-group-title {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.10);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #7dd3fc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* 需求REQ-040: 缠论买卖点等级开关 */
+.btn-draw-tool.bs-level { opacity: 0.72; }
+.btn-draw-tool.bs-level:hover { opacity: 1; }
+.btn-draw-tool.bs-level[data-bs^="buy"].active {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(248, 113, 113, 0.75);
+  color: #fca5a5;
+  opacity: 1;
+  font-weight: 700;
+}
+.btn-draw-tool.bs-level[data-bs^="sell"].active {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(52, 211, 153, 0.75);
+  color: #6ee7b7;
+  opacity: 1;
+  font-weight: 700;
+}
+/* 需求REQ-040: 已开启但本图未识别到该类买卖点时的诚实提示态（虚线边框，不隐藏开关） */
+.btn-draw-tool.bs-level.bs-level-empty { border-style: dashed; opacity: 0.85; }
+
+/* 换手率副图与手势/按钮交互升级样式 */
+.chart-zoom-control {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.seg-btn.zoom-btn {
+  font-weight: 600;
+  padding: 0.28rem 0.65rem;
+  background: rgba(30, 41, 59, 0.7);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.seg-btn.zoom-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.8);
+  color: #ffffff;
+}
+
+.seg-btn.zoom-btn:active {
+  transform: scale(0.95);
+}
+
+.seg-btn.zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: rgba(148, 163, 184, 0.2);
+  color: #64748b;
+}
+
+.chart-svg-host svg {
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+
+.chart-svg-host.is-panning svg {
+  cursor: grabbing !important;
+}
+
+/* 需求2: 格式塔交互原则 - 紧邻 K 线图侧边的悬浮缩放控制胶囊 */
+.chart-floating-zoom {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  transition: all 0.2s ease;
+}
+
+.chart-floating-zoom:hover {
+  border-color: rgba(56, 189, 248, 0.8);
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.25);
+}
+
+.floating-zoom-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.floating-zoom-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: rgba(56, 189, 248, 0.9);
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.floating-zoom-btn:active {
+  transform: scale(0.95);
+}
+
+/* 需求3: 放大K线图容器高度与主图可视面积 */
+.chart-panel-row.dual-panel .chart-svg-host {
+  min-height: 480px;
+}
+.chart-panel-row.single-panel .chart-svg-host {
+  min-height: 520px;
+}
+
+@media (max-width: 900px) {
+  .subplot-global-bar {
+    flex-direction: column !important;
+    gap: 0.6rem !important;
+  }
+  .subplot-summary-right {
+    position: static !important;
+  }
+}
+
+/* ====================================================
+   第一性原理技术买卖点（方法1 AMT拍卖理论 / 方法8 努力与结果）
+   设计遵循格式塔交互原则：接近性、相似性、闭合性、连续性、图底关系
+   ==================================================== */
+
+.first-principles-group {
+  border-left: 2px solid rgba(168, 85, 247, 0.6);
+  padding-left: 0.35rem;
+  margin-left: 0.2rem;
+}
+
+.first-principles-group .chart-group-title {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.45);
+  color: #c084fc;
+}
+
+.btn-draw-tool.fp-btn {
+  transition: all 0.2s ease-in-out;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.76rem;
+  padding: 0.25rem 0.55rem;
+}
+
+.btn-draw-tool.fp-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.btn-draw-tool.fp-btn.amt.active {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(129, 140, 248, 0.85);
+  color: #a5b4fc;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.35);
+}
+
+.btn-draw-tool.fp-btn.effort.active {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(251, 191, 36, 0.85);
+  color: #fde68a;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.35);
+}
+
+/* 格式塔弹窗：图底分明、层级清晰、信息块闭合 */
+.fp-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(3, 7, 18, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.fp-modal-card {
+  width: 100%;
+  max-width: 820px;
+  max-height: 85vh;
+  background: #0b1329;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(168, 85, 247, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fp-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.4rem;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.fp-modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.fp-modal-body {
+  padding: 1.4rem;
+  overflow-y: auto;
+  line-height: 1.65;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.fp-principle-block {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1.2rem;
+}
+
+.fp-principle-block.amt {
+  border-left: 4px solid #818cf8;
+}
+
+.fp-principle-block.effort {
+  border-left: 4px solid #f59e0b;
+}
+
+.fp-principle-block h4 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fp-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.fp-tag.amt { background: rgba(99, 102, 241, 0.25); color: #a5b4fc; }
+.fp-tag.effort { background: rgba(245, 158, 11, 0.25); color: #fde68a; }
+
+
+

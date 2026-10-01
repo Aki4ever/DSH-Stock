@@ -7,6 +7,12 @@
  * 4. 深度财务分析 4 大 Tab 切换 (主要指标、资产负债表、利润表、现金流量表)
  */
 
+/**
+ * 需求REQ-041: 缠论买卖点的默认显示等级 —— 打开页面即自动标记第 1、2、3 类买卖点（无需点击）。
+ * 等级语义：N＝同时显示第 1..N 类；买、卖各自独立；工具栏 6 个按钮保留为显隐开关，可临时关闭。
+ */
+const DEFAULT_BS_LEVEL = 3;
+
 // 全局应用状态
 const appState = {
   version: 'v2.9.0',
@@ -39,6 +45,11 @@ const appState = {
   chartCustomZoomCount: 0, // 鼠标滚轮动态缩放的蜡烛根数 (0表示使用默认预设)
   chanlunLayers: {},
   showChanlunDraw: false,  // 需求4: 缠论自动画线与买卖点开关
+  showAmtDraw: true,       // 第一性原理方法1: 拍卖市场理论(AMT)价值区与边缘拒绝买卖点
+  showEffortDraw: true,    // 第一性原理方法8: 威科夫努力与结果(Effort vs Result)吸收与滞涨买卖点
+  // 需求REQ-041: 买卖点默认全开（自动标记第 1/2/3 类买点与卖点），按钮保留可临时关闭
+  bsBuyLevel: DEFAULT_BS_LEVEL,
+  bsSellLevel: DEFAULT_BS_LEVEL,
   drawHLineMode: false,    // 需求1: 是否处于绘制水平压力/支撑线模式
   // 需求REQ-014/015: 图表辅助线改为「多模型图层」结构，各模型独立存储/独立清除/独立层级
   //   auto        自动多阶线 (1~4 根筹码中枢线)
@@ -145,6 +156,7 @@ const dom = {
   worldScoreCardSubLabel: document.getElementById('worldScoreCardSubLabel'),
   worldTimelineChartTitle: document.getElementById('worldTimelineChartTitle'),
   badgeScopeDomestic: document.getElementById('badgeScopeDomestic'),
+  worldScoreBasis: document.getElementById('worldScoreBasis'),
   badgeScopeInternational: document.getElementById('badgeScopeInternational'),
   worldStartDate: document.getElementById('worldStartDate'),
   worldEndDate: document.getElementById('worldEndDate'),
@@ -296,7 +308,7 @@ const dom = {
 
   // 图表与 Tooltip DOM
   modalChartWrapper: document.getElementById('modalChartWrapper'),
-  chartSvgContainer: document.getElementById('chartSvgContainer'),
+  chartSvgContainer: document.getElementById('chartSvgContainerRight'),
   chartTooltipBox: document.getElementById('chartTooltipBox'),
   ttDate: document.getElementById('ttDate'),
   ttOpen: document.getElementById('ttOpen'),
@@ -330,6 +342,7 @@ const dom = {
   paneProfile: document.getElementById('paneProfile'),
   paneFinance: document.getElementById('paneFinance'),
   paneBlock: document.getElementById('paneBlock'),
+  paneCapital: document.getElementById('paneCapital'),
   paneDynamic: document.getElementById('paneDynamic'),
   paneDividend: document.getElementById('paneDividend'),
   finTableBodyDividend: document.getElementById('finTableBodyDividend'),
@@ -382,6 +395,10 @@ document.addEventListener('DOMContentLoaded', () => {
   syncVersionAndTitle();
   initEventListeners();
   initFeishuTableDragAndFreeze(); // 需求2: 初始化飞书式列拖拽与可拖动冻结线
+
+  // 需求REQ-034: 首屏即渲染双图面板骨架（Tab 与工具条就位，未打开详情时显示加载态）
+  syncChartPanelRowLayout();
+  PANEL_SLOTS.forEach(slot => syncPanelToolbar(chartPanels[slot]));
 
   // 2. 先立即触发一次心跳，使顶栏绿灯秒显
   checkServerHealth();
@@ -572,18 +589,25 @@ function setWorldQuickDateRange(rangeType, evt = null) {
 }
 
 /**
- * 需求1: 动态更新顶栏真实快照截取日期
+ * 需求REQ-046: 行情日期精确到分。
+ * 接受 'YYYY-MM-DD'、'YYYY-MM-DD HH:MM(:SS)'、'YYYYMMDDHHMMSS'、'YYYYMMDD' 或后端 quote_datetime 对象；
+ * 来源只给到日时按日精度显示（不臆造时刻），完全拿不到时返回 null（界面显示「未获取」）。
  */
-function updateDataValidityDateBadge(dateStr) {
-  if (!dom.dataValidityBadge || !dateStr) return;
-  let formatted = dateStr;
-  if (dateStr.includes('-')) {
-    const p = dateStr.split('-');
-    if (p.length === 3) {
-      formatted = `${p[0]}年${parseInt(p[1], 10)}月${parseInt(p[2], 10)}日`;
-    }
+/**
+ * 需求1 / REQ-046: 顶栏「行情日期」徽标 —— 精确到分；来源只给日期或未获取时如实降级，绝不用本地时间冒充。
+ */
+function updateDataValidityDateBadge(value) {
+  if (!dom.dataValidityBadge) return;
+  const info = formatQuoteMoment(value);
+  if (!info) {
+    dom.dataValidityBadge.textContent = '📅 行情日期未获取';
+    dom.dataValidityBadge.title = '行情来源的真实快照时间未获取（不以本地时钟或基准批次冒充）';
+    return;
   }
-  dom.dataValidityBadge.textContent = `📅 行情日期: ${formatted}`;
+  dom.dataValidityBadge.textContent = `📅 行情日期: ${info.display}`;
+  dom.dataValidityBadge.title = info.precision === 'minute'
+    ? `行情来源的真实快照时间（精确到分）· 原始值 ${info.raw}`
+    : `行情来源只提供到日，未提供具体时刻 · 原始值 ${info.raw}`;
 }
 
 /**
@@ -628,7 +652,7 @@ function setDashboardDateRange(rangeType, evt = null) {
  * 同步网页 Title 与 Header 版本号
  */
 // 首屏回退版本与 config/version.json 同步；服务端心跳返回后会被真实版本覆盖
-function syncVersionAndTitle(version = 'v5.0.0') {
+function syncVersionAndTitle(version = 'v5.3.0') {
   appState.version = version;
   document.title = `【${version}】A股多维量化筛选器 - DSH Stock Web`;
   if (dom.appVersionBadge) {
@@ -1004,12 +1028,14 @@ async function executeFilter() {
     if (actionStatus) actionStatus.textContent = `${actionMeta.window_start || '—'} 至 ${actionMeta.window_end || '—'}（公告日期）· ${actionMeta.source || '来源未核验'} · ${{available:'已获取', partial:'仅部分记录，筛选结果可能不全', stale:'刷新失败，沿用旧数据', unavailable:'获取失败，无法判断股东行为'}[actionMeta.status] || '未获取'}`;
     appState.totalMatched = stats.matched_count || 0;
 
-    // 需求1: 真实且同步的数据快照截取日期更新
-    if ((stats.quote_dates||[]).length) {
-      const qd=stats.quote_dates.at(-1); updateDataValidityDateBadge(qd.slice(0,4)+'-'+qd.slice(4,6)+'-'+qd.slice(6,8));
+    // 需求1 / REQ-046: 顶栏行情日期精确到分 —— 优先真实快照时间，其次真实来源日期
+    if (stats.quote_datetime) {
+      updateDataValidityDateBadge(stats.quote_datetime);
+    } else if ((stats.quote_dates||[]).length) {
+      updateDataValidityDateBadge(stats.quote_dates.at(-1));
     }
     const quoteNote=document.getElementById('quoteSourceStatus');
-    if(quoteNote)quoteNote.textContent=`腾讯证券行情 · 来源日期 ${(stats.quote_dates||[]).join('、')||'未获取'} · ${stats.snapshot_note||''}`;
+    if(quoteNote)quoteNote.textContent=`腾讯证券行情 · 来源时间 ${(stats.quote_datetime && stats.quote_datetime.datetime) || (stats.quote_dates||[]).join('、')||'未获取'} · ${stats.snapshot_note||''}`;
 
     dom.matchedCount.textContent = (stats.matched_count || 0).toLocaleString();
     dom.statAvgPrice.textContent = formatReal(stats.avg_price,2,"¥");
@@ -1084,10 +1110,6 @@ function sortTable(key) {
 /**
  * 渲染股票数据表格 (股东持股真实累加求和，无 100% 异常)
  */
-function escapeActionText(value) {
-  return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
 function renderActionHolderCell(stock, direction) {
   const names = stock[direction === 'increase' ? 'increase_holders' : 'decrease_holders'] || [];
   const status = stock.shareholder_action_status;
@@ -1546,11 +1568,6 @@ function updateFreezeLinePosition() {
   } else {
     freezeLine.style.display = 'none';
   }
-}
-
-function roundTo(num, decimals) {
-  const factor = Math.pow(10, decimals);
-  return Math.round(num * factor) / factor;
 }
 
 /**
@@ -2054,14 +2071,6 @@ function renderTop10CircTiersDashboard(tierData, totalCount) {
   `;
 }
 
-function formatStatVal(v, unit) {
-  if (v === undefined || v === null) return '--';
-  if (unit === '亿元' && Math.abs(v) >= 10000) {
-    return `${(v / 10000).toFixed(2)}万亿`;
-  }
-  return `${v}`;
-}
-
 /**
  * 绘制全市场收益率区间直方图 (纯 SVG)
  */
@@ -2188,6 +2197,7 @@ async function loadWorldMacroIntelligence() {
       if(dom.worldTotalScore) dom.worldTotalScore.textContent='未获取';
       if(dom.worldSentimentLabel) dom.worldSentimentLabel.textContent='数据未接入';
       for(const key of ['worldEventsCount','statScoreLatest','statScoreMax','statScoreMin','statScoreAvg','badgeScopeDomestic','badgeScopeInternational'])if(dom[key])dom[key].textContent='未获取';
+      if(dom.worldScoreBasis)dom.worldScoreBasis.textContent='全部宏观来源均未获取，不生成任何推测分数。';
       if(dom.worldScoreChartSvgContainer)dom.worldScoreChartSvgContainer.textContent='真实宏观时序未接入';
       return;
     }
@@ -2210,6 +2220,12 @@ async function loadWorldMacroIntelligence() {
       dom.worldEventsCount.textContent = agg.event_count || (data.world_events || []).length;
     }
 
+    // 评分依据随真实口径展示（原先此处是写死的「当前不生成宏观分数」，与真实出分自相矛盾）
+    if (dom.worldScoreBasis) {
+      dom.worldScoreBasis.textContent = agg.score_basis
+        ? `评分依据: ${agg.score_basis}`
+        : '评分依据未获取（后端未提供口径说明）';
+    }
     renderWorldCommodities(data.commodities || []);
     // 依据当前置顶选中的国内/国际Tab，深度联动渲染时序走势图与事件流
     switchMacroScope(appState.macroScope || 'domestic');
@@ -2340,7 +2356,8 @@ function renderWorldCommodities(items) {
     const chgColor = chg > 0 ? '#ef4444' : chg < 0 ? '#10b981' : '#94a3b8';
     const sign = chg > 0 ? '+' : '';
 
-    // 需求2: A 股量化评分
+    // 需求2: A 股量化评分（后端未提供量化分时不臆造，显示「—」）
+    const hasQuant = c.quant_score !== undefined && c.quant_score !== null;
     const scoreVal = Number(c.quant_score || 0);
     const scoreColor = scoreVal > 0 ? '#ef4444' : scoreVal < 0 ? '#10b981' : '#94a3b8';
     const scoreSign = scoreVal > 0 ? '+' : '';
@@ -2349,27 +2366,27 @@ function renderWorldCommodities(items) {
     card.className = 'commodity-card';
     card.innerHTML = `
       <div class="commodity-header">
-        <span class="commodity-name">${escapeHtml(c.name)}</span>
-        <span class="commodity-tag">${c.category}</span>
+        <span class="commodity-name">${escapeHtml(c.name || c.symbol || c.code || '未获取')}</span>
+        <span class="commodity-tag">${escapeHtml(c.category || c.unit || '外盘商品')}</span>
       </div>
       <div class="commodity-price-row">
-        <span class="commodity-price">${c.price.toLocaleString()}</span>
+        <span class="commodity-price">${(c.price === null || c.price === undefined) ? '未获取' : Number(c.price).toLocaleString()}</span>
         <span class="commodity-change" style="color: ${chgColor};">
-          ${sign}${chgPct.toFixed(2)}% (${sign}${chg.toFixed(2)})
+          ${(c.change_pct === null || c.change_pct === undefined) ? '涨跌幅未获取' : `${sign}${chgPct.toFixed(2)}% (${sign}${chg.toFixed(2)})`}
         </span>
       </div>
       <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem;">
-        <span>信号: <strong style="color: ${chgColor};">${c.signal}</strong></span>
-        <span>代码: ${c.symbol}</span>
+        <span>行情时间: <strong style="color: ${chgColor};">${escapeHtml(c.quote_time || '未获取')}</strong></span>
+        <span>代码: ${escapeHtml(c.symbol || c.code || '—')}</span>
       </div>
 
-      <!-- 需求2: 内部常显对 A 股的影响评分勋章 -->
+      <!-- 需求2: 内部常显对 A 股的影响评分勋章（未提供量化分时如实显示未获取） -->
       <div class="commodity-quant-badge" style="background-color: ${scoreColor}18; color: ${scoreColor}; border: 1px solid ${scoreColor}40;">
-        🎯 A股影响: ${scoreSign}${scoreVal}分 (${c.score_badge || '传导流动性'})
+        🎯 A股影响: ${hasQuant ? `${scoreSign}${scoreVal}分` : '未获取'} (${escapeHtml(c.score_badge || '传导流动性')})
       </div>
 
       <div class="commodity-impact">
-        💡 <strong>市场影响:</strong> ${c.impact}
+        💡 <strong>来源:</strong> ${escapeHtml(c.source || c.impact || '未获取')}
       </div>
     `;
     dom.worldCommodityGrid.appendChild(card);
@@ -2404,8 +2421,8 @@ function switchMacroScope(scope) {
   }
   if (dom.worldHeaderScopeDesc) {
     dom.worldHeaderScopeDesc.innerHTML = (scope === 'domestic')
-      ? '国内宏观新闻与评分尚未接入可核验来源；下方提供来源网站入口。'
-      : '国际宏观新闻、大宗行情与评分尚未接入可核验来源。';
+      ? '国内宏观快讯来自东方财富 7×24 真实标题（来源随每条展示）；评分按全球指数与商品真实涨跌幅均值口径计算。'
+      : '国际宏观快讯来自东方财富 7×24 真实标题；大宗行情来自新浪财经外盘期货实时报价。';
   }
   if (dom.worldScoreCardSubLabel) {
     dom.worldScoreCardSubLabel.textContent = (scope === 'domestic')
@@ -2415,7 +2432,9 @@ function switchMacroScope(scope) {
 
   // 重置国家过滤器
   if (scope === 'domestic') {
-    appState.worldFilterCountry = 'cn';
+    // 口径修正（R11 真机实测）：国内事件流本身已按 category=domestic 过滤，
+    // 再叠加 country_code==='cn' 会把来源未标注国别的国内快讯整批隐藏（实测事件卡为 0）。
+    appState.worldFilterCountry = 'all';
     if (dom.worldCountryPills) {
       dom.worldCountryPills.style.display = 'none'; // 国内模式下隐去外围国家按钮
     }
@@ -2439,10 +2458,15 @@ function switchMacroScope(scope) {
   const agg = data.aggregate_score || {};
   
   if (scope === 'domestic') {
-    const dScore = agg.domestic_score !== undefined ? agg.domestic_score : agg.total_score;
+    // 口径修正（R11 真机实测）：后端对未分维度计分的维度返回 null（而不是缺键），
+    // 原写法只判 `!== undefined`，于是 null.toLocaleString() 抛异常 → 被外层 catch 吞掉 →
+    // 国内视图总分卡崩且连带清空商品/事件面板。这里改为「null/undefined 均回落总评分」。
+    const dScore = (agg.domestic_score === undefined || agg.domestic_score === null)
+      ? agg.total_score : agg.domestic_score;
     if (dom.worldTotalScore) {
-      dom.worldTotalScore.textContent = `${dScore >= 0 ? '+' : ''}${dScore.toLocaleString()}`;
-      dom.worldTotalScore.className = `score-number ${dScore >= 0 ? 'price-up' : 'price-down'}`;
+      dom.worldTotalScore.textContent = (dScore === null || dScore === undefined)
+        ? '未获取' : `${dScore >= 0 ? '+' : ''}${dScore.toLocaleString()}`;
+      dom.worldTotalScore.className = `score-number ${(dScore || 0) >= 0 ? 'price-up' : 'price-down'}`;
     }
     if (dom.worldEventsCount) {
       dom.worldEventsCount.textContent = agg.domestic_count || (data.domestic_events || []).length;
@@ -2460,10 +2484,12 @@ function switchMacroScope(scope) {
     const domTimeline = data.timeline_domestic || data.score_timeline;
     renderWorldScoreTimelineChart(domTimeline, '国内核心部委');
   } else {
-    const iScore = agg.international_score !== undefined ? agg.international_score : agg.total_score;
+    const iScore = (agg.international_score === undefined || agg.international_score === null)
+      ? agg.total_score : agg.international_score;
     if (dom.worldTotalScore) {
-      dom.worldTotalScore.textContent = `${iScore >= 0 ? '+' : ''}${iScore.toLocaleString()}`;
-      dom.worldTotalScore.className = `score-number ${iScore >= 0 ? 'price-up' : 'price-down'}`;
+      dom.worldTotalScore.textContent = (iScore === null || iScore === undefined)
+        ? '未获取' : `${iScore >= 0 ? '+' : ''}${iScore.toLocaleString()}`;
+      dom.worldTotalScore.className = `score-number ${(iScore || 0) >= 0 ? 'price-up' : 'price-down'}`;
     }
     if (dom.worldEventsCount) {
       dom.worldEventsCount.textContent = agg.international_count || (data.international_events || []).length;
@@ -2517,7 +2543,10 @@ function renderWorldEvents(events) {
   const domain = appState.worldFilterDomain;
 
   const filtered = events.filter(e => {
-    const matchC = (country === 'all' || e.country_code === country);
+    // 国家：选了具体国家时，只保留「明确属于该国」或「来源未标注国别」的快讯
+    //（未标注国别不等于不属于该国，直接隐藏会造成「明明有快讯却显示暂无」的误导）
+    const matchC = (country === 'all' || !e.country_code || e.country_code === country);
+    // 领域：选了具体领域时只保留明确命中该领域的快讯（领域是强标签，不做模糊放行）
     const matchD = (domain === 'all' || e.domain === domain);
     return matchC && matchD;
   });
@@ -2530,36 +2559,34 @@ function renderWorldEvents(events) {
   filtered.forEach(e => {
     const card = document.createElement('div');
     card.className = 'event-card';
+    // 字段口径修正（R11 真机实测）：真实快讯只有 title/time/media/category/source，
+    // 原先按「结构化事件」模板渲染会整段取到 undefined。现按真实字段渲染，
+    // 未提供量化冲击分/影响研判时**如实显示未获取**，不补造分析结论。
+    const hasScore = e.quant_score !== undefined && e.quant_score !== null;
     const scoreVal = Number(e.quant_score || 0);
     const scoreColor = scoreVal > 0 ? '#ef4444' : scoreVal < 0 ? '#10b981' : '#94a3b8';
     const scoreSign = scoreVal > 0 ? '+' : '';
-    const isDomestic = e.scope === 'domestic' || e.ministry;
+    const category = e.category || (e.scope === 'domestic' ? 'domestic' : 'unclassified');
+    const categoryLabel = category === 'domestic' ? '🇨🇳 国内' : (category === 'international' ? '🌐 国际' : '⚪ 未归类');
+    const timeText = e.time || e.date || '时间未获取';
 
     card.innerHTML = `
       <div class="event-top-line">
         <div class="event-meta-left">
-          <span class="event-flag">${e.flag}</span>
-          <span style="font-weight: 700; font-size: 0.88rem;">${isDomestic ? (e.ministry || e.country) : e.country}</span>
-          <span class="event-domain-tag">${e.domain_icon} ${e.domain}</span>
-          ${isDomestic ? `<span class="brand-tag" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-size: 0.7rem;">国家部委官方</span>` : ''}
+          <span class="event-domain-tag">${categoryLabel}</span>
+          <span class="brand-tag" style="background: rgba(148,163,184,0.2); color: #cbd5e1; font-size: 0.7rem;">${escapeHtml(e.media || '来源未标注')}</span>
           <span class="quant-tag-score" style="background-color: ${scoreColor}20; color: ${scoreColor}; border: 1px solid ${scoreColor}40;">
-            A股量化冲击: ${scoreSign}${scoreVal} 分
+            A股量化冲击: ${hasScore ? `${scoreSign}${scoreVal} 分` : '未获取'}
           </span>
         </div>
-        <span class="event-date">📅 发生日期: ${e.date}</span>
+        <span class="event-date">🕒 ${escapeHtml(timeText)}</span>
       </div>
 
-      <div class="event-title">${e.title}</div>
-      <div class="event-summary">${e.summary}</div>
-
-      <div class="event-impact-box">
-        🎯 <strong>政策及宏观影响深度研判:</strong> ${e.impact_analysis}<br>
-        <span style="font-size: 0.76rem; color: #93c5fd;">⚡ <strong>传导归因:</strong> ${e.score_reason || '对实体产业及A股资产形成实质性驱动'}</span>
-      </div>
+      <div class="event-title">${escapeHtml(e.title || '标题未获取')}</div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.2rem; flex-wrap: wrap; gap: 0.4rem;">
-        <span style="font-size: 0.75rem; color: var(--text-muted);">🏛️ 官方认证信源: ${e.official_source}</span>
-        <a href="${e.source_url}" target="_blank" class="event-source-link">🔗 查看官方原始通告 ↗</a>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">🏛️ 信源: ${escapeHtml(e.official_source || e.source || '未获取')}</span>
+        ${e.source_url ? `<a href="${escapeHtml(e.source_url)}" target="_blank" class="event-source-link">🔗 查看原始来源 ↗</a>` : ''}
       </div>
     `;
     dom.worldEventsStream.appendChild(card);
@@ -2958,7 +2985,12 @@ async function checkServerHealth() {
       if (data.version && data.version !== appState.version) {
         syncVersionAndTitle(data.version);
       }
-      if (data.snapshot_date) {
+      // 需求1 / REQ-046: 优先显示真实行情快照时间（精确到分），无则回落到基准批次日期
+      if (data.quote_datetime) {
+        updateDataValidityDateBadge(data.quote_datetime);
+      } else if (data.quote_date) {
+        updateDataValidityDateBadge(data.quote_date);
+      } else if (data.snapshot_date) {
         updateDataValidityDateBadge(data.snapshot_date);
       }
     } else {
@@ -3079,57 +3111,30 @@ async function toggleServerState() {
 // ====================================================
 
 /**
- * 需求1: 切换图表时段 Tab: timeline (分时图) ｜ kline5 (5天K线) ｜ kline10 (10天K线) ｜ kline20 (20天K线) ｜ kline60 (60天K线) ｜ all (全部/上市至今)
+ * 需求REQ-027/028: 切换图表时段 Tab
+ *   timeline 分时图 ｜ kline5m/15m/30m 分钟K线 ｜ kline20/60/120/180 日K ｜ all 全部（200 根）
+ */
+/**
+ * 需求REQ-034: 周期切换的兼容入口 —— 旧键一律映射到新的双图面板模型
+ *   timeline→分时维度·当日分时 ｜ kline5m/klinem5→分时维度·5分K线
+ *   klineweekly→K线维度·周线图 ｜ klinequarterly→K线维度·季线图 ｜ 其余→K线维度·日线图
+ *  需求REQ-044: 「1分K线」Tab 已移除，旧键 klinem1 不再切换到该颗粒度，统一回落到 5分K线
  */
 function switchChartPeriod(period) {
-  appState.chartPeriod = period;
-  if (dom.klineStartDate) dom.klineStartDate.value = '';
-  if (dom.klineEndDate) dom.klineEndDate.value = '';
-  if (dom.chartPeriodControl) {
-    dom.chartPeriodControl.querySelectorAll('.seg-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-period') === period);
-    });
-  }
-
-  // 需求REQ-022: 各 Tab 复位为自身的标准根数；「全部」＝标准视窗 200 根（滚轮缩放上限同为 200）
-  if (period === 'kline5') {
-    appState.chartZoomWindow = '5';
-    appState.chartCustomZoomCount = 0;
-  } else if (period === 'kline10') {
-    appState.chartZoomWindow = '10';
-    appState.chartCustomZoomCount = 0;
-  } else if (period === 'kline20') {
-    appState.chartZoomWindow = '20';
-    appState.chartCustomZoomCount = 0;
-  } else if (period === 'kline60') {
-    appState.chartZoomWindow = '60';
-    appState.chartCustomZoomCount = 0;
-  } else if (period === 'kline120') {
-    appState.chartZoomWindow = '120';
-    appState.chartCustomZoomCount = 0;
-  } else if (period === 'kline180') {
-    appState.chartZoomWindow = '180';
-    appState.chartCustomZoomCount = 0;
-  } else if (period === 'all') {
-    appState.chartZoomWindow = 'max';
-    appState.chartCustomZoomCount = 0;
-  }
-
-  hideTooltip();
-  // 切换周期时若开启了自动画线，自动自适应重算当前周期下的多阶中枢线
-  if (appState.autoLinesCount > 0) {
-    recomputeAutoLines();
-  }
-  renderActiveStockChart();
+  const p = String(period || '');
+  if (p === 'timeline') return switchMinuteSub('timeline', 'left');
+  if (p === 'kline5m' || p === 'klinem5' || p === 'klinem1') return switchMinuteSub('m5', 'left');
+  if (p === 'klineweekly') return switchKlineGroup('weekly', 'right');
+  if (p === 'klinequarterly') return switchKlineGroup('quarterly', 'right');
+  return switchKlineGroup('daily', 'right');
 }
 
 /**
  * 需求3: 应用 K 线自定义日期区间过滤
  */
 function applyKlineCustomDateRange() {
-  appState.chartCustomZoomCount = 0;
   hideTooltip();
-  renderActiveStockChart();
+  renderChartPanel('right');
 }
 
 /**
@@ -3149,6 +3154,7 @@ function switchDetailDimension(dimKey) {
     { key: 'shareholders', el: dom.paneShareholders },
     { key: 'finance', el: dom.paneFinance },
     { key: 'block', el: dom.paneBlock },
+    { key: 'capital', el: dom.paneCapital },
     { key: 'dividend', el: dom.paneDividend }
   ];
 
@@ -3194,18 +3200,12 @@ async function loadStockDividendHistory(code) {
 }
 
 /**
- * 设置日K缩放视窗 (需求REQ-022: 缩放上限严格 200 根，下限 5 根)
+ * 设置视窗根数（需求REQ-035: 下限 30 根，上限＝该颗粒度全部可用根数）
+ *   'max' → 显示全部K线
  */
-function setChartZoomWindow(windowSize) {
-  appState.chartZoomWindow = windowSize;
-  appState.chartCustomZoomCount = 0; // 重置滚轮动态计数
-  if (dom.chartZoomControl) {
-    dom.chartZoomControl.querySelectorAll('.seg-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-zoom') === String(windowSize));
-    });
-  }
-  hideTooltip();
-  renderActiveStockChart();
+function setChartZoomWindow(windowSize, slot = 'right') {
+  if (windowSize === 'max') return showAllKlineBars(slot);
+  return switchKlineCount(parseInt(windowSize, 10) || MIN_PANEL_BARS, slot);
 }
 
 /**
@@ -3335,40 +3335,43 @@ function countLayerLines(layerKey) {
   return layer ? layer.lines.length : 0;
 }
 
-/** 需求REQ-015: 把指定辅助线提升到最顶层并高亮 */
-function bringChartLineToFront(line) {
+/** 需求REQ-015: 把指定辅助线提升到最顶层并高亮（仅作用于本面板） */
+function bringChartLineToFront(slot, line) {
   if (!line) return;
   line.zIndex = nextLineZIndex();
   appState.topLineId = line.id;
-  renderActiveStockChart();
+  persistPanelFromAppState(panelBySlot(slot));
+  renderChartPanel(panelBySlot(slot).slot);
   showChartToast(`已置顶：${line.type} ¥${Number(line.price).toFixed(2)}`);
 }
 
-/** 需求REQ-014: 只清除指定模型的辅助线，其他模型完整保留 */
-function clearChartLayer(layerKey) {
-  const layers = ensureLineLayers();
-  const layer = layers[layerKey];
-  if (!layer) return;
-  layer.lines = [];
-  if (layerKey === 'auto') {
-    appState.autoLinesCount = 0;
-    const ctrl = document.getElementById('autoLinesCountControl');
-    if (ctrl) {
-      ctrl.querySelectorAll('.seg-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
-      });
+/** 需求REQ-014: 只清除指定模型的辅助线，其他模型完整保留（仅本面板） */
+function clearChartLayer(layerKey, slot = 'right') {
+  withChartPanel(slot, (panel) => {
+    const layers = ensureLineLayers();
+    const layer = layers[layerKey];
+    if (!layer) return;
+    layer.lines = [];
+    if (layerKey === 'auto') {
+      appState.autoLinesCount = 0;
+      const ctrl = document.getElementById(panel.autoCountControlId);
+      if (ctrl) {
+        ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
+        });
+      }
     }
-  }
-  renderActiveStockChart();
+  });
 }
 
-/** 需求REQ-014: 切换某个图层模型的显示/隐藏 */
-function toggleChartLayerVisible(layerKey) {
-  const layers = ensureLineLayers();
-  const layer = layers[layerKey];
-  if (!layer) return;
-  layer.visible = layer.visible === false;
-  renderActiveStockChart();
+/** 需求REQ-014: 切换某个图层模型的显示/隐藏（仅本面板） */
+function toggleChartLayerVisible(layerKey, slot = 'right') {
+  withChartPanel(slot, () => {
+    const layers = ensureLineLayers();
+    const layer = layers[layerKey];
+    if (!layer) return;
+    layer.visible = layer.visible === false;
+  });
 }
 
 /** 计算同一图层模型内的条数摘要文案 */
@@ -3474,9 +3477,11 @@ function buildHorizontalLinesSVG(opts) {
  * 需求REQ-014: 图层管理面板渲染 (格式塔: 共同区域 + 邻近性 + 相似性)
  * 每个模型一行：模型名 → 条数 → 显示开关 → 仅作用于该模型的清除按钮
  */
-function renderLineLayerPanel(analysis) {
-  const panel = document.getElementById('chartLayerPanel');
-  if (!panel) return;
+function renderLineLayerPanel(panelRef, analysis) {
+  const panel = panelRef && panelRef.layerPanelId ? panelRef : panelBySlot('right');
+  const slot = panel.slot;
+  const host = document.getElementById(panel.layerPanelId);
+  if (!host) return;
   ensureLineLayers();
 
   const rows = LINE_LAYER_ORDER.map(key => {
@@ -3506,10 +3511,10 @@ function renderLineLayerPanel(analysis) {
       <div class="chart-layer-row ${blocked ? 'is-blocked' : ''} ${appState.topLineId && layer.lines.some(l => l.id === appState.topLineId) ? 'is-active' : ''}" data-layer="${key}">
         <span class="chart-layer-name">${meta.icon} ${meta.name}</span>
         <span class="chart-layer-count" title="${blocked ? blocked.replace(/"/g, '') : ''}">${countText}</span>
-        <button type="button" class="chart-layer-btn ${visible ? 'on' : ''}" onclick="toggleChartLayerVisible('${key}')"
-                title="${visible ? '隐藏' : '显示'}${meta.name}（不影响其他模型）">${visible ? '👁 显示' : '🚫 隐藏'}</button>
-        <button type="button" class="chart-layer-btn danger" onclick="clearChartLayer('${key}')" ${n === 0 ? 'disabled' : ''}
-                title="仅清除「${meta.name}」，其他画线模型保持不变">🧹 清除</button>
+        <button type="button" class="chart-layer-btn ${visible ? 'on' : ''}" onclick="toggleChartLayerVisible('${key}','${slot}')"
+                title="${visible ? '隐藏' : '显示'}${meta.name}（不影响其他模型，也不影响另一个图）">${visible ? '👁 显示' : '🚫 隐藏'}</button>
+        <button type="button" class="chart-layer-btn danger" onclick="clearChartLayer('${key}','${slot}')" ${n === 0 ? 'disabled' : ''}
+                title="仅清除本图的「${meta.name}」，其他画线模型与另一个图保持不变">🧹 清除</button>
       </div>
       ${metricText ? `<p class="chart-layer-metric">📐 ${metricText}</p>` : ''}
       ${blocked ? `<p class="chart-layer-note">${blocked}（如需自动线，请先补齐该周期的成交额来源）</p>` : ''}
@@ -3524,9 +3529,9 @@ function renderLineLayerPanel(analysis) {
       <div class="chart-layer-row" data-layer="chanlun-${item.key}">
         <span class="chart-layer-name">${item.icon} ${item.name}</span>
         <span class="chart-layer-count">${label}</span>
-        <button type="button" class="chart-layer-btn ${on ? 'on' : ''}" onclick="toggleChanlunLayer('${item.key}')"
+        <button type="button" class="chart-layer-btn ${on ? 'on' : ''}" onclick="toggleChanlunLayer('${item.key}','${slot}')"
                 title="${on ? '隐藏' : '显示'}${item.name}（不影响其他缠论图层与画线模型）">${on ? '👁 显示' : '🚫 隐藏'}</button>
-        <button type="button" class="chart-layer-btn danger" onclick="clearChanlunLayer('${item.key}')"
+        <button type="button" class="chart-layer-btn danger" onclick="clearChanlunLayer('${item.key}','${slot}')"
                 title="仅关闭「${item.name}」图层，其他图层保持不变">🧹 清除</button>
       </div>
     `;
@@ -3534,7 +3539,7 @@ function renderLineLayerPanel(analysis) {
 
   const anyChanlun = CHANLUN_LAYER_META.some(i => appState.chanlunLayers[i.key] !== false);
 
-  panel.innerHTML = `
+  host.innerHTML = `
     <div class="chart-layer-group">
       <div class="chart-layer-group-title">
         📏 水平辅助线模型（各模型可同时存在，清除互不影响）
@@ -3546,7 +3551,7 @@ function renderLineLayerPanel(analysis) {
     <div class="chart-layer-group">
       <div class="chart-layer-group-title">
         ☯️ 缠论图层
-        <button type="button" class="chart-layer-btn danger" onclick="clearAllChanlunLayers()"
+        <button type="button" class="chart-layer-btn danger" onclick="clearAllChanlunLayers('${slot}')"
                 ${anyChanlun ? '' : 'disabled'} title="仅关闭全部缠论图层，不影响水平辅助线模型">🧹 清除全部缠论图层</button>
       </div>
       ${chanlunRows}
@@ -3554,24 +3559,28 @@ function renderLineLayerPanel(analysis) {
   `;
 }
 
-/** 需求REQ-014: 切换单个缠论图层显隐 (与图层管理面板、图例复选框保持同步) */
-function toggleChanlunLayer(key) {
-  appState.showChanlunDraw = true;
-  appState.chanlunLayers[key] = appState.chanlunLayers[key] === false;
-  if (dom.btnChanlunDraw) dom.btnChanlunDraw.classList.add('active');
-  renderActiveStockChart();
+/** 需求REQ-014: 切换单个缠论图层显隐 (与图层管理面板、图例复选框保持同步；仅本面板) */
+function toggleChanlunLayer(key, slot = 'right') {
+  withChartPanel(slot, (panel) => {
+    appState.showChanlunDraw = true;
+    appState.chanlunLayers[key] = appState.chanlunLayers[key] === false;
+    const btn = document.getElementById(`btnChanlunDraw_${panel.slot}`);
+    if (btn) btn.classList.add('active');
+  });
 }
 
-/** 需求REQ-014: 只清除指定缠论图层 */
-function clearChanlunLayer(key) {
-  appState.chanlunLayers[key] = false;
-  renderActiveStockChart();
+/** 需求REQ-014: 只清除指定缠论图层（仅本面板） */
+function clearChanlunLayer(key, slot = 'right') {
+  withChartPanel(slot, () => {
+    appState.chanlunLayers[key] = false;
+  });
 }
 
-/** 需求REQ-014: 清除全部缠论图层 (不影响水平辅助线模型) */
-function clearAllChanlunLayers() {
-  CHANLUN_LAYER_META.forEach(i => { appState.chanlunLayers[i.key] = false; });
-  renderActiveStockChart();
+/** 需求REQ-014: 清除全部缠论图层 (不影响水平辅助线模型；仅本面板) */
+function clearAllChanlunLayers(slot = 'right') {
+  withChartPanel(slot, () => {
+    CHANLUN_LAYER_META.forEach(i => { appState.chanlunLayers[i.key] = false; });
+  });
 }
 
 /**
@@ -3698,25 +3707,25 @@ function calculateAutoSupportResistanceLevels(klines, currentPrice, targetCount 
 /**
  * 需求2: 设置自动画线条数 (0=关, 1=1根, 2=2根, 3=3根, 4=4根)
  */
-function setAutoLinesCount(count) {
-  appState.autoLinesCount = parseInt(count, 10) || 0;
+function setAutoLinesCount(count, slot = 'right') {
+  withChartPanel(slot, (panel) => {
+    appState.autoLinesCount = parseInt(count, 10) || 0;
 
-  // 更新 UI 分段激活
-  const ctrl = document.getElementById('autoLinesCountControl');
-  if (ctrl) {
-    ctrl.querySelectorAll('.seg-btn').forEach(btn => {
-      btn.classList.toggle('active', parseInt(btn.getAttribute('data-count'), 10) === appState.autoLinesCount);
-    });
-  }
+    // 更新 UI 分段激活（只改本面板的控件）
+    const ctrl = document.getElementById(panel.autoCountControlId);
+    if (ctrl) {
+      ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.getAttribute('data-count'), 10) === appState.autoLinesCount);
+      });
+    }
 
-  if (appState.autoLinesCount === 0) {
-    // 需求REQ-014: 仅清空「自动多阶线」模型，手动压力线/支撑线与其他模型完整保留
-    ensureLineLayers().auto.lines = [];
-  } else {
-    recomputeAutoLines();
-  }
-
-  renderActiveStockChart();
+    if (appState.autoLinesCount === 0) {
+      // 需求REQ-014: 仅清空「自动多阶线」模型，手动压力线/支撑线与其他模型完整保留
+      ensureLineLayers().auto.lines = [];
+    } else {
+      recomputeAutoLines();
+    }
+  });
 }
 
 /**
@@ -3729,15 +3738,18 @@ function setAutoLinesCount(count) {
  * @param {Array} lines 辅助线数组
  * @param {Array} anchorKlines 全量K线（用于锚定首个交汇日与统计交易面积）
  */
-function attachTradeAreaToLines(lines, anchorKlines) {
+function attachTradeAreaToLines(lines, anchorKlines, opts) {
   const list = anchorKlines || [];
   (lines || []).forEach(line => {
     const anchorIdx = findFirstCrossIndex(list, line.price);
-    const area = computeTradeArea(list, line.price, anchorIdx);
+    const area = computeTradeArea(list, line.price, anchorIdx, opts);
     line.tradeAreaYi = area.tradeAreaYi;
     line.tradeAreaDays = area.countedDays;
     line.tradeAreaExcludedDays = area.excludedDays;
     line.tradeAreaIncomplete = area.incomplete;
+    // 需求REQ-030: 窗口口径下同步暴露「窗口内总成交额」与「交汇金额」，供面板与弹窗同源展示
+    line.tradeAreaWindowTotalYi = area.windowTotalAmountYi;
+    line.tradeAreaIntersectYi = area.intersectAmountYi;
     line.tradeAreaAnchor = anchorIdx >= 0 ? ((list[anchorIdx] && (list[anchorIdx].date || list[anchorIdx].time)) || null) : null;
     line.tradeAreaNote = area.reason;
   });
@@ -3749,7 +3761,7 @@ function recomputeAutoLines() {
   if (!appState.activeDetailStock || !appState.autoLinesCount) return;
   const stock = appState.activeDetailStock;
 
-  // 需求REQ-026: 交易面积锚定用全量K线；自动线测算用当前视窗K线
+  // 需求REQ-029/030: 压力线与其指标一律按当前显示窗口测算与展示（放大缩小随之变动）
   let anchorKlines = [];
   let klines = [];
   if (appState.chartPeriod === 'timeline') {
@@ -3770,24 +3782,25 @@ function recomputeAutoLines() {
     }));
     klines = anchorKlines;
   } else {
-    const daily = (stock.daily_bars && stock.daily_bars.length > 0) ? stock.daily_bars : [];
-    if (daily.length === 0) { appState.autoLinesBlockedReason = '当前周期无K线数据，无法测算自动线'; return; }
-    anchorKlines = daily.map(withResolvedAmount);
+    // 需求REQ-028/035: 数据源与图表渲染完全同源 —— 分钟K线取分钟接口、日/周/季取对应颗粒度序列
+    const slot = appState.chartPanelSlot;
+    const panelState = (slot && chartPanels[slot]) ? chartPanels[slot].st : null;
+    const sourceBars = panelState
+      ? panelAvailableBars(stock, panelState)
+      : (isMinuteKlinePeriod(appState.chartPeriod)
+        ? (currentMinuteKlineBars(stock, appState.chartPeriod) || [])
+        : ((stock.daily_bars && stock.daily_bars.length > 0) ? stock.daily_bars : []));
+    if (sourceBars.length === 0) { appState.autoLinesBlockedReason = '当前周期无K线数据，无法测算自动线'; return; }
+    anchorKlines = sourceBars.map(withResolvedAmount);
     klines = anchorKlines;
 
-    // 需求REQ-022: 自动线在当前视窗内测算，视窗口徑与图表渲染保持一致
-    let winCount = STANDARD_KLINE_VIEW_COUNT;
-    if (appState.chartCustomZoomCount > 0) winCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, appState.chartCustomZoomCount));
-    else if (appState.chartPeriod === 'kline5') winCount = 5;
-    else if (appState.chartPeriod === 'kline10') winCount = 10;
-    else if (appState.chartPeriod === 'kline20') winCount = 20;
-    else if (appState.chartPeriod === 'kline60') winCount = 60;
-    else if (appState.chartPeriod === 'kline120') winCount = 120;
-    else if (appState.chartPeriod === 'kline180') winCount = 180;
-
+    // 需求REQ-035: 视窗根数与图表渲染保持一致（下限 30 根 / 上限＝全部可用根数）
+    const winCount = currentKlineWindow();
     if (klines.length > winCount) {
       klines = klines.slice(klines.length - winCount);
     }
+    // 需求REQ-029: 展示与指标只覆盖当前显示窗口
+    anchorKlines = klines;
   }
 
   // 需求REQ-025: 真实成交额优先；仅在均价与成交量也缺失时才无法测算（不再一律拒绝兜底口径）
@@ -3800,8 +3813,10 @@ function recomputeAutoLines() {
 
   const autoLevels = calculateAutoSupportResistanceLevels(klines, stock.price, appState.autoLinesCount);
   autoLevels.forEach(l => { l.isAuto = true; });
-  // 需求REQ-026: 交易面积按全量K线锚定，缩放窗口不影响该指标
+  // 需求REQ-030: 交易面积与未交汇天数一律按当前显示窗口（该线段）计算，随放大缩小变动
   attachTradeAreaToLines(autoLevels, anchorKlines);
+  // 需求REQ-031: 窗口内总成交额（图上所有交易日成交额之和），供图内与面板同源展示
+  appState.windowAmountSummary = computeWindowTotalAmount(klines);
   if (autoLevels.length === 0) {
     appState.autoLinesBlockedReason = '当前周期内没有满足「交汇交易日集合互不重复」条件的价位，本周期不生成自动线';
   }
@@ -3815,34 +3830,38 @@ function recomputeAutoLines() {
 /**
  * 需求1: 触发自动画线 (兼容原有入口，默认画 1 根)
  */
-function triggerAutoDrawLevels() {
-  setAutoLinesCount(appState.autoLinesCount === 1 ? 0 : 1);
+function triggerAutoDrawLevels(slot = 'right') {
+  const st = panelBySlot(slot).st;
+  setAutoLinesCount(st.autoLinesCount === 1 ? 0 : 1, slot);
 }
 
 /**
- * 需求1: 开启/关闭画水平线 (压力/支撑位) 模式
+ * 需求1: 开启/关闭画水平线 (压力/支撑位) 模式（仅本面板生效）
  */
-function toggleDrawHLineMode() {
-  appState.drawHLineMode = !appState.drawHLineMode;
-  if (dom.btnToggleHLine) {
-    dom.btnToggleHLine.classList.toggle('active', appState.drawHLineMode);
-    dom.btnToggleHLine.innerHTML = appState.drawHLineMode ? '✏️ 点击图表放置水平线...' : '📏 画水平线';
-  }
+function toggleDrawHLineMode(slot = 'right') {
+  withChartPanel(slot, (panel) => {
+    appState.drawHLineMode = !appState.drawHLineMode;
+    const btn = document.getElementById(panel.hlineBtnId);
+    if (btn) {
+      btn.classList.toggle('active', appState.drawHLineMode);
+      btn.innerHTML = appState.drawHLineMode ? '✏️ 点击图表放置水平线...' : '📏 画水平线';
+    }
+  }, { render: false });
 }
 
 /**
- * 需求4: 切换缠论自动画线与买卖点显示
+ * 需求4: 切换缠论自动画线与买卖点显示（仅本面板）
  */
-function toggleChanlunDraw() {
-  appState.showChanlunDraw = !appState.showChanlunDraw;
-  // 需求REQ-014: 重新打开缠论叠加时，若此前被逐层清除过，则恢复全部缠论图层显示
-  if (appState.showChanlunDraw && CHANLUN_LAYER_META.every(i => appState.chanlunLayers[i.key] === false)) {
-    CHANLUN_LAYER_META.forEach(i => { appState.chanlunLayers[i.key] = true; });
-  }
-  if (dom.btnChanlunDraw) {
-    dom.btnChanlunDraw.classList.toggle('active', appState.showChanlunDraw);
-  }
-  renderActiveStockChart();
+function toggleChanlunDraw(slot = 'right') {
+  withChartPanel(slot, (panel) => {
+    appState.showChanlunDraw = !appState.showChanlunDraw;
+    // 需求REQ-014: 重新打开缠论叠加时，若此前被逐层清除过，则恢复全部缠论图层显示
+    if (appState.showChanlunDraw && CHANLUN_LAYER_META.every(i => appState.chanlunLayers[i.key] === false)) {
+      CHANLUN_LAYER_META.forEach(i => { appState.chanlunLayers[i.key] = true; });
+    }
+    const btn = document.getElementById(`btnChanlunDraw_${panel.slot}`);
+    if (btn) btn.classList.toggle('active', appState.showChanlunDraw);
+  });
 }
 
 /**
@@ -3881,35 +3900,218 @@ function closeChanlunScopeModal() {
  * 需求REQ-014: 清除全部水平辅助线模型 (仅在用户明确点击「清除全部」时使用)
  * 各模型自身的清除入口为 clearChartLayer(layerKey)，两者互不替代。
  */
-function clearAllChartDrawLines() {
-  const layers = ensureLineLayers();
-  LINE_LAYER_ORDER.forEach(key => { layers[key].lines = []; });
-  appState.autoLinesCount = 0;
-  appState.drawHLineMode = false;
-  appState.topLineId = null;
-  if (dom.btnToggleHLine) {
-    dom.btnToggleHLine.classList.remove('active');
-    dom.btnToggleHLine.innerHTML = '📏 画水平线';
-  }
-  const ctrl = document.getElementById('autoLinesCountControl');
-  if (ctrl) {
-    ctrl.querySelectorAll('.seg-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
-    });
-  }
-  renderActiveStockChart();
+function clearAllChartDrawLines(slot = 'right') {
+  withChartPanel(slot, (panel) => {
+    const layers = ensureLineLayers();
+    LINE_LAYER_ORDER.forEach(key => { layers[key].lines = []; });
+    appState.autoLinesCount = 0;
+    appState.drawHLineMode = false;
+    appState.topLineId = null;
+    const hlineBtn = document.getElementById(panel.hlineBtnId);
+    if (hlineBtn) {
+      hlineBtn.classList.remove('active');
+      hlineBtn.innerHTML = '📏 画水平线';
+    }
+    const ctrl = document.getElementById(panel.autoCountControlId);
+    if (ctrl) {
+      ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
+      });
+    }
+  });
 }
 
 /**
- * 切换副图指标 Tab: vol (成交量) ｜ amt (成交额)
+ * 切换副图指标 Tab: vol (成交量) ｜ amt (成交额) ｜ turnover_rate (换手率)
+ * 需求1/4: 两个图合并联动：控制一个就能同步切换两边的图，且格式塔控件联动统一
  */
-function switchChartSubplot(subplot) {
+function switchChartSubplot(subplot, slot = 'both') {
   appState.chartSubplot = subplot;
-  dom.chartSubPlotControl.querySelectorAll('.seg-btn').forEach(btn => {
+  PANEL_SLOTS.forEach(s => {
+    const panel = panelBySlot(s);
+    if (panel && panel.st) {
+      panel.st.subplot = subplot;
+      panel.st.subplotTouched = true;
+    }
+  });
+
+  // 同步更新页面上所有幅图指标按钮的激活高亮状态
+  document.querySelectorAll('[data-subplot]').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-subplot') === subplot);
   });
+
   hideTooltip();
-  renderActiveStockChart();
+  PANEL_SLOTS.forEach(s => renderChartPanel(s));
+}
+
+/**
+ * 需求3/4: K线图缩放控制函数（+ 放大减少根数，- 缩小增加根数）
+ */
+function zoomKlineChart(dir, slot = 'right') {
+  withChartPanel(slot, (panel) => {
+    const st = panel.st;
+    if (panelIsTimeline(st)) {
+      showChartToast('当日分时图固定全天走势，不参与根数缩放');
+      return;
+    }
+    const available = Math.max(st.availableCount || 0, MIN_PANEL_BARS);
+    const maxN = Math.max(MIN_PANEL_BARS, available);
+    let cur = panelEffectiveCount(st, available);
+    const step = Math.max(5, Math.round(cur * 0.15));
+    if (dir === 'in') {
+      // 需求3: + 按钮，放大图片（显示根数变少）
+      cur = Math.max(MIN_PANEL_BARS, cur - step);
+    } else {
+      // 需求4: - 按钮，缩小图片（显示根数变多）
+      cur = Math.min(maxN, cur + step);
+    }
+    st.klineCount = cur;
+    hideTooltip();
+    renderChartPanel(panel.slot);
+  });
+}
+
+/**
+ * 需求5/6: K线图平移控制函数（deltaBars > 0 往右滑动看左边更早历史，deltaBars < 0 往左滑动看右边较新K线）
+ */
+function panKlineChart(deltaBars, slot = 'right') {
+  withChartPanel(slot, (panel) => {
+    const st = panel.st;
+    if (panelIsTimeline(st)) return;
+    const available = Number(st.availableCount) || 0;
+    const N = panelEffectiveCount(st, available);
+    const maxOffset = Math.max(0, available - N);
+    let curOffset = Number(st.panOffset) || 0;
+    const nextOffset = Math.max(0, Math.min(maxOffset, curOffset + deltaBars));
+    if (nextOffset !== curOffset) {
+      st.panOffset = nextOffset;
+      hideTooltip();
+      renderChartPanel(panel.slot);
+    }
+  });
+}
+
+/** 需求REQ-040: 缠论买卖点显示等级 —— 0＝关闭；N＝同时显示第 1..N 类（选「买点3」即画出买点1、2、3）。
+ *  买卖点各自独立（买点等级不影响卖点），且只对本面板生效；再次点击同一等级即关闭。 */
+function toggleChartBsLevel(side, level, slot = 'right') {
+  const panel = panelBySlot(slot);
+  const key = side === 'buy' ? 'bsBuyLevel' : 'bsSellLevel';
+  const current = Number(panel.st[key]) || 0;
+  panel.st[key] = current === level ? 0 : level;
+  hideTooltip();
+  renderChartPanel(panel.slot);
+}
+
+/** 需求REQ-040/041: 本面板当前颗粒度的买卖点可获得情况（用于如实告知"未获取/未识别"，绝不用推测值填充）。
+ *  数据一律取自后端 analyze_bars 的真实返回：日线取 stock.chanlun，当日分时取 stock.intraday_chanlun，
+ *  周线/季线/5分K线取现场提交真实K线所得的判定结果（stock.group_chanlun）。 */
+function panelBsAvailability(slot, side) {
+  const panel = panelBySlot(slot);
+  const stock = appState.activeDetailStock;
+  const analysis = stock ? panelChanlunAnalysis(stock, panel.st) : null;
+  const counts = (analysis && analysis.counts) || {};
+  const result = { hasAnalysis: !!(analysis && Array.isArray(analysis.buy_sell_points)), counts: {}, reason: null };
+  for (let i = 1; i <= 3; i++) result.counts[i] = Number(counts[`${side}${i}`]) || 0;
+  if (!result.hasAnalysis) {
+    result.reason = (analysis && analysis.error)
+      ? `本颗粒度缠论判定未获取：${analysis.error}`
+      : '本颗粒度缠论判定尚未取回（未获取时不渲染任何标记，也绝不用其他级别结果冒充）';
+  }
+  return result;
+}
+
+// ====================================================
+// 需求REQ-034/035/036: 双图面板的 Tab 切换与显隐控制
+// ====================================================
+
+/** 需求REQ-034: 分时维度子 Tab 切换（需求REQ-044: 当日分时 / 5分K线） */
+function switchMinuteSub(key, slot = 'left') {
+  const panel = panelBySlot(slot);
+  if (!MINUTE_SUBTAB_MAP[key]) return;
+  panel.st.minuteSub = key;
+  // 需求REQ-035: 切换颗粒度后视窗根数复位为下限 30 根
+  panel.st.klineCount = MIN_PANEL_BARS;
+  // 需求REQ-037（2026-09-24 修订）: 统一档位后此处不再改变档位（首屏两图与唯一控件同为成交额），
+  // 仅作为「用户从未手动选择」时的兜底复位点保留
+  applyDefaultSubplot(panel.st);
+  hideTooltip();
+  withChartPanel(panel.slot, () => {
+    if (appState.autoLinesCount > 0) recomputeAutoLines();
+  }, { render: false });
+  renderChartPanel(panel.slot);
+}
+
+/** 需求REQ-034: K线维度一级 Tab 切换（日线图 / 周线图 / 季线图，决定K线颗粒度） */
+function switchKlineGroup(key, slot = 'right') {
+  const panel = panelBySlot(slot);
+  if (!KLINE_GROUP_MAP[key]) return;
+  panel.st.klineGroup = key;
+  // 需求REQ-036: 重合图只在日线颗粒度下有意义
+  if (key !== 'daily') panel.st.overlayIntraday = false;
+  panel.st.klineCount = MIN_PANEL_BARS;
+  panel.st.panOffset = 0;
+  hideTooltip();
+  withChartPanel(panel.slot, () => {
+    if (appState.autoLinesCount > 0) recomputeAutoLines();
+  }, { render: false });
+  renderChartPanel(panel.slot);
+}
+
+/** 需求REQ-035: K线维度二级 Tab 切换（视窗根数档位 30/60/120/180） */
+function switchKlineCount(count, slot = 'right') {
+  const panel = panelBySlot(slot);
+  const c = parseInt(count, 10);
+  if (!Number.isFinite(c) || c <= 0) return;
+  panel.st.klineCount = Math.max(MIN_PANEL_BARS, c);
+  hideTooltip();
+  withChartPanel(panel.slot, () => {
+    if (appState.autoLinesCount > 0) recomputeAutoLines();
+  }, { render: false });
+  renderChartPanel(panel.slot);
+}
+
+/** 需求REQ-035: 一键显示全部K线（上限＝该颗粒度全部可用根数） */
+function showAllKlineBars(slot = 'right') {
+  switchKlineCount(999999, slot);
+}
+
+/** 需求REQ-036: 重合图开关（日K背景 + 当日分时折线叠加，共用同一价格轴） */
+function toggleOverlayIntraday(slot = 'right') {
+  const panel = panelBySlot(slot);
+  panel.st.overlayIntraday = !panel.st.overlayIntraday;
+  if (panel.st.overlayIntraday) loadIntradayChanlun(appState.activeDetailStock ? appState.activeDetailStock.code : null, panel.slot);
+  renderChartPanel(panel.slot);
+}
+
+/** 需求REQ-034: 调出某个维度面板（两个维度可同屏并存） */
+function showChartPanel(slot) {
+  const panel = panelBySlot(slot);
+  panel.visible = true;
+  // 调出分时图前，先确保当日分时的分钟级数据/分时明细可用；
+  // 数据一律来自真实来源，不可用时由面板内文案如实提示
+  syncChartPanelRowLayout();
+  renderChartPanel(panel.slot);
+}
+
+/** 需求REQ-034: 收起某个维度面板（至少保留一个图，避免出现空白区） */
+function hideChartPanel(slot) {
+  const panel = panelBySlot(slot);
+  const others = PANEL_SLOTS.filter(s => s !== panel.slot && chartPanels[s].visible);
+  if (others.length === 0) {
+    showChartToast('至少需要保留一个图表');
+    return;
+  }
+  panel.visible = false;
+  hideTooltip();
+  syncChartPanelRowLayout();
+  renderChartPanel(panel.slot);
+}
+
+/** 需求REQ-034: 面板显示/收起切换 */
+function toggleChartPanel(slot) {
+  const panel = panelBySlot(slot);
+  if (panel.visible) hideChartPanel(panel.slot);
+  else showChartPanel(panel.slot);
 }
 
 /**
@@ -3947,10 +4149,41 @@ async function loadStockBlockTrades(code) {
 
 function renderBlockTradesTable(trades) {
   if (!dom.finTableBodyBlock) return;
+  const countEl = document.getElementById('blockSummaryTotalCount');
+  const amountEl = document.getElementById('blockSummaryTotalAmount');
+  const premEl = document.getElementById('blockSummaryAvgPremium');
+  const orgEl = document.getElementById('blockSummaryOrgBuyCount');
+
   if (!trades || trades.length === 0) {
+    if (countEl) countEl.innerText = '0 笔';
+    if (amountEl) amountEl.innerText = '0 万元';
+    if (premEl) premEl.innerText = '0.00%';
+    if (orgEl) orgEl.innerText = '0 笔';
     dom.finTableBodyBlock.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">尚未获取真实大宗交易记录，不能据此判断无交易</td></tr>';
     return;
   }
+
+  let totalAmountWan = 0;
+  let premSum = 0;
+  let orgBuyCount = 0;
+  trades.forEach(t => {
+    totalAmountWan += Number(t.amount_wan) || 0;
+    premSum += Number(t.premium_ratio) || 0;
+    if (t.is_buyer_org || (t.buyer && t.buyer.includes('机构'))) {
+      orgBuyCount++;
+    }
+  });
+
+  const avgPrem = trades.length > 0 ? (premSum / trades.length) : 0;
+  if (countEl) countEl.innerText = `${trades.length} 笔`;
+  if (amountEl) amountEl.innerText = totalAmountWan >= 10000 ? `${(totalAmountWan / 10000).toFixed(2)} 亿元` : `${totalAmountWan.toFixed(2)} 万元`;
+  if (premEl) {
+    const sign = avgPrem > 0 ? '+' : '';
+    premEl.innerText = `${sign}${avgPrem.toFixed(2)}%`;
+    premEl.style.color = avgPrem > 0 ? '#ef4444' : (avgPrem < 0 ? '#10b981' : '#ffffff');
+  }
+  if (orgEl) orgEl.innerText = `${orgBuyCount} 笔`;
+
   dom.finTableBodyBlock.innerHTML = '';
   trades.forEach(t => {
     const prem = t.premium_ratio;
@@ -4064,7 +4297,11 @@ async function openStockDetail(code, refresh = false) {
 
   dom.modalStockName.textContent = '标的详情加载中...';
   dom.modalStockCode.textContent = code;
-  dom.chartSvgContainer.innerHTML = '<div style="padding: 2.5rem; color: var(--text-muted);"><div class="spinner"></div><div>正在从官方金融网关稳健拉取行情走势、公司全景与四大财务报表...</div></div>';
+  // 需求REQ-034: 两个图面板都显示加载态（可见面板立即渲染，隐藏面板打开时再按需渲染）
+  PANEL_SLOTS.forEach(slot => {
+    const host = document.getElementById(chartPanels[slot].containerId);
+    if (host) host.innerHTML = '<div style="padding: 2.5rem; color: var(--text-muted);"><div class="spinner"></div><div>正在从官方金融网关稳健拉取行情走势、公司全景与四大财务报表...</div></div>';
+  });
   hideTooltip();
 
   try {
@@ -4078,6 +4315,22 @@ async function openStockDetail(code, refresh = false) {
       stock.daily_bars = [];
     }
     appState.activeDetailStock = stock;
+    // 需求2: 补齐所有 daily_bars 的换手率，确保每根K线都有对应换手率
+    if (stock.daily_bars && Array.isArray(stock.daily_bars)) {
+      stock.daily_bars.forEach((b, idx) => {
+        if (b.turnover_rate === undefined || b.turnover_rate === null || isNaN(b.turnover_rate) || b.turnover_rate === 0) {
+          b.turnover_rate = resolveItemTurnoverRate(b, stock);
+        }
+      });
+    }
+    // 补齐 timeline_data items 的换手率
+    if (stock.timeline_data && Array.isArray(stock.timeline_data.items)) {
+      stock.timeline_data.items.forEach(it => {
+        if (it.turnover_rate === undefined || it.turnover_rate === null || isNaN(it.turnover_rate)) {
+          it.turnover_rate = resolveItemTurnoverRate(it, stock);
+        }
+      });
+    }
     const meta = stock.history_meta || {};
     if (historyStatus) {
       const status = {available: '来源历史已获取完毕', partial: '历史尚未获取完整', stale: '刷新失败，当前为旧缓存', unavailable: '暂无可信数据'}[meta.status] || '请重启服务以加载新数据协议';
@@ -4185,7 +4438,8 @@ async function openStockDetail(code, refresh = false) {
     if (pendingActionSummary) pendingActionSummary.textContent = '股东行为未获取';
     dom.modalStockName.textContent = '详情加载失败';
     console.error('加载详情失败:', err);
-    dom.chartSvgContainer.innerHTML = `<div style="padding: 2rem; color: var(--color-up);">获取详情失败: ${err.message}</div>`;
+    // 需求REQ-034: 失败提示写入主图容器（K线图面板）
+    if (dom.chartSvgContainer) dom.chartSvgContainer.innerHTML = `<div style="padding: 2rem; color: var(--color-up);">获取详情失败: ${err.message}</div>`;
   }
 }
 
@@ -4302,19 +4556,43 @@ function renderFinancialTables(fin) {
   }
 }
 
-/** 需求REQ-014: 切换个股时清空全部图层模型并复位层级 (仅作用于图表呈现状态，不触碰任何数据) */
+/** 需求REQ-014/034: 切换个股时清空全部图面板的图层模型与视窗状态 (仅作用于图表呈现状态，不触碰任何数据) */
 function resetAllChartLayers() {
-  const layers = ensureLineLayers();
-  LINE_LAYER_ORDER.forEach(key => { layers[key].lines = []; layers[key].visible = true; });
-  appState.lineZCounter = 1000;
-  appState.topLineId = null;
-  if (appState.autoLinesCount) appState.autoLinesCount = 0;
-  const ctrl = document.getElementById('autoLinesCountControl');
-  if (ctrl) {
-    ctrl.querySelectorAll('.seg-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
-    });
-  }
+  PANEL_SLOTS.forEach(slot => {
+    const panel = chartPanels[slot];
+    syncPanelToAppState(panel);
+    const layers = ensureLineLayers();
+    LINE_LAYER_ORDER.forEach(key => { layers[key].lines = []; layers[key].visible = true; });
+    appState.lineZCounter = 1000;
+    appState.topLineId = null;
+    appState.autoLinesCount = 0;
+    appState.autoLinesBlockedReason = null;
+    appState.windowAmountSummary = null;
+    appState.drawHLineMode = false;
+    appState.showChanlunDraw = false;
+    // 需求REQ-041: 买卖点显示等级复位为「默认全开」（自动标记是默认态，不因切换标的而失效）
+    appState.bsBuyLevel = DEFAULT_BS_LEVEL;
+    appState.bsSellLevel = DEFAULT_BS_LEVEL;
+    // 需求REQ-037 & 需求4: 副图与全局幅图联动保持一致，默认成交量或全局选中项
+    appState.chartSubplot = appState.chartSubplot || 'vol';
+    panel.st.subplot = appState.chartSubplot;
+    panel.st.subplotTouched = true;
+    persistPanelFromAppState(panel);
+    // 需求REQ-035: 视窗根数复位为下限 30 根
+    panel.st.klineCount = MIN_PANEL_BARS;
+    panel.st.overlayIntraday = false;
+    const ctrl = document.getElementById(panel.autoCountControlId);
+    if (ctrl) {
+      ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-count') === '0');
+      });
+    }
+    const hlineBtn = document.getElementById(panel.hlineBtnId);
+    if (hlineBtn) {
+      hlineBtn.classList.remove('active');
+      hlineBtn.innerHTML = '📏 画水平线';
+    }
+  });
 }
 
 /**
@@ -4324,7 +4602,85 @@ function resetAllChartLayers() {
  * 需求REQ-024: 拉取分时级别缠论分析（复用后端同一套缠论算法，不在前端另建一套）
  * 口径铁律：分时级别的笔＝分钟级笔，不等于日线级别；失败或未获取一律如实标注，不伪造图线。
  */
-async function loadIntradayChanlun(code) {
+/**
+ * 需求REQ-028: 按需拉取分钟K线（5/15/30 分钟），个股与指数共用同一实现
+ * 铁律:
+ *   1. 每根K线必须是来源真实时间区间的开/收/高/低/量，绝不插值、绝不复制邻近K线补足根数；
+ *   2. 成交额由该K线均价 × 成交量推出并标记为估算（来源未提供可互相印证的成交额字段）；
+ *   3. 来源不可用时如实提示原因，绝不伪造分钟K线。
+ * 缓存绑定在「当前详情对象 + 周期」上：关闭详情重开会得到全新对象，不会命中旧缓存。
+ */
+function minuteKlineEndpoint(period, code, isIndex) {
+  const interval = KLINE_MINUTE_INTERVALS[period];
+  const prefix = isIndex ? '/api/index' : '/api/stock';
+  // 需求REQ-035: 一次取满该颗粒度的上限根数，保证「缩小到全部」时确有全部数据可显示
+  return `${prefix}/${encodeURIComponent(code)}/minute-kline?interval=${interval}&limit=${MINUTE_KLINE_REQUEST_LIMIT}`;
+}
+
+async function loadMinuteKlineData(entryOwner, period, opts = {}) {
+  if (!entryOwner || !isMinuteKlinePeriod(period)) return null;
+  if (!entryOwner.minute_kline_loaders) entryOwner.minute_kline_loaders = {};
+  const cached = entryOwner.minute_kline_loaders[period];
+  if (cached && (cached.bars || cached.error)) return cached;
+  if (cached && cached.loading) return cached;
+  entryOwner.minute_kline_loaders[period] = { loading: true };
+  try {
+    const url = minuteKlineEndpoint(period, opts.code || entryOwner.code, !!opts.isIndex);
+    const res = await fetch(url, { cache: 'no-store' });
+    const json = await res.json();
+    const data = (json && json.data) || null;
+    const bars = (data && Array.isArray(data.bars)) ? data.bars : [];
+    if (!res.ok || !data || data.status !== 'available' || bars.length === 0) {
+      entryOwner.minute_kline_loaders[period] = {
+        bars: [], error: (data && (data.error || data.amount_note)) || json.message || '来源未返回有效分钟K线'
+      };
+    } else {
+      // 需求2: 为分钟K线补齐换手率
+      bars.forEach(b => {
+        if (b.turnover_rate === undefined || b.turnover_rate === null || isNaN(b.turnover_rate)) {
+          b.turnover_rate = resolveItemTurnoverRate(b, entryOwner);
+        }
+      });
+      entryOwner.minute_kline_loaders[period] = { bars: bars, meta: data };
+    }
+  } catch (err) {
+    entryOwner.minute_kline_loaders[period] = { bars: [], error: err.message || '分钟K线请求失败' };
+  }
+  return entryOwner.minute_kline_loaders[period];
+}
+
+async function loadMinuteKlines(code, period, slot = 'left') {
+  if (!code || !isMinuteKlinePeriod(period)) return;
+  const stock = appState.activeDetailStock;
+  if (!stock || stock.code !== code) return;
+  // 需求REQ-034: 只有「本次确实取回了新数据」才重绘，
+  // 否则「重绘 → 再次调用本函数 → 缓存命中 → 再重绘」会形成微任务自触发死循环
+  const before = ((stock.minute_kline_loaders || {})[period]) || null;
+  const entry = await loadMinuteKlineData(stock, period, { code: code, isIndex: false });
+  if (entry === before) return;
+  // 仅当仍停留在同一详情对象与该面板的同一颗粒度时重绘，避免打断用户其他视图
+  const panel = panelBySlot(slot);
+  if (appState.activeDetailStock === stock && panelPeriodKey(panel.st) === period && panel.visible) {
+    renderChartPanel(panel.slot);
+  }
+}
+
+async function loadIndexMinuteKlines(code, period) {
+  if (!code || !isMinuteKlinePeriod(period)) return;
+  const indexData = indexState.activeIndex;
+  if (!indexData || indexData.code !== code) return;
+  await loadMinuteKlineData(indexData, period, { code: code, isIndex: true });
+  if (indexState.activeIndex === indexData && indexState.period === period) {
+    renderActiveIndexChart();
+  }
+}
+
+function currentMinuteKlineBars(owner, period) {
+  const entry = ((owner || {}).minute_kline_loaders || {})[period] || {};
+  return (Array.isArray(entry.bars) && entry.bars.length > 0) ? entry.bars : null;
+}
+
+async function loadIntradayChanlun(code, slot = 'left') {
   if (!code) return;
   // 需求REQ-024: 缓存必须绑在「当前详情对象」上，而非仅按代码判断 ——
   // 关闭详情再重新打开会得到全新的 stock 对象，此时旧的代码级缓存会让分时缠论永远不再拉取。
@@ -4341,43 +4697,304 @@ async function loadIntradayChanlun(code) {
     if (!stock || stock.code !== code) return;
     stock.intraday_chanlun = json.data || null;
     appState.intradayChanlunCode = code;
-    // 仅当仍停留在分时 Tab 时重绘，避免打断用户在其他周期的视图
-    if (appState.chartPeriod === 'timeline' && appState.activeDetailStock === stock) {
-      renderActiveStockChart();
+    // 仅当面板仍停留在分时维度（当日分时 / 重合图）时重绘，避免打断用户在其他颗粒度的视图
+    const panel = panelBySlot(slot);
+    const needsIntraday = panel.st.minuteSub === 'timeline' || panel.st.overlayIntraday;
+    if (appState.activeDetailStock === stock && panel.visible && needsIntraday) {
+      renderChartPanel(panel.slot);
     }
   } catch (err) {
     const stock = appState.activeDetailStock;
     if (stock && stock.code === code) {
       stock.intraday_chanlun = { status: 'unavailable', error: err.message, counts: {} };
-      if (appState.chartPeriod === 'timeline') renderActiveStockChart();
+      // 记录「已尝试」，避免「渲染 → 重试请求 → 再渲染」的自触发循环；不可用原因仍如实展示
+      appState.intradayChanlunCode = code;
+      const panel = panelBySlot(slot);
+      if (panel.st.minuteSub === 'timeline' && panel.visible) renderChartPanel(panel.slot);
     }
   } finally {
     if (appState.intradayChanlunPending === code) appState.intradayChanlunPending = null;
   }
 }
 
+/** 需求REQ-034: 重绘个股详情的全部图面板（左＝分时维度，右＝K线维度；任一可单独占满整行） */
 function renderActiveStockChart() {
-  renderChanlunLegend(appState.activeDetailStock?.chanlun);
-  const stock = appState.activeDetailStock;
-  if (!stock) return;
-  const dateBar = document.getElementById('klineDateRangeBar');
-  if (dateBar) dateBar.style.display = appState.chartPeriod === 'timeline' ? 'none' : 'flex';
+  PANEL_SLOTS.forEach(slot => renderChartPanel(slot));
+}
 
-  const width = 860;
-  const height = 440;
-  const mainHeight = 270;
-  const subHeight = 110;
+/** 需求REQ-034: 面板行布局同步（两个面板可见时左右平分，单个可见时占满整行） */
+function syncChartPanelRowLayout() {
+  const row = document.getElementById('chartPanelRow');
+  if (row) {
+    const visibleCount = PANEL_SLOTS.filter(s => chartPanels[s].visible).length;
+    row.classList.toggle('single-panel', visibleCount <= 1);
+    row.classList.toggle('dual-panel', visibleCount >= 2);
+  }
+  PANEL_SLOTS.forEach(slot => {
+    const wrap = document.getElementById(chartPanels[slot].panelId);
+    if (wrap) wrap.hidden = !chartPanels[slot].visible;
+  });
+  const addMinute = document.getElementById('btnAddMinutePanel');
+  if (addMinute) addMinute.hidden = chartPanels.left.visible;
+  const addKline = document.getElementById('btnAddKlinePanel');
+  if (addKline) addKline.hidden = chartPanels.right.visible;
+}
+
+/** 需求REQ-034: 面板内各控件选中态与文案同步（Tab / 副图 / 自动线 / 画线工具） */
+function syncPanelToolbar(panel) {
+  const st = panel.st;
+
+  if (panel.dimension === 'minute') {
+    const subCtrl = document.getElementById('minuteSubControl');
+    if (subCtrl) {
+      subCtrl.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-sub') === st.minuteSub);
+      });
+    }
+  } else {
+    const groupCtrl = document.getElementById('klineGroupControl');
+    if (groupCtrl) {
+      groupCtrl.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-group') === st.klineGroup);
+      });
+    }
+    const unit = (KLINE_GROUP_MAP[st.klineGroup] || KLINE_GROUPS[0]).unit;
+    const countCtrl = document.getElementById('klineCountControl');
+    if (countCtrl) {
+      countCtrl.innerHTML = KLINE_COUNT_TIERS.map(n =>
+        `<button type="button" class="seg-btn ${st.klineCount === n ? 'active' : ''}" data-count="${n}"
+                 onclick="switchKlineCount(${n})">${n}${unit}K线</button>`
+      ).join('') + `<span class="chart-count-hint" id="klineCountHint">当前 ${st.klineCount} 根 / 全部 ${st.availableCount || 0} 根</span>`;
+    }
+  }
+
+  // 需求REQ-040: 买卖点等级按钮（等级 <= 当前等级的按钮全部高亮，直观表达「选 3 即含 1、2」）
+  // 同时把后端真实识别数量写进按钮，识别不到就如实标注 0，不以推测补造。
+  [['buy', 'Buy', st.bsBuyLevel], ['sell', 'Sell', st.bsSellLevel]].forEach(([side, cap, raw]) => {
+    const level = Number(raw) || 0;
+    const availability = panelBsAvailability(panel.slot, side);
+    for (let i = 1; i <= 3; i++) {
+      const btn = document.getElementById(`btnBs${cap}${i}_${panel.slot}`);
+      if (!btn) continue;
+      if (btn.dataset.tip === undefined) btn.dataset.tip = btn.getAttribute('title') || '';
+      const count = availability.counts[i] || 0;
+      const active = level > 0 && i <= level;
+      btn.classList.toggle('active', active);
+      btn.classList.toggle('bs-level-empty', active && count === 0);
+      btn.dataset.count = String(count);
+      const note = !availability.hasAnalysis
+        ? (availability.reason || '本颗粒度缠论判定未获取（不渲染任何标记，不伪造）')
+        : (count === 0 ? '本图未识别到符合条件的该类买卖点（严格按缠论定义判定）' : `本图已识别 ${count} 个`);
+      btn.setAttribute('title', `${btn.dataset.tip}｜${note}`);
+    }
+  });
+
+  const subCtrl = document.getElementById(panel.subplotControlId);
+  if (subCtrl) {
+    subCtrl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-subplot') === st.subplot);
+    });
+  }
+
+  const autoCtrl = document.getElementById(panel.autoCountControlId);
+  if (autoCtrl) {
+    autoCtrl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.getAttribute('data-count'), 10) === (st.autoLinesCount || 0));
+    });
+  }
+
+  const hlineBtn = document.getElementById(panel.hlineBtnId);
+  if (hlineBtn) {
+    hlineBtn.classList.toggle('active', !!st.drawHLineMode);
+    hlineBtn.innerHTML = st.drawHLineMode ? '✏️ 点击图表放置水平线...' : '📏 画水平线';
+  }
+
+  const chanBtn = document.getElementById(`btnChanlunDraw_${panel.slot}`);
+  if (chanBtn) chanBtn.classList.toggle('active', !!st.showChanlunDraw);
+
+  const amtBtn = document.getElementById(`btnAmtDraw_${panel.slot}`);
+  if (amtBtn) amtBtn.classList.toggle('active', !!appState.showAmtDraw);
+
+  const effortBtn = document.getElementById(`btnEffortDraw_${panel.slot}`);
+  if (effortBtn) effortBtn.classList.toggle('active', !!appState.showEffortDraw);
+
+  const overlayBtn = document.getElementById('btnOverlayIntraday');
+  if (overlayBtn) {
+    const usable = panel.dimension === 'kline' && st.klineGroup === 'daily';
+    overlayBtn.disabled = !usable;
+    overlayBtn.classList.toggle('active', usable && !!st.overlayIntraday);
+    overlayBtn.title = usable
+      ? '把当日分时折线与日K叠加在同一价格轴上对比（分时横向铺满，时间轴与日K不对应）'
+      : '重合图仅在「日线图」颗粒度下可用';
+  }
+}
+
+/** 需求REQ-041: 需要「现场提交K线判定」的颗粒度 → 缓存键（日线与当日分时走后端既有入口，不在此列） */
+function panelChanlunCacheKey(st) {
+  if (!st) return null;
+  if (st.dimension === 'minute') return st.minuteSub === 'm5' ? 'm5' : null;
+  if (st.klineGroup === 'weekly') return 'weekly';
+  if (st.klineGroup === 'quarterly') return 'quarterly';
+  return null;
+}
+
+/** 需求REQ-041: 图上买卖点摘要文案（所属级别 + 六类真实识别数量）
+ *  无分析数据、或用户已把买卖点全部关闭时返回 null（不画任何摘要，也不补造数字）。 */
+function chanlunBsSummaryText(analysis, periodKey) {
+  if (!analysis || !Array.isArray(analysis.buy_sell_points) || !chartBsLevelActive()) return null;
+  const counts = analysis.counts || {};
+  const info = CHANLUN_BS_TYPE_ORDER.map(([key, label]) => `${label} ${Number(counts[key]) || 0}`).join(' · ');
+  return `☯️ 自动标记买卖点（${chanlunLevelLabel(analysis, periodKey)}）：${info}`;
+}
+
+/** 需求REQ-041: 各颗粒度缠论结果所属级别（必须显式标注，避免与日线信号混读） */
+const CHANLUN_LEVEL_LABELS = {
+  weekly: '周线级别', quarterly: '季线级别', m5: '5分级别', intraday: '分时级别', daily: '日线级别'
+};
+
+/** 需求REQ-041: 图上买卖点标注顺序（买 1/2/3、卖 1/2/3），计数一律取后端真实识别结果 */
+const CHANLUN_BS_TYPE_ORDER = [
+  ['buy1', '1买'], ['buy2', '2买'], ['buy3', '3买'],
+  ['sell1', '1卖'], ['sell2', '2卖'], ['sell3', '3卖']
+];
+
+function chanlunLevelLabel(analysis, periodKey) {
+  const explicit = analysis && analysis.level;
+  if (explicit && CHANLUN_LEVEL_LABELS[explicit]) return CHANLUN_LEVEL_LABELS[explicit];
+  return CHANLUN_LEVEL_LABELS[{ klinedaily: 'daily', timeline: 'intraday' }[periodKey]] || '';
+}
+
+/** 需求REQ-041: 构造提交给 /api/chanlun/bars 的真实K线序列（周/季聚合K线、5分K线） */
+function buildPanelChanlunPayload(stock, st) {
+  const key = panelChanlunCacheKey(st);
+  if (!stock || !key) return null;
+  const bars = panelAvailableBars(stock, st) || [];
+  if (!bars.length) return null;
+  const normalized = [];
+  for (const bar of bars) {
+    const open = Number(bar.open), close = Number(bar.close), high = Number(bar.high), low = Number(bar.low);
+    if (![open, close, high, low].every(v => Number.isFinite(v) && v > 0)) return null;   // 价格不完整则不发请求，绝不让后端按缺失值判定
+    // 分析要求日期唯一且递增：分钟K线以「日期 时间」为键（与后端分时缠论同一口径）
+    const stamp = bar.time ? `${bar.date} ${bar.time}` : bar.date;
+    normalized.push({ date: stamp, open, close, high, low, volume: Number(bar.volume) || 0 });
+  }
+  return { level: key, bars: normalized };
+}
+
+/**
+ * 需求REQ-041: 按需为「周线/季线/5分K线」取缠论判定（唯一取数入口）
+ * 口径：只把本页面已获取的真实K线上报给后端同一套 analyze_bars 现场计算，不落库、不臆造；
+ *      失败时记录不可用原因并如实展示，绝不重试到死循环（pending + 结果缓存双重闸门）。
+ */
+async function loadPanelChanlun(stock, st, slot = 'right') {
+  const key = panelChanlunCacheKey(st);
+  if (!stock || !key) return;
+  if (!stock.group_chanlun) stock.group_chanlun = {};
+  if (stock.group_chanlun[key]) return;                                  // 已有结果（含失败原因）不再重复请求
+  if (stock.group_chanlun_pending && stock.group_chanlun_pending[key]) return;
+  const payload = buildPanelChanlunPayload(stock, st);
+  if (!payload) return;
+  stock.group_chanlun_pending = stock.group_chanlun_pending || {};
+  stock.group_chanlun_pending[key] = true;
+  const isCurrent = () => appState.activeDetailStock === stock;
+  try {
+    const res = await fetch('/api/chanlun/bars', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ code: stock.code, level: payload.level, bars: payload.bars })
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error((json && json.message) || `缠论判定请求失败（HTTP ${res.status}）`);
+    if (!isCurrent()) return;
+    stock.group_chanlun[key] = (json && json.data) || null;
+    const panel = panelBySlot(slot);
+    if (panel.visible && panelChanlunCacheKey(panel.st) === key) renderChartPanel(panel.slot);
+  } catch (err) {
+    if (isCurrent()) {
+      stock.group_chanlun[key] = {
+        status: 'unavailable', level: key,
+        error: err.message || '缠论判定请求失败，本颗粒度暂无可核验的买卖点',
+        counts: {}
+      };
+      const panel = panelBySlot(slot);
+      if (panel.visible && panelChanlunCacheKey(panel.st) === key) renderChartPanel(panel.slot);
+    }
+  } finally {
+    if (stock.group_chanlun_pending) delete stock.group_chanlun_pending[key];
+  }
+}
+
+/** 需求REQ-034/REQ-041: 当前面板颗粒度对应的缠论分析结果（无对应数据源时如实返回 null，不伪造图线）
+ *  日线＝后端详情内的日线缠论；当日分时＝后端分时缠论端点；
+ *  周线/季线/5分K线＝把本页面真实K线提交给 /api/chanlun/bars 现场计算（见 loadPanelChanlun）。 */
+function panelChanlunAnalysis(stock, st) {
+  if (!stock) return null;
+  const period = panelPeriodKey(st);
+  if (period === 'timeline') return stock.intraday_chanlun || null;
+  if (period === 'klinedaily') return stock.chanlun || null;
+  const key = panelChanlunCacheKey(st);
+  if (!key) return null;
+  return (stock.group_chanlun || {})[key] || null;
+}
+
+/** 需求REQ-036: 重合图（方案A）—— 日K为背景，当日分时折线叠加，共用同一价格轴 */
+function panelOverlayTimeline(stock, st) {
+  if (!st.overlayIntraday || st.dimension !== 'kline' || st.klineGroup !== 'daily') return null;
+  const tl = (stock && stock.timeline_data) || {};
+  const items = Array.isArray(tl.items) ? tl.items.filter(it => Number.isFinite(Number(it.price))) : [];
+  if (!items.length) {
+    return { items: [], preClose: null, note: '当日真实分时来源当前不可用，重合图暂无可叠加的分时曲线' };
+  }
+  return {
+    items: items,
+    preClose: Number(tl.pre_close || stock.prev_close || stock.price),
+    note: null
+  };
+}
+
+/** 需求REQ-034: 渲染单个图面板 */
+function renderChartPanel(slot) {
+  const panel = panelBySlot(slot);
+  const host = document.getElementById(panel.containerId);
+  syncChartPanelRowLayout();
+  if (!host) return;
+  if (!panel.visible) { host.innerHTML = ''; return; }
+
+  const stock = appState.activeDetailStock;
+  const st = panel.st;
+  syncPanelToAppState(panel);
+  syncPanelToolbar(panel);
+
+  // 需求3/REQ-034: 自定义日期区间只对「日/周/季」K线生效（当日分时与分钟K线为区间接口返回，不再按日期过滤）
+  const dateBar = document.getElementById('klineDateRangeBar');
+  if (dateBar) {
+    const showDateBar = panel.dimension === 'kline' && !isMinuteKlinePeriod(panelPeriodKey(st));
+    dateBar.style.display = showDateBar ? 'flex' : 'none';
+  }
+
+  if (!stock) {
+    host.innerHTML = '<div style="padding: 2.5rem; color: var(--text-muted);">图表加载中...</div>';
+    persistPanelFromAppState(panel);
+    return;
+  }
+
+  // 需求3: k线图的整体大小放大(当前太小,看的不清晰)，从 860x440 放大至 920x540，主图高度由 270 提升至 350
+  const width = 920;
+  const height = 540;
+  const mainHeight = 350;
+  const subHeight = 125;
   const margin = { top: 20, right: 65, bottom: 25, left: 65 };
 
-  if (appState.chartPeriod === 'timeline') {
+  // ---------- 分时维度：当日分时（固定全天全景，不参与根数缩放） ----------
+  if (panelIsTimeline(st)) {
     const tlData = stock.timeline_data || { pre_close: stock.prev_close || stock.price, items: [] };
-    let items = (tlData.items && Array.isArray(tlData.items) && tlData.items.length > 0) 
-      ? tlData.items 
-      : null;
+    const items = (tlData.items && Array.isArray(tlData.items) && tlData.items.length > 0) ? tlData.items : null;
+    st.availableCount = items ? items.length : 0;
 
     // 铁律: 严禁伪造假分时，无数据直接以文案清晰提示
-    if (!items || items.length === 0) {
-      dom.chartSvgContainer.innerHTML = `
+    if (!items) {
+      host.innerHTML = `
         <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
           <div style="font-size: 2.2rem; margin-bottom: 0.8rem;">⏱️</div>
           <div style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.4rem;">暂无当日真实分时数据源</div>
@@ -4385,87 +5002,154 @@ function renderActiveStockChart() {
         </div>
       `;
       hideTooltip();
+      renderLineLayerPanel(panel, null);
+      persistPanelFromAppState(panel);
       return;
     }
 
     const preClose = Number(tlData.pre_close || stock.prev_close || stock.price || items[0].price);
 
     // 需求REQ-024: 分时级缠论画线（后端同一套缠论算法，前端口径为「分时级别」）
-    loadIntradayChanlun(stock.code);
+    loadIntradayChanlun(stock.code, slot);
 
-    // 需求1: 分时图不需要放大缩小时间区间，固定看全分时图 (09:30-15:00 完整全景)
-    dom.chartSvgContainer.innerHTML = generateTimelineSVG(items, preClose, appState.chartSubplot, width, height, mainHeight, subHeight, margin, stock.intraday_chanlun);
-    bindChartCrosshair('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
-    bindChartZoomAndDrawing('timeline', items, preClose, width, height, mainHeight, subHeight, margin);
-  } else {
-    // 需求5: 所有K线图必须源自真实数据，如果没有真实数据就提示无数据源
-    let klines = (stock.daily_bars && Array.isArray(stock.daily_bars) && stock.daily_bars.length > 0) 
-      ? stock.daily_bars 
-      : null;
-
-    if (!klines || klines.length === 0) {
-      dom.chartSvgContainer.innerHTML = `
-        <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
-          <div style="font-size: 2.2rem; margin-bottom: 0.8rem;">⚠️</div>
-          <div style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.4rem;">暂无官方真实 K 线数据源</div>
-          <div style="font-size: 0.85rem; color: var(--text-secondary);">该标的尚未获取到公开历史日K数据，系统严格遵循金融合规底座，绝不伪造虚假走势。</div>
-        </div>
-      `;
-      hideTooltip();
-      return;
+    host.innerHTML = generateTimelineSVG(items, preClose, st.subplot, width, height, mainHeight, subHeight, margin, stock.intraday_chanlun, slot);
+    bindChartCrosshair('timeline', items, preClose, width, height, mainHeight, subHeight, margin, slot);
+    bindChartZoomAndDrawing('timeline', items, preClose, width, height, mainHeight, subHeight, margin, slot);
+    renderLineLayerPanel(panel, stock.intraday_chanlun);
+    persistPanelFromAppState(panel);
+    if (!stock.kline_daily || !stock.kline_daily.length) {
+      // 若无K线，则根据分时items更新总和
+      updateSubplotSummaryTotal(items.map(it => ({ volume: it.volume, turnover_rate: it.turnover_rate, amount_yi: it.amount_yi })), st.subplot);
     }
-    
-    // 需求3: K线支持自定义时间区间筛选
+    return;
+  }
+
+  // ---------- K线维度（日/周/季）与分时维度的分钟K线 ----------
+  const period = panelPeriodKey(st);
+  const useMinute = isMinuteKlinePeriod(period);
+  let allBars = panelAvailableBars(stock, st);
+  // 需求REQ-028/034: 仅在本颗粒度尚无数据时按需拉取；数据已到位（或已失败并记明原因）时不再重复请求，
+  // 避免「渲染 → 请求 → 渲染」相互触发
+  if (useMinute && (!allBars || allBars.length === 0)) {
+    loadMinuteKlines(stock.code, period, slot);
+  }
+
+  if (!allBars || allBars.length === 0) {
+    const minuteLabel = { klinem1: '1 分钟', klinem5: '5 分钟', kline5m: '5 分钟', kline15m: '15 分钟', kline30m: '30 分钟' }[period] || '';
+    const entry = (stock.minute_kline_loaders || {})[period] || {};
+    const loader = useMinute && entry.loading === true;
+    const minuteError = entry.error || stock.minute_kline_error;
+    const groupLabel = (KLINE_GROUP_MAP[st.klineGroup] || KLINE_GROUPS[0]).label;
+    host.innerHTML = `
+      <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
+        <div style="font-size: 2.2rem; margin-bottom: 0.8rem;">${loader ? '⏳' : '⚠️'}</div>
+        <div style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.4rem;">${loader ? `正在调取 ${minuteLabel}K线真实数据…` : (useMinute ? `暂无官方真实 ${minuteLabel}K线数据源` : `暂无官方真实${groupLabel}数据源`)}</div>
+        <div style="font-size: 0.85rem; color: var(--text-secondary);">${loader ? '数据取自公开行情来源的分钟K线接口，不生成任何推测K线。' : (useMinute ? (minuteError || '该标的的分钟K线来源当前不可用，系统严格遵循金融合规底座，绝不伪造分钟K线。') : '该标的尚未获取到公开历史日K数据，无法聚合出周/季K线；系统严格遵循金融合规底座，绝不伪造虚假走势。')}</div>
+      </div>
+    `;
+    st.availableCount = 0;
+    hideTooltip();
+    renderLineLayerPanel(panel, null);
+    persistPanelFromAppState(panel);
+    return;
+  }
+
+  // 需求3: K线支持自定义时间区间筛选（分钟K线为区间接口返回，不再按日期二次过滤）
+  if (panel.dimension === 'kline' && !useMinute) {
     const sDate = dom.klineStartDate ? dom.klineStartDate.value : '';
     const eDate = dom.klineEndDate ? dom.klineEndDate.value : '';
     if (sDate || eDate) {
-      klines = klines.filter(k => {
+      allBars = allBars.filter(k => {
         if (sDate && k.date < sDate) return false;
         if (eDate && k.date > eDate) return false;
         return true;
       });
-      if (klines.length === 0) {
-        dom.chartSvgContainer.innerHTML = '<div style="padding:2rem">所选日期范围内没有 K 线，请调整日期。</div>';
+      if (allBars.length === 0) {
+        st.availableCount = 0;
+        host.innerHTML = '<div style="padding:2rem">所选日期范围内没有 K 线，请调整日期。</div>';
         hideTooltip();
+        renderLineLayerPanel(panel, null);
+        persistPanelFromAppState(panel);
         return;
       }
-    } else {
-      // 需求REQ-022: 标准视窗 200 根；缩放只改根数，且缩放上限严格为 200 根
-      let winCount = STANDARD_KLINE_VIEW_COUNT;
-      if (appState.chartCustomZoomCount > 0) {
-        winCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, appState.chartCustomZoomCount));
-      } else if (appState.chartPeriod === 'kline5') winCount = 5;
-      else if (appState.chartPeriod === 'kline10') winCount = 10;
-      else if (appState.chartPeriod === 'kline20') winCount = 20;
-      else if (appState.chartPeriod === 'kline60') winCount = 60;
-      else if (appState.chartPeriod === 'kline120') winCount = 120;
-      else if (appState.chartPeriod === 'kline180') winCount = 180;
-      else winCount = STANDARD_KLINE_VIEW_COUNT;
-
-      if (klines.length > winCount) {
-        klines = klines.slice(klines.length - winCount);
-      }
     }
+  }
 
-    dom.chartSvgContainer.innerHTML = generateDailyKlineSVG(klines, appState.chartSubplot, width, height, mainHeight, subHeight, margin, stock.chanlun);
-    bindChartCrosshair('daily', klines, stock.prev_close || stock.price, width, height, mainHeight, subHeight, margin);
-    bindChartZoomAndDrawing('daily', klines, stock.prev_close || stock.price, width, height, mainHeight, subHeight, margin);
+  // 需求REQ-035: 视窗根数 N（下限 30 / 上限＝全部可用根数）；不足则右侧留白
+  st.availableCount = allBars.length;
+  const win = panelWindowBars(allBars, st);
+  const klines = win.bars;
+
+  // 需求REQ-031: 当前显示窗口内的总成交额（图上所有K线成交额之和），随放大缩小变动
+  appState.windowAmountSummary = computeWindowTotalAmount(klines.map(withResolvedAmount));
+
+  // 需求REQ-041: 周线/季线/5分K线没有后端落库的缠论结果，改为把本页面真实K线提交给后端现场判定；
+  // 命中缓存（含失败原因）时本函数直接返回，不会造成「渲染→请求→渲染」自触发。
+  loadPanelChanlun(stock, st, slot);
+
+  const analysis = panelChanlunAnalysis(stock, st);
+  const overlay = panelOverlayTimeline(stock, st);
+
+  host.innerHTML = generateDailyKlineSVG(klines, st.subplot, width, height, mainHeight, subHeight, margin, analysis, slot, overlay, period);
+  bindChartCrosshair('daily', klines, stock.prev_close || stock.price, width, height, mainHeight, subHeight, margin, slot);
+  bindChartZoomAndDrawing('daily', klines, stock.prev_close || stock.price, width, height, mainHeight, subHeight, margin, slot);
+  renderLineLayerPanel(panel, analysis);
+  persistPanelFromAppState(panel);
+
+  if (panel.slot === 'right') renderChanlunLegend(analysis);
+
+  // 需求1: 更新幅图联动条右侧的「幅图总和」
+  updateSubplotSummaryTotal(klines, st.subplot);
+}
+
+/**
+ * 需求1: 计算并更新幅图指标「总和」
+ */
+function updateSubplotSummaryTotal(klines, subplotType) {
+  const sumEl = document.getElementById('chartSubplotSummaryVal');
+  if (!sumEl) return;
+  if (!klines || !klines.length) {
+    sumEl.innerText = '--';
+    return;
+  }
+
+  const isVol = (subplotType === 'vol');
+  const isTurn = (subplotType === 'turnover_rate');
+
+  if (isTurn) {
+    const totalTurn = klines.reduce((acc, d) => acc + (Number(d.turnover_rate) || 0), 0);
+    sumEl.innerHTML = `<span style="color: #c084fc;">区间总换手率: ${totalTurn.toFixed(2)}%</span> <span style="font-size: 0.78rem; color: #94a3b8;">(${klines.length}周期)</span>`;
+  } else if (isVol) {
+    const totalVol = klines.reduce((acc, d) => acc + (Number(d.volume) || 0), 0);
+    const fmtVol = (val) => {
+      if (val >= 100000000) return (val / 100000000).toFixed(2) + ' 亿手';
+      if (val >= 10000) return (val / 10000).toFixed(1) + ' 万手';
+      return Math.round(val) + ' 手';
+    };
+    sumEl.innerHTML = `<span style="color: #38bdf8;">视窗总成交量: ${fmtVol(totalVol)}</span> <span style="font-size: 0.78rem; color: #94a3b8;">(${klines.length}周期)</span>`;
+  } else {
+    const totalAmt = computeWindowTotalAmount(klines);
+    const amtStr = totalAmt && Number.isFinite(totalAmt.totalAmountYi) && totalAmt.days > 0 ? `${totalAmt.totalAmountYi.toFixed(2)} 亿元` : '--';
+    sumEl.innerHTML = `<span style="color: #f59e0b;">视窗总成交额: ${amtStr}</span> <span style="font-size: 0.78rem; color: #94a3b8;">(${klines.length}周期)</span>`;
   }
 }
 
 /**
  * 绑定鼠标悬浮十字光标与图1浮动摘要信息卡
  */
-function bindChartCrosshair(mode, dataList, preClose, w, h, mh, sh, m) {
-  const svg = document.getElementById('stockInteractiveSvg');
+function bindChartCrosshair(mode, dataList, preClose, w, h, mh, sh, m, slot = 'right') {
+  const svg = document.getElementById(`stockInteractiveSvg_${slot}`);
   if (!svg || !dataList || dataList.length === 0) return;
 
   const innerW = w - m.left - m.right;
   const n = dataList.length;
-  const stepX = innerW / Math.max(1, mode === 'timeline' ? n - 1 : n);
+  // 需求REQ-029/035: K线模式必须按本面板当前视窗根数的槽宽定位（否则十字光标与K线错位）
+  const stepX = mode === 'timeline'
+    ? innerW / Math.max(1, n - 1)
+    : klineSlotWidth(w, m, n, currentKlineSlotBasis());
 
-  const crosshairX = document.getElementById('crosshairX');
-  const crosshairY = document.getElementById('crosshairY');
+  const crosshairX = document.getElementById(`crosshairX_${slot}`);
+  const crosshairY = document.getElementById(`crosshairY_${slot}`);
 
   svg.addEventListener('mousemove', (e) => {
     const rect = svg.getBoundingClientRect();
@@ -4502,8 +5186,8 @@ function bindChartCrosshair(mode, dataList, preClose, w, h, mh, sh, m) {
       crosshairY.style.display = 'block';
     }
 
-    // 弹出与渲染摘要卡 (严格对应图1)
-    renderTooltip(mode, item, idx > 0 ? dataList[idx - 1] : null, preClose);
+    // 需求3: 弹出与渲染摘要卡，就近跟随鼠标位置，带边界智能避让
+    renderTooltip(mode, item, idx > 0 ? dataList[idx - 1] : null, preClose, e, slot);
   });
 
   svg.addEventListener('mouseleave', () => {
@@ -4514,118 +5198,155 @@ function bindChartCrosshair(mode, dataList, preClose, w, h, mh, sh, m) {
 /**
  * 需求1: 绑定鼠标滚轮无级缩放与点击画水平线 (压力/支撑位) 交互
  */
-function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
-  const svg = document.getElementById('stockInteractiveSvg');
+function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m, slot = 'right') {
+  const panel = panelBySlot(slot);
+  const svg = document.getElementById(`stockInteractiveSvg_${slot}`);
   if (!svg || !dataList || dataList.length === 0) return;
 
-  // 1. 鼠标滚轮缩放逻辑 (需求1: 仅日K线模式下启用滚轮缩放；分时图固定全景全天展示)
-  svg.addEventListener('wheel', (e) => {
-    if (mode === 'timeline') {
-      // 需求1: 分时图不需要放大缩小时间区间，禁用滚轮缩放并放行页面正常滚动或阻止图表跳动
-      return;
+  // 需求1: 移除K线图手势缩放(双指捏合/张开手势缩放与滚轮缩放)，只支持点击浮动的 +- 按钮进行扩大和缩小图形
+  // 需求2: K线图只支持左滑和右滑手势让图形左右滑动平移查看历史/最新走势
+  let isDragging = false;
+  let dragMoved = false;
+  let mouseStartX = 0;
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  // PC 鼠标按住左键拖拽平移视口 (左滑右滑)
+  svg.addEventListener('mousedown', (e) => {
+    if (mode === 'timeline' || appState.drawHLineMode) return;
+    if (e.button !== 0) return;
+    isDragging = true;
+    dragMoved = false;
+    mouseStartX = e.clientX;
+    const host = document.getElementById(panel.containerId);
+    if (host) host.classList.add('is-panning');
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const deltaX = e.clientX - mouseStartX;
+    if (Math.abs(deltaX) >= 8) {
+      dragMoved = true;
+      const bars = Math.round(deltaX / 10);
+      if (bars !== 0) {
+        // 右拖 deltaX > 0: 看左边更早K线 (panOffset 增加)
+        // 左拖 deltaX < 0: 看右边较新K线 (panOffset 减少)
+        panKlineChart(bars, slot);
+        mouseStartX = e.clientX;
+      }
     }
-    e.preventDefault();
-    const stock = appState.activeDetailStock;
-    if (!stock) return;
+  });
 
-    // 需求REQ-022: 缩放只改同一页面的 K 线根数；下限 5 根、上限严格 200 根
-    let curCount = appState.chartCustomZoomCount > 0
-      ? appState.chartCustomZoomCount
-      : (appState.chartZoomWindow === '5' ? 5
-        : appState.chartZoomWindow === '10' ? 10
-        : appState.chartZoomWindow === '20' ? 20
-        : appState.chartZoomWindow === '60' ? 60
-        : appState.chartZoomWindow === '120' ? 120
-        : appState.chartZoomWindow === '180' ? 180
-        : STANDARD_KLINE_VIEW_COUNT);
-    curCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, curCount));
-
-    // 降低灵敏度：从原先的 12% 降到 4%，保证平滑细腻缩放
-    const step = Math.max(1, Math.round(curCount * 0.04));
-    if (e.deltaY < 0) {
-      // 滚轮向上 -> 放大 -> 数量变少 -> 区间拉近 (最小 5 根)
-      curCount = Math.max(MIN_KLINE_VIEW_COUNT, curCount - step);
-    } else {
-      // 滚轮向下 -> 缩小 -> 数量变多 (上限 200 根)
-      curCount = Math.min(STANDARD_KLINE_VIEW_COUNT, curCount + step);
+  window.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      const host = document.getElementById(panel.containerId);
+      if (host) host.classList.remove('is-panning');
+      setTimeout(() => { dragMoved = false; }, 60);
     }
+  });
 
-    appState.chartCustomZoomCount = curCount;
-    hideTooltip();
-    renderActiveStockChart();
-  }, { passive: false });
+  // 移动端 Touch 单指水平滑动左滑/右滑手势平移（已彻底移除双指缩放手势）
+  svg.addEventListener('touchstart', (e) => {
+    if (mode === 'timeline') return;
+    if (e.touches.length === 1) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+
+  svg.addEventListener('touchmove', (e) => {
+    if (mode === 'timeline') return;
+    if (e.touches.length === 1 && !appState.drawHLineMode) {
+      // 单指平移：左滑看右边K线，右滑看左边K线
+      const curX = e.touches[0].clientX;
+      const curY = e.touches[0].clientY;
+      const deltaX = curX - touchStartX;
+      const deltaY = curY - touchStartY;
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+        const bars = Math.round(deltaX / 12);
+        if (bars !== 0) {
+          panKlineChart(bars, slot);
+          touchStartX = curX;
+          touchStartY = curY;
+        }
+      }
+    }
+  }, { passive: true });
 
   // 2. 点击交互：绘制水平辅助线 (压力/支撑线) + 需求REQ-015 重合辅助线置顶
+  //    需求REQ-034: 全部改动只落在本面板的图层模型上，另一个图完全不受影响
   svg.addEventListener('click', (e) => {
+    if (dragMoved) return; // 拖拽平移结束后不触发放置辅助线
     const rect = svg.getBoundingClientRect();
     const scaleY = h / rect.height;
     const scaleX = w / rect.width;
     const mouseY = (e.clientY - rect.top) * scaleY;
     const mouseX = (e.clientX - rect.left) * scaleX;
 
-    if (appState.drawHLineMode) {
-      // 仅在主图价格区域内生效
-      if (mouseY < m.top || mouseY > m.top + mh) return;
-      // 依据 Y 坐标反算价格
-      let priceVal = 0;
-      if (mode === 'timeline') {
-        const prices = dataList.map(d => d.price);
-        const maxPrice = Math.max(...prices, preClose * 1.002);
-        const minPrice = Math.min(...prices, preClose * 0.998);
-        const diff = Math.max(Math.abs(maxPrice - preClose), Math.abs(preClose - minPrice)) * 1.05;
-        const pTop = preClose + diff;
-        const pBottom = preClose - diff;
-        priceVal = pTop - ((mouseY - m.top) / mh) * (pTop - pBottom);
-      } else {
-        const highs = dataList.map(d => d.high);
-        const lows = dataList.map(d => d.low);
-        const pad = (Math.max(...highs) - Math.min(...lows)) * 0.08;
-        const pTop = Math.max(...highs) + pad;
-        const pBottom = Math.max(0.1, Math.min(...lows) - pad);
-        priceVal = pTop - ((mouseY - m.top) / mh) * (pTop - pBottom);
+    withChartPanel(slot, () => {
+      if (appState.drawHLineMode) {
+        // 仅在主图价格区域内生效
+        if (mouseY < m.top || mouseY > m.top + mh) return;
+        // 依据 Y 坐标反算价格
+        let priceVal = 0;
+        if (mode === 'timeline') {
+          const prices = dataList.map(d => d.price);
+          const maxPrice = Math.max(...prices, preClose * 1.002);
+          const minPrice = Math.min(...prices, preClose * 0.998);
+          const diff = Math.max(Math.abs(maxPrice - preClose), Math.abs(preClose - minPrice)) * 1.05;
+          const pTop = preClose + diff;
+          const pBottom = preClose - diff;
+          priceVal = pTop - ((mouseY - m.top) / mh) * (pTop - pBottom);
+        } else {
+          const highs = dataList.map(d => d.high);
+          const lows = dataList.map(d => d.low);
+          const pad = (Math.max(...highs) - Math.min(...lows)) * 0.08;
+          const pTop = Math.max(...highs) + pad;
+          const pBottom = Math.max(0.1, Math.min(...lows) - pad);
+          priceVal = pTop - ((mouseY - m.top) / mh) * (pTop - pBottom);
+        }
+
+        // 需求2: 针对手动放置的辅助线，同样精准统计交汇交易日成交总额 (Low <= priceVal <= High)
+        let crossedAmountYi = 0;
+        let crossedDays = 0;
+        dataList.forEach(item => {
+          const hgt = Number(item.high !== undefined ? item.high : item.price);
+          const lgt = Number(item.low !== undefined ? item.low : item.price);
+          if (lgt <= priceVal && priceVal <= hgt) {
+            crossedDays++;
+            let amt = 0;
+            if (item.amount_yi != null) {
+              amt = Number(item.amount_yi);
+            } else if (item.amount != null) {
+              amt = Number(item.amount) / 100000000.0;
+            }
+            crossedAmountYi += amt;
+          }
+        });
+
+        // 需求REQ-014: 手动画线按价格归属自动落到「压力线」或「支撑线」模型，两个模型独立可清除
+        const isPressure = priceVal >= preClose;
+        const layerKey = isPressure ? 'manual_up' : 'manual_down';
+        const newLine = addChartLine(layerKey, {
+          id: `${layerKey}_${Date.now()}_${Math.round(priceVal * 100)}`,
+          y: mouseY,
+          price: Number(priceVal.toFixed(2)),
+          type: isPressure ? '压力位' : '支撑位',
+          crossedDays: crossedDays,
+          crossedAmountYi: Number(crossedAmountYi.toFixed(2))
+        });
+        // 需求REQ-026: 交易面积锚定首个交汇日 → 今天（在 dataList 不可得成交额时为不完整口径）
+        appState.topLineId = newLine ? newLine.id : null;
+        if (newLine) attachTradeAreaToLines([newLine], dataList);
+
+        showChartToast(`已加入「${LINE_LAYER_META[layerKey].name}」模型`);
+        return;
       }
 
-      // 需求2: 针对手动放置的辅助线，同样精准统计交汇交易日成交总额 (Low <= priceVal <= High)
-      let crossedAmountYi = 0;
-      let crossedDays = 0;
-      dataList.forEach(item => {
-        const h = Number(item.high !== undefined ? item.high : item.price);
-        const l = Number(item.low !== undefined ? item.low : item.price);
-        if (l <= priceVal && priceVal <= h) {
-          crossedDays++;
-          let amt = 0;
-          if (item.amount_yi != null) {
-            amt = Number(item.amount_yi);
-          } else if (item.amount != null) {
-            amt = Number(item.amount) / 100000000.0;
-
-          }
-          crossedAmountYi += amt;
-        }
-      });
-
-      // 需求REQ-014: 手动画线按价格归属自动落到「压力线」或「支撑线」模型，两个模型独立可清除
-      const isPressure = priceVal >= preClose;
-      const layerKey = isPressure ? 'manual_up' : 'manual_down';
-      const newLine = addChartLine(layerKey, {
-        id: `${layerKey}_${Date.now()}_${Math.round(priceVal * 100)}`,
-        y: mouseY,
-        price: Number(priceVal.toFixed(2)),
-        type: isPressure ? '压力位' : '支撑位',
-        crossedDays: crossedDays,
-        crossedAmountYi: Number(crossedAmountYi.toFixed(2))
-      });
-      // 需求REQ-026: 交易面积锚定首个交汇日 → 今天（在 dataList 不可得成交额时为不完整口径）
-      appState.topLineId = newLine ? newLine.id : null;
-      if (newLine) attachTradeAreaToLines([newLine], dataList);
-
-      renderActiveStockChart();
-      showChartToast(`已加入「${LINE_LAYER_META[layerKey].name}」模型`);
-      return;
-    }
-
-    // 需求REQ-015: 非绘制模式下点击辅助线 → 置顶
-    handleChartLineClick(mouseX, mouseY, w, h, m, mh);
+      // 需求REQ-015: 非绘制模式下点击辅助线 → 置顶
+      handleChartLineClick(slot, mouseX, mouseY, w, h, m, mh);
+    });
   });
 }
 
@@ -4635,7 +5356,7 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m) {
  * 2. 命中线段本体：唯一命中直接置顶；多条重合（视觉上叠在一起）则轮换置顶，
  *    每次点击把当前最底层的一条提到最顶层，用户可逐条看清重合的全部辅助线。
  */
-function handleChartLineClick(mouseX, mouseY, w, h, m, mh) {
+function handleChartLineClick(slot, mouseX, mouseY, w, h, m, mh) {
   const lines = getVisibleChartLines().filter(l => Number.isFinite(l._svgY));
   if (!lines.length) return;
 
@@ -4646,7 +5367,7 @@ function handleChartLineClick(mouseX, mouseY, w, h, m, mh) {
     Math.abs(mouseY - l._svgY) <= 10
   );
   if (tagHits.length) {
-    bringChartLineToFront(tagHits[tagHits.length - 1]);
+    bringChartLineToFront(slot, tagHits[tagHits.length - 1]);
     return;
   }
 
@@ -4656,7 +5377,7 @@ function handleChartLineClick(mouseX, mouseY, w, h, m, mh) {
   if (!hits.length) return;
 
   if (hits.length === 1) {
-    bringChartLineToFront(hits[0]);
+    bringChartLineToFront(slot, hits[0]);
     return;
   }
 
@@ -4665,7 +5386,6 @@ function handleChartLineClick(mouseX, mouseY, w, h, m, mh) {
   const target = hits[0];
   target.zIndex = nextLineZIndex();
   appState.topLineId = target.id;
-  renderActiveStockChart();
   showChartToast(`重合 ${hits.length} 条 → 已置顶：${target.type} ¥${Number(target.price).toFixed(2)}`);
 }
 
@@ -4673,24 +5393,60 @@ function hideTooltip() {
   if (dom.chartTooltipBox) {
     dom.chartTooltipBox.style.display = 'none';
   }
-  const crosshairX = document.getElementById('crosshairX');
-  const crosshairY = document.getElementById('crosshairY');
-  if (crosshairX) crosshairX.style.display = 'none';
-  if (crosshairY) crosshairY.style.display = 'none';
+  PANEL_SLOTS.forEach(slot => {
+    const crosshairX = document.getElementById(`crosshairX_${slot}`);
+    const crosshairY = document.getElementById(`crosshairY_${slot}`);
+    if (crosshairX) crosshairX.style.display = 'none';
+    if (crosshairY) crosshairY.style.display = 'none';
+  });
+  const legacyX = document.getElementById('crosshairX');
+  const legacyY = document.getElementById('crosshairY');
+  if (legacyX) legacyX.style.display = 'none';
+  if (legacyY) legacyY.style.display = 'none';
 }
 
 /**
- * 严格复刻图1格式渲染浮动信息栏
+ * 需求3: 严格复刻图1格式渲染浮动信息栏，并就近跟随鼠标光标
  */
-function renderTooltip(mode, d, prevD, preClose) {
+function renderTooltip(mode, d, prevD, preClose, mouseEvent = null, slot = 'right') {
   if (!dom.chartTooltipBox || !d) return;
 
   dom.chartTooltipBox.style.display = 'block';
+
+  // 需求3: 格式塔接近原则 —— 浮动信息框紧随鼠标光标
+  if (mouseEvent && dom.modalChartWrapper) {
+    const wrapRect = dom.modalChartWrapper.getBoundingClientRect();
+    const cursorX = mouseEvent.clientX - wrapRect.left;
+    const cursorY = mouseEvent.clientY - wrapRect.top;
+
+    const boxW = 145;
+    const boxH = 210;
+    // 默认在光标右侧 16px，略微偏上 20px
+    let posX = cursorX + 16;
+    let posY = cursorY - 20;
+
+    // 边界检测：若靠近右边缘，自动翻转到光标左侧
+    if (posX + boxW > wrapRect.width - 10) {
+      posX = cursorX - boxW - 16;
+    }
+    // 边界检测：若靠近下边缘，自动上移
+    if (posY + boxH > wrapRect.height - 10) {
+      posY = Math.max(10, wrapRect.height - boxH - 10);
+    }
+    if (posY < 10) posY = 10;
+    if (posX < 10) posX = 10;
+
+    dom.chartTooltipBox.style.left = `${posX}px`;
+    dom.chartTooltipBox.style.top = `${posY}px`;
+  }
 
   let dateStr = '';
   let openP = 0, closeP = 0, highP = 0, lowP = 0;
   let chgPct = 0, ampPct = 0, volStr = '', amtStr = '', turnStr = '';
   const refClose = prevD ? (prevD.close || prevD.price) : preClose;
+
+  // 换手率统一权威计算：本周期成交量 ÷ 流通股本 × 100%
+  const rateVal = resolveItemTurnoverRate(d);
 
   if (mode === 'timeline') {
     dateStr = d.time || '15:00';
@@ -4702,9 +5458,9 @@ function renderTooltip(mode, d, prevD, preClose) {
     ampPct = null;
     volStr = formatVolume(d.volume);
     amtStr = formatAmountYi(d.amount_yi);
-    turnStr = d.turnover_rate==null ? '未获取' : `${formatReal(d.turnover_rate,2)}%`;
+    turnStr = rateVal > 0 ? `${rateVal.toFixed(2)}%` : (d.turnover_rate != null ? `${Number(d.turnover_rate).toFixed(2)}%` : '0.00%');
   } else {
-    // 日K线 (如 20260728)
+    // 日K线 / 周K / 季K (如 20260728)
     dateStr = (d.date || '—').replace(/-/g, '');
     openP = d.open;
     closeP = d.close;
@@ -4714,7 +5470,7 @@ function renderTooltip(mode, d, prevD, preClose) {
     ampPct = prevD && refClose > 0 ? (((highP - lowP) / refClose) * 100) : null;
     volStr = formatVolume(d.volume);
     amtStr = formatAmountYi(d.amount_yi);
-    turnStr = '未提供';
+    turnStr = rateVal > 0 ? `${rateVal.toFixed(2)}%` : (d.turnover_rate != null ? `${Number(d.turnover_rate).toFixed(2)}%` : '0.00%');
   }
 
   // 严格图1红涨绿跌配色
@@ -4744,27 +5500,10 @@ function renderTooltip(mode, d, prevD, preClose) {
   dom.ttTurnover.textContent = turnStr;
 }
 
-function formatVolume(vol) {
-  if (!vol || vol <= 0) return '0手';
-  if (vol >= 10000) {
-    return `${(vol / 10000).toFixed(2)}万`;
-  }
-  return `${Math.round(vol)}`;
-}
-
-function formatAmountYi(amtYi) {
-  if (amtYi === null || amtYi === undefined) return '未提供';
-  if (!amtYi || amtYi <= 0) return '0.00亿';
-  if (amtYi < 0.01) {
-    return `${(amtYi * 10000).toFixed(2)}万`;
-  }
-  return `${amtYi.toFixed(2)}亿`;
-}
-
 /**
  * 分时走势矢量 SVG 发生器
  */
-function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, analysis=null) {
+function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, analysis=null, slot='left') {
   if (!items || items.length === 0) {
     return '<div style="padding: 2rem; color: var(--text-muted);">暂无分时明细</div>';
   }
@@ -4804,47 +5543,75 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, anal
 
   const subTopY = m.top + mh + 25;
   const isVol = (subplotType === 'vol');
-  const subVals = items.map(d => isVol ? d.volume : d.amount_yi);
-  const maxSubVal = Math.max(...subVals, 0.1) * 1.1;
-  const subValToH = (v) => (v / maxSubVal) * (sh - 10);
+  const isTurn = (subplotType === 'turnover_rate');
+  const subVals = items.map(d => {
+    if (isTurn) return (d.turnover_rate !== undefined && d.turnover_rate !== null) ? Number(d.turnover_rate) : 0.0;
+    return isVol ? d.volume : d.amount_yi;
+  });
+  const maxSubVal = Math.max(...subVals, isTurn ? 0.5 : 0.1) * 1.1;
 
-  // 需求3: 分时图副图全面呈现 平均、最小、最大、中位数 概要数据
+  // 需求REQ-047: 分时图副图同样按「实测宽度平铺」排布 —— 标题与统计项逐项定位，绝不重叠
   const timelineStats = calculateDistributionSummary(subVals);
-  let timelineSummarySvg = '';
-  if (isVol) {
-    const fmtVol = (val) => {
-      if (val >= 100000000) return (val / 100000000).toFixed(2) + '亿手';
-      if (val >= 10000) return (val / 10000).toFixed(1) + '万手';
-      return Math.round(val) + '手';
-    };
-    timelineSummarySvg = `
-      <g class="sub-summary-group">
-        <text x="${m.left + 115}" y="${subTopY + 14}" fill="#38bdf8" font-size="10" font-family="monospace">
-          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#38bdf8">${fmtVol(timelineStats.mean)}</tspan>
-          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${fmtVol(timelineStats.min)}</tspan>
-          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${fmtVol(timelineStats.max)}</tspan>
-          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${fmtVol(timelineStats.median)}</tspan>
-        </text>
-      </g>
-    `;
+  const tlTitle = isTurn ? '副图：换手率' : (isVol ? '副图：成交量' : '副图：成交额');
+  const fmtTlVol = (val) => {
+    if (val >= 100000000) return (val / 100000000).toFixed(2) + '亿手';
+    if (val >= 10000) return (val / 10000).toFixed(1) + '万手';
+    return Math.round(val) + '手';
+  };
+  let tlHeaderItems = [];
+  if (isTurn) {
+    const totalTurn = items.reduce((acc, d) => acc + (Number(d.turnover_rate) || 0), 0);
+    tlHeaderItems = [
+      { label: '总和:', value: `${totalTurn.toFixed(2)}%`, fill: '#f59e0b' },
+      { label: '平均:', value: `${timelineStats.mean.toFixed(2)}%`, fill: '#c084fc' },
+      { label: '地量(最小):', value: `${timelineStats.min.toFixed(2)}%`, fill: '#10b981' },
+      { label: '天量(最大):', value: `${timelineStats.max.toFixed(2)}%`, fill: '#ef4444' },
+      { label: '中位数:', value: `${timelineStats.median.toFixed(2)}%`, fill: '#facc15' }
+    ];
+  } else if (isVol) {
+    const totalVol = items.reduce((acc, d) => acc + (Number(d.volume) || 0), 0);
+    tlHeaderItems = [
+      { label: '总和:', value: fmtTlVol(totalVol), fill: '#f59e0b' },
+      { label: '平均:', value: fmtTlVol(timelineStats.mean), fill: '#38bdf8' },
+      { label: '地量(最小):', value: fmtTlVol(timelineStats.min), fill: '#10b981' },
+      { label: '天量(最大):', value: fmtTlVol(timelineStats.max), fill: '#ef4444' },
+      { label: '中位数:', value: fmtTlVol(timelineStats.median), fill: '#facc15' }
+    ];
   } else {
-    timelineSummarySvg = `
-      <g class="sub-summary-group">
-        <text x="${m.left + 115}" y="${subTopY + 14}" fill="#f59e0b" font-size="10" font-family="monospace">
-          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#f59e0b">${timelineStats.mean.toFixed(2)}亿</tspan>
-          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${timelineStats.min.toFixed(2)}亿</tspan>
-          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${timelineStats.max.toFixed(2)}亿</tspan>
-          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${timelineStats.median.toFixed(2)}亿</tspan>
-        </text>
-      </g>
-    `;
+    const totalAmt = items.reduce((acc, d) => acc + (Number(d.amount_yi) || 0), 0);
+    tlHeaderItems = [
+      { label: '总和:', value: `${totalAmt.toFixed(2)}亿`, fill: '#f59e0b' },
+      { label: '平均:', value: `${timelineStats.mean.toFixed(2)}亿`, fill: '#f59e0b' },
+      { label: '地量(最小):', value: `${timelineStats.min.toFixed(2)}亿`, fill: '#10b981' },
+      { label: '天量(最大):', value: `${timelineStats.max.toFixed(2)}亿`, fill: '#ef4444' },
+      { label: '中位数:', value: `${timelineStats.median.toFixed(2)}亿`, fill: '#facc15' }
+    ];
   }
+  const tlHeader = layoutSubplotHeader({
+    x0: m.left + 8,
+    y: subTopY + 14,
+    title: tlTitle,
+    items: tlHeaderItems,
+    maxRight: m.left + innerW - 6,
+    fontSize: 10
+  });
+  let timelineSummarySvg = tlHeader.svg;
+  const subValToH = (v) => (v / maxSubVal) * Math.max(20, sh - 10 - (tlHeader.rows - 1) * 12);
 
-  if(subVals.some(v=>v==null)) timelineSummarySvg = `<text x="${m.left + 110}" y="${subTopY + 14}" fill="#94a3b8" font-size="12">当前来源未提供完整量额</text>`;
+  // 需求REQ-047: 旧「固定 statStartX + dx 平铺」写法已由 layoutSubplotHeader 按实测宽度取代（本块已删除）
+
+  if(!isTurn && subVals.some(v=>v==null)) timelineSummarySvg = layoutSubplotHeader({
+    x0: m.left + 8,
+    y: subTopY + 14,
+    title: tlTitle,
+    items: [{ label: '当前来源未提供完整量额', value: null, fill: '#94a3b8' }],
+    maxRight: m.left + innerW - 6,
+    fontSize: 10
+  }).svg;
   let subBars = '';
   items.forEach((d, idx) => {
     const x = m.left + idx * stepX;
-    const v = isVol ? d.volume : d.amount_yi;
+    const v = isTurn ? (d.turnover_rate || 0) : (isVol ? d.volume : d.amount_yi);
     if(v==null)return;
     const bH = Math.max(0, subValToH(v));
     const bY = subTopY + sh - bH;
@@ -4854,13 +5621,31 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, anal
 
   const pctTop = (((pTop - preClose) / preClose) * 100).toFixed(2);
   const pctBottom = (((pBottom - preClose) / preClose) * 100).toFixed(2);
-  const subUnit = isVol ? '手' : '亿元';
-  const subTitle = isVol ? '副图：成交量 (手)' : '副图：成交额 (亿元)';
+  // 需求1: 在分时副图标题中同样展示总和与统计概览，避免文字叠压
+  let tlSumBadge = '';
+  if (isTurn) {
+    const totalTurn = items.reduce((acc, d) => acc + (Number(d.turnover_rate) || 0), 0);
+    tlSumBadge = `(总和: ${totalTurn.toFixed(2)}%)`;
+  } else if (isVol) {
+    const totalVol = items.reduce((acc, d) => acc + (Number(d.volume) || 0), 0);
+    const fmtVol = (val) => {
+      if (val >= 100000000) return (val / 100000000).toFixed(2) + '亿手';
+      if (val >= 10000) return (val / 10000).toFixed(1) + '万手';
+      return Math.round(val) + '手';
+    };
+    tlSumBadge = `(总和: ${fmtVol(totalVol)})`;
+  } else {
+    const totalAmt = items.reduce((acc, d) => acc + (Number(d.amount_yi) || 0), 0);
+    tlSumBadge = `(总和: ${totalAmt.toFixed(2)}亿)`;
+  }
+
+  const subUnit = isTurn ? '%' : (isVol ? '手' : '亿元');
+  // 需求REQ-047: 分时副图标题统一由 tlTitle + layoutSubplotHeader 输出（此处不再单独渲染）
 
   return `
-    <svg id="stockInteractiveSvg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background-color: #0b1329; border-radius: 8px; cursor: crosshair;">
+    <svg id="stockInteractiveSvg_${slot}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background-color: #0b1329; border-radius: 8px; cursor: crosshair;">
       <defs>
-        <linearGradient id="tlGrad" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id="tlGrad_${slot}" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3"/>
           <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0"/>
         </linearGradient>
@@ -4879,23 +5664,26 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, anal
       <text x="${m.left + innerW * 0.5}" y="${m.top + 16}" fill="#94a3b8" font-size="10" text-anchor="middle" font-weight="bold">11:30 早午盘 13:00</text>
 
       <!-- 分时面积与走势曲线 -->
-      <path d="${pathArea}" fill="url(#tlGrad)"/>
+      <path d="${pathArea}" fill="url(#tlGrad_${slot})"/>
       <path d="${pathAvg}" fill="none" stroke="#facc15" stroke-width="1.2" opacity="0.9"/>
       <path d="${pathPrice}" fill="none" stroke="#38bdf8" stroke-width="1.8"/>
 
       <!-- 需求REQ-024: 分时级缠论画线（复用同一套缠论算法，级别明确标注为分时级别） -->
-      <defs><clipPath id="timelineChanlunClip"><rect x="${m.left}" y="${m.top}" width="${innerW}" height="${mh}"/></clipPath></defs>
-      <g clip-path="url(#timelineChanlunClip)">${appState.showChanlunDraw && analysis ? generateChanlunOverlaySVG(
-        items.map(it => ({ date: it.time, time: it.time, open: it.price, close: it.price, high: it.price, low: it.price, price: it.price })),
+      <defs><clipPath id="timelineChanlunClip_${slot}"><rect x="${m.left}" y="${m.top}" width="${innerW}" height="${mh}"/></clipPath></defs>
+      <g clip-path="url(#timelineChanlunClip_${slot})">${(appState.showChanlunDraw || chartBsLevelActive()) && analysis ? generateChanlunOverlaySVG(
+        items.map(it => ({ time: it.time, open: it.price, close: it.price, high: it.price, low: it.price, price: it.price })),
         (i) => m.left + i * stepX,
         (p) => priceToY(p),
-        analysis
+        analysis,
+        chanlunLevelLabel(analysis, 'timeline')
       ) : ''}</g>
       ${appState.showChanlunDraw ? `<text x="${m.left + 8}" y="${m.top + 28}" fill="#c084fc" font-size="10" font-weight="600">☯️ 缠论（分时级别${analysis && analysis.status === 'available' ? '' : '：' + (analysis && analysis.error ? '未获取（' + analysis.error + '）' : '未获取')}）</text>` : ''}
+      <!-- 需求REQ-041: 分时图的买卖点同样必须标注所属级别与六类真实识别数量 -->
+      ${chanlunBsSummaryText(analysis, 'timeline') ? `<text class="chanlun-bs-summary" x="${m.left + 8}" y="${m.top + 42}" fill="#c084fc" font-size="10">${chanlunBsSummaryText(analysis, 'timeline')}</text>` : ''}
 
       <!-- 十字光标虚线 -->
-      <line id="crosshairX" x1="0" y1="${m.top}" x2="0" y2="${subTopY + sh}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
-      <line id="crosshairY" x1="${m.left}" y1="0" x2="${m.left + innerW}" y2="0" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
+      <line id="crosshairX_${slot}" x1="0" y1="${m.top}" x2="0" y2="${subTopY + sh}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
+      <line id="crosshairY_${slot}" x1="${m.left}" y1="0" x2="${m.left + innerW}" y2="0" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
 
       <!-- 主图 Y 轴坐标文字 -->
       <text x="${m.left - 8}" y="${m.top + 12}" fill="#ef4444" font-size="11" text-anchor="end" font-family="monospace">¥${pTop}</text>
@@ -4922,7 +5710,7 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, anal
 
       <!-- 副图量额区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
-      <text x="${m.left + 8}" y="${subTopY + 14}" fill="#94a3b8" font-size="10" font-weight="600">${subTitle}</text>
+      <!-- 需求REQ-047: 副图标题由 timelineSummarySvg 内的平铺排布器统一输出，此处不再重复绘制 -->
       ${timelineSummarySvg}
       <text x="${m.left - 8}" y="${subTopY + 14}" fill="#64748b" font-size="10" text-anchor="end" font-family="monospace">${maxSubVal.toFixed(1)}${subUnit}</text>
       
@@ -4940,10 +5728,24 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, anal
  * @param {Function} getY 价格Y坐标映射函数
  * @returns {string} SVG 片段包含缠论笔与买卖点标记徽章
  */
-function generateChanlunOverlaySVG(klines, getX, getY, analysis) {
+/** 需求REQ-040: 买卖点开关是否开启（买卖点独立于「缠论画线」总开关，可单独查看） */
+function chartBsLevelActive() {
+  return (Number(appState.bsBuyLevel) || 0) > 0 || (Number(appState.bsSellLevel) || 0) > 0;
+}
+
+function generateChanlunOverlaySVG(klines, getX, getY, analysis, levelLabel = '') {
   if (!analysis || !klines.length) return '';
-  // 需求REQ-024: 分时K线的唯一键是 time，日K是 date，两者都必须能定位端点
-  const keyOf = b => (b && b.date !== undefined ? b.date : (b ? b.time : undefined));
+  // 需求REQ-024/041: 图上一根K线的唯一键 ——
+  //   当日分时：键为分钟刻「HH:MM」（与分析的「交易日 HH:MM」按分钟刻归一化）；
+  //   分钟K线：键必须由日期与时间合成「YYYY-MM-DD HH:MM」，与后端分析的键完全一致
+  //           （旧实现只取 date 字段，同一天的全部分钟K线折叠成同一个键，缠论端点与买卖点全部无法定位）；
+  //   日线/周线/季线：键为日期「YYYY-MM-DD」。
+  const keyOf = b => {
+    if (!b) return undefined;
+    if (b.date !== undefined && b.time !== undefined) return `${b.date} ${b.time}`;
+    if (b.date !== undefined) return b.date;
+    return b.time;
+  };
   // 需求REQ-024: 分时级别分析结果的日期为「交易日 + 分钟」（保证唯一且递增），
   // 而分时K线自身以「HH:MM」为键；两者按分钟刻归一化到同一键。
   const sameKey = (a, b) => {
@@ -4954,21 +5756,36 @@ function generateChanlunOverlaySVG(klines, getX, getY, analysis) {
   const idx = new Map();
   klines.forEach((b, i) => { const k = keyOf(b); if (!idx.has(k)) idx.set(k, i); });
   const first = keyOf(klines[0]), last = keyOf(klines[klines.length - 1]);
-  const globalIdx = new Map((analysis.dates || klines.map(b => keyOf(b))).map((d, i) => [d, i]));
+  const analysisDates = analysis.dates || klines.map(b => keyOf(b));
+  const globalIdx = new Map(analysisDates.map((d, i) => [d, i]));
   const idxOf = v => {
     if (globalIdx.has(v)) return globalIdx.get(v);
     for (const [k, i] of globalIdx) if (sameKey(k, v)) return i;
     return undefined;
   };
-  const offset = idxOf(first) || 0;
+  // 需求REQ-041: offset ＝ 当前视窗第一根K线在分析序列中的索引，标记的 x 位置全靠它换算。
+  // 分钟K线的键由 date 与 time 两个字段组成，与分析的「日期 时间」合成键无法归一化，
+  // 此时 idxOf 会返回 undefined；若直接取 0，视窗内就会画出「序列开头」的点，标记整体错位。
+  // 兜底按「视窗末尾对齐」推算（面板视窗本就取最后 N 根，且分钟K线不参与日期区间过滤），
+  // 从而保证渲染位置与后端判定索引严格对应。
+  let offset = idxOf(first);
+  if (offset === undefined) {
+    const lastIdx = idxOf(last);
+    offset = lastIdx !== undefined
+      ? Math.max(0, Math.min(lastIdx, analysisDates.length - 1) - (klines.length - 1))
+      : Math.max(0, analysisDates.length - klines.length);
+  }
   const x = t => getX(idxOf(t) - offset);
   // 需求REQ-024: 分时窗口判定同样必须按分钟刻归一化（分析结果带交易日前缀）
   const cmpKey = v => String(v === null || v === undefined ? '' : v).trim().split(/\s+/).pop();
   const visible = r => cmpKey(r.end_time) >= cmpKey(first) && cmpKey(r.start_time) <= cmpKey(last);
+  // 需求REQ-040: 缠论结构图层由「缠论画线」总开关控制；三类买卖点由各自等级开关独立控制，
+  // 因此关闭「缠论画线」时仍可单独查看买卖点标记。
+  const structure = !!appState.showChanlunDraw;
   const colors={pens:'#c084fc',segments:'#38bdf8',pivots:'#f59e0b',divergences:'#fb7185',ma_entanglements:'#34d399'};
   let svg='';
   for(const key of ['pivots','ma_entanglements']) {
-    if(appState.chanlunLayers[key]===false) continue;
+    if(!structure || appState.chanlunLayers[key]===false) continue;
     for(const r of (analysis[key]||[]).filter(visible)) {
       const left=Math.max(x(first),x(r.start_time)),right=Math.min(x(last),x(r.end_time));
       const top=getY(key==='pivots'?r.zg:r.high),bottom=getY(key==='pivots'?r.zd:r.low);
@@ -4976,17 +5793,17 @@ function generateChanlunOverlaySVG(klines, getX, getY, analysis) {
     }
   }
   for(const key of ['pens','segments']) {
-    if(appState.chanlunLayers[key]===false)continue;
+    if(!structure || appState.chanlunLayers[key]===false)continue;
     for(const r of (analysis[key]||[]).filter(visible)) {
       svg+=`<line class="chanlun-${key}" x1="${x(r.start_time)}" y1="${getY(r.start_price)}" x2="${x(r.end_time)}" y2="${getY(r.end_price)}" stroke="${colors[key]}" stroke-width="${key==='pens'?1.5:3}" stroke-dasharray="${r.status==='confirmed'?'none':'6,4'}"><title>${key==='pens'?'笔':'线段'} · ${r.status==='confirmed'?'已确认':'待确认'} · ${r.start_time} 至 ${r.end_time}</title></line>`;
     }
   }
-  if(appState.chanlunLayers.divergences!==false) for(const r of analysis.divergences||[]) {
+  if(structure && appState.chanlunLayers.divergences!==false) for(const r of analysis.divergences||[]) {
     if(!idx.has(r.time))continue;
     svg+=`<g class="chanlun-divergences"><circle cx="${x(r.time)}" cy="${getY(r.price)}" r="5" fill="${colors.divergences}"/><text x="${x(r.time)+6}" y="${getY(r.price)-8}" fill="${colors.divergences}" font-size="11">${r.kind}${r.status==='provisional'?'?':''}</text><title>MACD面积 ${r.previous_area.toFixed(2)} → ${r.current_area.toFixed(2)}</title></g>`;
   }
   const maColors=['#fbbf24','#fb7185','#60a5fa'];
-  if(appState.chanlunLayers.ma_entanglements!==false) (analysis.parameters?.ma_periods||[]).forEach((period,j)=>{
+  if(structure && appState.chanlunLayers.ma_entanglements!==false) (analysis.parameters?.ma_periods||[]).forEach((period,j)=>{
     const byDate=globalIdx;
     const points=klines.map((b,i)=>{
       const dayKey = b.date !== undefined ? b.date : b.time;
@@ -4997,7 +5814,337 @@ function generateChanlunOverlaySVG(klines, getX, getY, analysis) {
       return v==null?null:`${getX(i)},${getY(v)}`;}).filter(Boolean);
     if(points.length)svg+=`<polyline class="chanlun-ma" points="${points.join(' ')}" fill="none" stroke="${maColors[j%3]}" stroke-width="1"><title>MA${period}</title></polyline>`;
   });
+  // 需求REQ-040: 缠论三类买卖点（后端严格按缠论定义识别，前端只按开关渲染，不做任何推断或补造）
+  const bsBuy = Number(appState.bsBuyLevel) || 0;
+  const bsSell = Number(appState.bsSellLevel) || 0;
+  if ((bsBuy > 0 || bsSell > 0) && Array.isArray(analysis.buy_sell_points)) {
+    for (const r of analysis.buy_sell_points) {
+      const isBuy = String(r.type || '').startsWith('buy');
+      // 注意：类型串为 buy1/buy2/buy3/sell1/sell2/sell3，等级必须取数字字符，
+      // 不能用 slice(3)（'sell1'.slice(3) 会得到 'l1'，会把全部卖点误判为无效等级）
+      const level = parseInt(String(r.type || '').replace(/[^0-9]/g, ''), 10);
+      if (!(level >= 1 && level <= 3)) continue;
+      if (isBuy ? level > bsBuy : level > bsSell) continue;   // 选 3 即同时画出第 1、2、3 类
+      const key = r.time !== undefined ? r.time : r.date;
+      const globalIndex = idxOf(key);
+      if (globalIndex === undefined) continue;
+      const local = globalIndex - offset;
+      if (local < 0 || local >= klines.length) continue;      // 只画当前视窗内的点
+      const cx = getX(local), cy = getY(r.price);
+      const color = isBuy ? '#ef4444' : '#10b981';
+      const tri = isBuy
+        ? `<polygon points="${cx},${cy + 12} ${cx - 6},${cy + 3} ${cx + 6},${cy + 3}" fill="${color}"/>`
+        : `<polygon points="${cx},${cy - 12} ${cx - 6},${cy - 3} ${cx + 6},${cy - 3}" fill="${color}"/>`;
+      const textY = isBuy ? cy + 26 : cy - 16;
+      const mark = `${level}${isBuy ? '买' : '卖'}`;
+      // 需求REQ-041: 每个标记必须自带「级别」与「判定依据」，避免跨级别混读、也便于逐条复核
+      const levelNote = levelLabel ? `｜级别：${levelLabel}` : '';
+      svg += `<g class="chanlun-bs chanlun-${r.type}" data-status="${r.status}">${tri}`
+           + `<text x="${cx}" y="${textY}" fill="${color}" font-size="11" font-weight="700" text-anchor="middle">${mark}${r.status === 'provisional' ? '?' : ''}</text>`
+           + `<title>${r.label}${levelNote} · ${r.time} · ¥${r.price} · ${r.status === 'confirmed' ? '已确认' : '待确认'}｜判定依据：${r.reason}</title></g>`;
+    }
+  }
   return `<g class="chanlun-overlay-layer">${svg}</g>`;
+}
+
+// ====================================================
+// 第一性原理买卖点体系 (方法1 拍卖理论AMT / 方法8 努力与结果Effort)
+// 交互与视觉设计严格遵循格式塔原理 (Gestalt Principles)
+// ====================================================
+
+/**
+ * 第一性原理方法1: 拍卖市场理论 (AMT) 价值区 (Value Area) 与拒绝买卖点推算
+ * 基于 70% 成交量分布，计算 POC、VAH、VAL，并识别边缘拒绝买卖点
+ */
+function calculateAuctionMarketProfile(klines) {
+  if (!klines || klines.length < 5) return null;
+  const highs = klines.map(k => Number(k.high || k.price));
+  const lows = klines.map(k => Number(k.low || k.price));
+  const maxP = Math.max(...highs);
+  const minP = Math.min(...lows);
+  if (maxP <= minP) return null;
+
+  const binCount = 35;
+  const binStep = (maxP - minP) / binCount;
+  const bins = new Array(binCount).fill(0);
+
+  let totalVol = 0;
+  klines.forEach(k => {
+    const vol = Number(k.volume) || 1;
+    totalVol += vol;
+    const midP = (Number(k.high || k.price) + Number(k.low || k.price)) / 2;
+    const bIdx = Math.min(binCount - 1, Math.max(0, Math.floor((midP - minP) / binStep)));
+    bins[bIdx] += vol;
+  });
+
+  if (totalVol === 0) return null;
+
+  let pocIdx = 0;
+  let maxBinVol = -1;
+  for (let i = 0; i < binCount; i++) {
+    if (bins[i] > maxBinVol) {
+      maxBinVol = bins[i];
+      pocIdx = i;
+    }
+  }
+
+  const pocPrice = minP + (pocIdx + 0.5) * binStep;
+
+  // 扩展计算 70% 价值区
+  let targetVol = totalVol * 0.70;
+  let currentVol = bins[pocIdx];
+  let up = pocIdx;
+  let down = pocIdx;
+
+  while (currentVol < targetVol && (up < binCount - 1 || down > 0)) {
+    const nextUp = up < binCount - 1 ? bins[up + 1] : -1;
+    const nextDown = down > 0 ? bins[down - 1] : -1;
+    if (nextUp >= nextDown && up < binCount - 1) {
+      up++;
+      currentVol += bins[up];
+    } else if (down > 0) {
+      down--;
+      currentVol += bins[down];
+    } else if (up < binCount - 1) {
+      up++;
+      currentVol += bins[up];
+    } else {
+      break;
+    }
+  }
+
+  const vahPrice = minP + (up + 1) * binStep;
+  const valPrice = minP + down * binStep;
+
+  // 扫描价值区边缘拒绝买卖点
+  const signals = [];
+  for (let i = 1; i < klines.length; i++) {
+    const prev = klines[i - 1];
+    const curr = klines[i];
+    const prevLow = Number(prev.low || prev.price);
+    const currClose = Number(curr.close || curr.price);
+    const currLow = Number(curr.low || curr.price);
+    const currHigh = Number(curr.high || curr.price);
+    const prevHigh = Number(prev.high || prev.price);
+
+    // 买点: 刺破或跌破 VAL, 但迅速收复 VAL 上方 (低价探索被物理拒绝)
+    if ((currLow < valPrice && currClose >= valPrice) || (prevLow < valPrice && currClose > valPrice && currClose > Number(prev.close || prev.price))) {
+      signals.push({
+        idx: i,
+        type: 'amt_buy',
+        price: currLow,
+        label: 'AMT买',
+        reason: `价格探出价值区下沿 VAL(¥${valPrice.toFixed(2)}) 遭遇强力买单托底，迅速收复价值区，市场各方拒绝低价探索，构成公允价值折价买点。`
+      });
+    } else if ((currHigh > vahPrice && currClose <= vahPrice) || (prevHigh > vahPrice && currClose < vahPrice && currClose < Number(prev.close || prev.price))) {
+      // 卖点: 突破 VAH, 但遇阻回落收在 VAH 下方 (高价探索被物理拒绝)
+      signals.push({
+        idx: i,
+        type: 'amt_sell',
+        price: currHigh,
+        label: 'AMT卖',
+        reason: `价格冲出价值区上沿 VAH(¥${vahPrice.toFixed(2)}) 缺乏后续主动买盘跟进，遭遇获利盘与解套盘压制跌回价值区，市场各方拒绝高价，构成溢价卖点。`
+      });
+    }
+  }
+
+  return {
+    poc: pocPrice,
+    vah: vahPrice,
+    val: valPrice,
+    signals: signals
+  };
+}
+
+/**
+ * 第一性原理方法8: 威科夫努力与结果定律 (Wyckoff Law of Effort vs Result) 异常识别
+ * 识别极端大成交量(努力)但实体极小(结果)的动力学异常：
+ * - 底部被动吸收买点: 天量滞跌/窄幅十字星, 冰山限价买单吃光抛盘
+ * - 高位派发滞涨卖点: 天量长上影/涨不动, 主力利用买盘流动性大举派发
+ */
+function calculateWyckoffEffortResult(klines) {
+  if (!klines || klines.length < 15) return { signals: [], anomalyIndices: new Set() };
+
+  const signals = [];
+  const anomalyIndices = new Set();
+
+  for (let i = 10; i < klines.length; i++) {
+    const slice = klines.slice(Math.max(0, i - 15), i);
+    const avgVol = slice.reduce((acc, k) => acc + (Number(k.volume) || 0), 0) / slice.length;
+    const avgSpread = slice.reduce((acc, k) => acc + Math.abs((Number(k.close || k.price) - Number(k.open || k.price))), 0) / slice.length;
+
+    const curr = klines[i];
+    const currVol = Number(curr.volume) || 0;
+    const currSpread = Math.abs(Number(curr.close || curr.price) - Number(curr.open || curr.price));
+    const currHigh = Number(curr.high || curr.price);
+    const currLow = Number(curr.low || curr.price);
+    const currClose = Number(curr.close || curr.price);
+    const currOpen = Number(curr.open || curr.price);
+    const range = Math.max(0.001, currHigh - currLow);
+
+    // 努力倍数与结果倍数
+    const effortRatio = avgVol > 0 ? (currVol / avgVol) : 1;
+    const resultRatio = avgSpread > 0 ? (currSpread / avgSpread) : 1;
+
+    // 悖论判定: 成交量极大 (努力 ≥ 1.65倍均量), 但价格实体很小 (结果 ≤ 0.65倍均振幅 或 实体占振幅比例 ≤ 35%)
+    const isAnomaly = effortRatio >= 1.65 && (resultRatio <= 0.65 || (currSpread / range) <= 0.35);
+
+    if (isAnomaly) {
+      anomalyIndices.add(i);
+
+      // 计算均线环境判断是底部吸收还是高位派发
+      const ma10 = slice.slice(-10).reduce((acc, k) => acc + Number(k.close || k.price), 0) / 10;
+      const isDowntrendOrPullback = currClose <= ma10 * 1.01;
+      const lowerWick = Math.min(currOpen, currClose) - currLow;
+      const upperWick = currHigh - Math.max(currOpen, currClose);
+
+      if (isDowntrendOrPullback && lowerWick >= upperWick * 0.8) {
+        signals.push({
+          idx: i,
+          type: 'effort_buy',
+          price: currLow,
+          label: '⚡吸收买',
+          effortRatio: effortRatio,
+          reason: `威科夫努力与结果定律：成交量达20日均量的${effortRatio.toFixed(1)}倍(极大努力)，但实体仅${currSpread.toFixed(2)}元(极小位移)并收出下影，物理上存在超级主力冰山限价买单强力吸收全部恐慌抛盘，构成被动吸收买点。`
+        });
+      } else if (!isDowntrendOrPullback && upperWick >= lowerWick * 0.8) {
+        signals.push({
+          idx: i,
+          type: 'effort_sell',
+          price: currHigh,
+          label: '⚡滞涨卖',
+          effortRatio: effortRatio,
+          reason: `威科夫努力与结果定律：高位成交量达20日均量的${effortRatio.toFixed(1)}倍(极大努力)，但价格涨不动且收出长上影(极小位移)，物理上表明主力借散户追涨狂热通过主动市价卖单大量派发出货，构成滞涨派发卖点。`
+        });
+      }
+    }
+  }
+
+  return { signals, anomalyIndices };
+}
+
+/**
+ * 生成第一性原理主图与标记 SVG 图层 (符合格式塔闭合性、图底关系与共同命运)
+ */
+function generateFirstPrinciplesOverlaySVG(klines, getX, getY, innerW, mh, m, slot) {
+  let svg = '';
+
+  // 1. 拍卖市场理论 (AMT) 价值区图层
+  if (appState.showAmtDraw) {
+    const amt = calculateAuctionMarketProfile(klines);
+    if (amt) {
+      const yVah = getY(amt.vah);
+      const yVal = getY(amt.val);
+      const yPoc = getY(amt.poc);
+      const topY = Math.min(yVah, yVal);
+      const heightZone = Math.max(2, Math.abs(yVal - yVah));
+
+      // 格式塔闭合原则: 半透明色块包络 Value Area
+      svg += `
+        <g class="amt-value-area-layer">
+          <!-- 价值区闭合色块 (图底关系: 半透明置底) -->
+          <rect x="${m.left}" y="${topY}" width="${innerW}" height="${heightZone}" fill="#6366f1" fill-opacity="0.08" stroke="#818cf8" stroke-opacity="0.35" stroke-dasharray="4,4"/>
+          
+          <!-- VAH 上沿虚线 -->
+          <line x1="${m.left}" y1="${yVah}" x2="${m.left + innerW}" y2="${yVah}" stroke="#a5b4fc" stroke-width="1.2" stroke-dasharray="5,3" stroke-opacity="0.8"/>
+          <text x="${m.left + innerW - 6}" y="${yVah - 4}" fill="#a5b4fc" font-size="9" text-anchor="end" font-family="monospace">VAH(70%): ¥${amt.vah.toFixed(2)}</text>
+          
+          <!-- VAL 下沿虚线 -->
+          <line x1="${m.left}" y1="${yVal}" x2="${m.left + innerW}" y2="${yVal}" stroke="#a5b4fc" stroke-width="1.2" stroke-dasharray="5,3" stroke-opacity="0.8"/>
+          <text x="${m.left + innerW - 6}" y="${yVal + 11}" fill="#a5b4fc" font-size="9" text-anchor="end" font-family="monospace">VAL(70%): ¥${amt.val.toFixed(2)}</text>
+          
+          <!-- POC 核心成交量线 (金黄色微光) -->
+          <line x1="${m.left}" y1="${yPoc}" x2="${m.left + innerW}" y2="${yPoc}" stroke="#facc15" stroke-width="1.5" stroke-dasharray="6,2" stroke-opacity="0.9"/>
+          <text x="${m.left + 8}" y="${yPoc - 4}" fill="#facc15" font-size="10" font-weight="700" font-family="monospace">POC(最大量中枢): ¥${amt.poc.toFixed(2)}</text>
+        </g>
+      `;
+
+      // AMT 买卖点标记 (格式塔相似性: 几何图形+语义色)
+      amt.signals.forEach(s => {
+        if (s.idx < 0 || s.idx >= klines.length) return;
+        const cx = getX(s.idx);
+        const cy = getY(s.price);
+        const isBuy = s.type === 'amt_buy';
+        const color = isBuy ? '#38bdf8' : '#f43f5e';
+        const tri = isBuy
+          ? `<polygon points="${cx},${cy + 16} ${cx - 5},${cy + 8} ${cx + 5},${cy + 8}" fill="${color}"/>`
+          : `<polygon points="${cx},${cy - 16} ${cx - 5},${cy - 8} ${cx + 5},${cy - 8}" fill="${color}"/>`;
+        const textY = isBuy ? cy + 28 : cy - 20;
+
+        svg += `
+          <g class="amt-bs-marker" style="cursor: pointer;">
+            ${tri}
+            <rect x="${cx - 24}" y="${textY - 9}" width="48" height="15" rx="3" fill="#0b1329" stroke="${color}" stroke-width="1" fill-opacity="0.85"/>
+            <text x="${cx}" y="${textY + 2}" fill="${color}" font-size="9.5" font-weight="700" text-anchor="middle">${s.label}</text>
+            <title>【${s.label}】${s.reason} · 日期: ${klines[s.idx].date || klines[s.idx].time} · 触发价: ¥${s.price.toFixed(2)}</title>
+          </g>
+        `;
+      });
+    }
+  }
+
+  // 2. 威科夫努力与结果定律 (Effort vs Result) 图层
+  if (appState.showEffortDraw) {
+    const effort = calculateWyckoffEffortResult(klines);
+    if (effort && effort.signals.length) {
+      effort.signals.forEach(s => {
+        if (s.idx < 0 || s.idx >= klines.length) return;
+        const cx = getX(s.idx);
+        const cy = getY(s.price);
+        const isBuy = s.type === 'effort_buy';
+        const color = isBuy ? '#f59e0b' : '#fb923c';
+        const textY = isBuy ? cy + 30 : cy - 22;
+
+        // 异动蜡烛光晕背景 (格式塔图底原则与突出显示)
+        svg += `
+          <g class="effort-bs-marker" style="cursor: pointer;">
+            <!-- 异动光晕背景柱 -->
+            <rect x="${cx - 8}" y="${m.top}" width="16" height="${mh}" fill="#f59e0b" fill-opacity="0.04" stroke="#f59e0b" stroke-opacity="0.15" stroke-dasharray="2,2"/>
+            
+            <!-- 闪电符号徽章 -->
+            <circle cx="${cx}" cy="${isBuy ? cy + 12 : cy - 12}" r="7" fill="#0b1329" stroke="${color}" stroke-width="1.2"/>
+            <text x="${cx}" y="${isBuy ? cy + 15 : cy - 9}" fill="${color}" font-size="10" font-weight="700" text-anchor="middle">⚡</text>
+            
+            <rect x="${cx - 28}" y="${textY - 9}" width="56" height="15" rx="3" fill="#0b1329" stroke="${color}" stroke-width="1" fill-opacity="0.85"/>
+            <text x="${cx}" y="${textY + 2}" fill="${color}" font-size="9.5" font-weight="700" text-anchor="middle">${s.label}</text>
+            <title>【${s.label}】${s.reason} · 异常成交量: 均量×${s.effortRatio.toFixed(1)} · 日期: ${klines[s.idx].date || klines[s.idx].time}</title>
+          </g>
+        `;
+      });
+    }
+  }
+
+  return `<g class="first-principles-overlay-layer">${svg}</g>`;
+}
+
+function toggleAmtDraw(slot) {
+  appState.showAmtDraw = !appState.showAmtDraw;
+  const panel = panelBySlot(slot);
+  syncPanelToolbar(panel);
+  renderActiveStockChart();
+  if (typeof showChartToast === 'function') {
+    showChartToast(`🏛️ 拍卖市场价值区 (AMT): ${appState.showAmtDraw ? '已开启' : '已隐藏'}`);
+  }
+}
+
+function toggleEffortDraw(slot) {
+  appState.showEffortDraw = !appState.showEffortDraw;
+  const panel = panelBySlot(slot);
+  syncPanelToolbar(panel);
+  renderActiveStockChart();
+  if (typeof showChartToast === 'function') {
+    showChartToast(`⚡ 威科夫努力与结果 (Effort vs Result): ${appState.showEffortDraw ? '已开启' : '已隐藏'}`);
+  }
+}
+
+function openFirstPrinciplesModal() {
+  const modal = document.getElementById('firstPrinciplesModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeFirstPrinciplesModal() {
+  const modal = document.getElementById('firstPrinciplesModal');
+  if (modal) modal.style.display = 'none';
 }
 
 function renderChanlunLegend(analysis) {
@@ -5022,38 +6169,436 @@ function renderChanlunLegend(analysis) {
 const STANDARD_KLINE_VIEW_COUNT = 200;
 const MIN_KLINE_VIEW_COUNT = 5;
 
+/** 需求REQ-029: 各 K 线 Tab 的默认根数（铺满绘图区，不留白）。全部/分钟K线＝标准 200 根 */
+const KLINE_PERIOD_COUNTS = {
+  kline5m: 200, kline15m: 200, kline30m: 200,
+  kline20: 20, kline60: 60, kline120: 120, kline180: 180, all: 200
+};
+
+/** 需求REQ-028/034: 分钟K线周期 → 接口 interval 映射
+ *  kline5m/15m/30m 沿用旧键（指数页仍在用）；klinem1/klinem5 为个股双图面板的分钟颗粒度键 */
+const KLINE_MINUTE_INTERVALS = {
+  kline5m: 'm5', kline15m: 'm15', kline30m: 'm30',
+  klinem1: 'm1', klinem5: 'm5'
+};
+
+// ====================================================
+// 需求REQ-034/035/036: 个股详情「双维度双图」体系
+//   维度一 分时图：当日分时 / 5分K线（需求REQ-044: 1分K线 Tab 已移除；每根K线＝对应分钟真实区间）
+//   维度二 K线图：日线图 / 周线图 / 季线图（每根K线＝1日 / 1周 / 1季）
+//   · 两个维度可同屏并存（左右布局），各自独立：颗粒度、视窗根数、缩放、画线图层、十字光标
+//   · 缩放只改变「画面显示多少根K线」：下限 30 根，上限＝该颗粒度全部可用根数；
+//     真实根数不足视窗根数时从左边逐根绘制、右侧留白，绝不拉伸、绝不插值补足
+// ====================================================
+
+/** 需求REQ-035: 视窗根数下限（放大到极限即 30 根） */
+const MIN_PANEL_BARS = 30;
+
+/** 需求REQ-035: K线维度二级 Tab 的根数档位（天/周/季统一 30/60/120/180） */
+const KLINE_COUNT_TIERS = [30, 60, 120, 180];
+
+/** 需求REQ-034: 分时维度子 Tab（当日分时属于分时分组）
+ *  需求REQ-044: 按用户指令移除「1分K线」Tab —— 分时维度只保留「当日分时 / 5分K线」两个入口。
+ *  后端 m1 抓取能力（KLINE_MINUTE_INTERVALS.klinem1）保留，仅移除前端入口，不影响既有接口。 */
+const MINUTE_SUBTABS = [
+  { key: 'timeline', label: '⏱️ 当日分时', period: 'timeline', zoomable: false },
+  { key: 'm5', label: '🕔 5分K线', period: 'klinem5', zoomable: true }
+];
+
+/** 需求REQ-034: K线维度一级 Tab（决定K线颗粒度） */
+const KLINE_GROUPS = [
+  { key: 'daily', label: '📊 日线图', unit: '天', period: 'klinedaily' },
+  { key: 'weekly', label: '📈 周线图', unit: '周', period: 'klineweekly' },
+  { key: 'quarterly', label: '🗓️ 季线图', unit: '季', period: 'klinequarterly' }
+];
+
+const MINUTE_SUBTAB_MAP = MINUTE_SUBTABS.reduce((acc, t) => { acc[t.key] = t; return acc; }, {});
+const KLINE_GROUP_MAP = KLINE_GROUPS.reduce((acc, g) => { acc[g.key] = g; return acc; }, {});
+
+/** 需求REQ-035: 分钟K线单次请求根数（与后端上限对齐，保证「全部」可取满） */
+const MINUTE_KLINE_REQUEST_LIMIT = 800;
+
+/** 需求REQ-034: 一个图面板的独立状态（两块面板互不影响） */
+function createPanelChartState(dimension) {
+  return {
+    dimension: dimension,          // 'minute' | 'kline'
+    minuteSub: 'timeline',         // 'timeline' | 'm5'（需求REQ-044: 1分K线已移除）
+    klineGroup: 'daily',           // 'daily' | 'weekly' | 'quarterly'
+    klineCount: MIN_PANEL_BARS,    // 当前视窗根数 N（下限 30，上限＝全部可用根数）
+    panOffset: 0,                  // 需求5/6: 平移视口回溯根数（0＝最新当天）
+    // 需求REQ-037（2026-09-24 修订）: 副图控件已合并为唯一「幅图联动」控件，首屏两图统一默认「成交额」，
+    // 与控件高亮保持一致（'vol' | 'amt' | 'turnover_rate'）
+    subplot: 'amt',
+    subplotTouched: false,         // 用户是否手动选过副图（未选过时按颗粒度自动取默认值）
+    overlayIntraday: false,        // 需求REQ-036: 重合图开关（仅 K 线维度可用）
+    chanlunLayers: {},             // 缠论图层显隐（本面板独立）
+    // 需求REQ-040: 缠论三类买卖点显示等级（0＝不显示；N＝同时显示第 1..N 类，选 3 即含 1、2）
+    // 需求REQ-041: 默认值＝DEFAULT_BS_LEVEL（自动标记六类买卖点，与全局默认一致）
+    bsBuyLevel: DEFAULT_BS_LEVEL,
+    bsSellLevel: DEFAULT_BS_LEVEL,
+    showChanlunDraw: false,
+    drawHLineMode: false,
+    // 需求REQ-014/015: 水平辅助线多模型图层（本面板独立存储/独立清除/独立层级）
+    lineLayers: {
+      auto:        { key: 'auto',        lines: [], visible: true },
+      manual_up:   { key: 'manual_up',   lines: [], visible: true },
+      manual_down: { key: 'manual_down', lines: [], visible: true }
+    },
+    lineZCounter: 1000,
+    topLineId: null,
+    autoLinesCount: 0,
+    autoLinesBlockedReason: null,
+    windowAmountSummary: null,
+    availableCount: 0              // 当前颗粒度的全部可用根数（每次渲染实测写入）
+  };
+}
+
+/** 需求REQ-034: 双图面板：左＝分时维度，右＝K线维度；任一可单独占满整行
+ *  需求REQ-045: 面板默认可见性 —— 打开个股详情即「分时图 + 日线图」左右并排，无需点击「调出」按钮。
+ *  （不写入 localStorage，每次进入详情页都回到双图默认态） */
+const chartPanels = {
+  left: {
+    slot: 'left', dimension: 'minute', visible: true,
+    containerId: 'chartSvgContainerLeft', panelId: 'chartPanelLeft',
+    layerPanelId: 'chartLayerPanelLeft', autoCountControlId: 'autoLinesCountControl_left',
+    hlineBtnId: 'btnToggleHLine_left', subplotControlId: 'chartSubPlotControlLeft',
+    st: createPanelChartState('minute')
+  },
+  right: {
+    slot: 'right', dimension: 'kline', visible: true,
+    containerId: 'chartSvgContainerRight', panelId: 'chartPanelRight',
+    layerPanelId: 'chartLayerPanelRight', autoCountControlId: 'autoLinesCountControl_right',
+    hlineBtnId: 'btnToggleHLine_right', subplotControlId: 'chartSubPlotControlRight',
+    st: createPanelChartState('kline')
+  }
+};
+
+const PANEL_SLOTS = ['left', 'right'];
+
+function panelBySlot(slot) {
+  return chartPanels[slot] || chartPanels.right;
+}
+
+/** 需求REQ-034: 面板当前颗粒度对应的周期键 */
+function panelPeriodKey(st) {
+  if (st.dimension === 'minute') {
+    const tab = MINUTE_SUBTAB_MAP[st.minuteSub] || MINUTE_SUBTABS[0];
+    return tab.period;
+  }
+  const group = KLINE_GROUP_MAP[st.klineGroup] || KLINE_GROUPS[0];
+  return group.period;
+}
+
+/** 需求REQ-034: 面板当前是否显示「当日分时」（固定全景，不参与根数缩放） */
+function panelIsTimeline(st) {
+  return st.dimension === 'minute' && st.minuteSub === 'timeline';
+}
+
+/** 需求REQ-037（2026-09-24 口径修订）: 副图默认档位。
+ * 修订原因：左右面板的副图控件已合并为**唯一**的「幅图联动」控件（单点切换、两图同步），
+ * 首屏两图必须与控件高亮一致 —— 统一为「成交额」。此前「当日分时＝成交量」的按维度默认值是
+ * 两控件时代的遗留口径，会导致首屏「控件高亮成交额 / 左图显示成交量」自相矛盾。
+ * 用户一旦手动选过（subplotTouched=true），applyDefaultSubplot 即不再改写其选择。 */
+function panelDefaultSubplot(_st) {
+  return 'amt';
+}
+
+/** 需求REQ-037: 用户从未手动选过副图时，按当前颗粒度自动套用默认档位（一旦手动选过则尊重用户选择） */
+function applyDefaultSubplot(st) {
+  if (!st.subplotTouched) st.subplot = panelDefaultSubplot(st);
+}
+
+/**
+ * 需求1/2: 权威换手率核心口径推算
+ * 换手率 = 本周期成交量 (股) ÷ 本周期流通股本 (股) × 100%
+ * 流通股本 (股) = 流通市值 (亿元) * 1e8 / 最新股价 (元)
+ */
+function getStockCirculatingShares(stock) {
+  if (!stock) return 0;
+  if (stock._circShares && stock._circShares > 0) return stock._circShares;
+  const circCapYi = Number(stock.circulating_cap) || 0;
+  const price = Number(stock.price) || Number(stock.prev_close) || 0;
+  if (circCapYi > 0 && price > 0) {
+    stock._circShares = (circCapYi * 100000000.0) / price;
+    return stock._circShares;
+  }
+  return 0;
+}
+
+function resolveItemTurnoverRate(item, stock) {
+  if (!item) return 0;
+  if (item.turnover_rate !== undefined && item.turnover_rate !== null && !isNaN(item.turnover_rate) && item.turnover_rate > 0) {
+    return Number(item.turnover_rate);
+  }
+  const circShares = getStockCirculatingShares(stock || appState.activeDetailStock);
+  const volHand = Number(item.volume) || 0;
+  if (circShares > 0 && volHand > 0) {
+    const volShares = volHand * 100.0;
+    const rate = (volShares / circShares) * 100.0;
+    return Number(rate.toFixed(2));
+  }
+  return item.turnover_rate != null ? Number(item.turnover_rate) : 0;
+}
+
+/** 需求REQ-035: 周/季K线由真实日K按自然周/自然季度聚合（禁止插值、禁止补足） */
+function aggregateBarsForGroup(dailyBars, groupKey) {
+  const bars = Array.isArray(dailyBars) ? dailyBars : [];
+  if (!bars.length) return [];
+  const bucketOf = (dateStr) => {
+    const parts = String(dateStr || '').split('-').map(Number);
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+    const [y, m, d] = parts;
+    if (groupKey === 'quarterly') return `${y}Q${Math.floor((m - 1) / 3) + 1}`;
+    // 自然周（ISO 口径）：以该日期所在周的周四为该周唯一键
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    const dow = dt.getUTCDay() === 0 ? 7 : dt.getUTCDay();
+    dt.setUTCDate(dt.getUTCDate() + 4 - dow);
+    const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((dt - yearStart) / 86400000 + 1) / 7);
+    return `${dt.getUTCFullYear()}W${String(week).padStart(2, '0')}`;
+  };
+
+  const out = [];
+  let cur = null;
+  bars.forEach(bar => {
+    const key = bucketOf(bar.date);
+    if (key === null) return;
+    if (!cur || cur.key !== key) {
+      if (cur) out.push(cur);
+      cur = { key, open: Number(bar.open), close: Number(bar.close), high: Number(bar.high), low: Number(bar.low),
+              volume: 0, amountYi: 0, amountResolved: 0, amountMissing: 0, amountDerivedDays: 0, count: 0 };
+    }
+    if (!Number.isFinite(cur.open)) cur.open = Number(bar.open);
+    cur.close = Number(bar.close);
+    cur.high = Math.max(cur.high, Number(bar.high));
+    cur.low = Math.min(cur.low, Number(bar.low));
+    const vol = Number(bar.volume);
+    if (Number.isFinite(vol)) cur.volume += vol;
+    // 需求REQ-042/043: 周/季成交额＝区间内每根日线的成交额「逐日相加」。
+    // 关键：相加的是与「日线图副图显示的成交额」完全同一口径（resolveKlineAmount 三级：
+    // 真实 amount_yi → 来源 amount/1e8 → 均价×成交量兜底），而不是只看原始 amount_yi 字段——
+    // 否则日线来源未披露成交额时，日线图有值而周/季图却为空，与用户需求不符。
+    const resolved = resolveKlineAmount(bar);
+    if (resolved.amountYi === null || !Number.isFinite(resolved.amountYi)) {
+      cur.amountMissing += 1;
+    } else {
+      cur.amountYi += resolved.amountYi;
+      cur.amountResolved += 1;
+      if (resolved.derived) cur.amountDerivedDays += 1;   // 该根日线成交额本身是估算（均价×成交量）
+    }
+    cur.date = bar.date;      // 需求REQ-035: 区间标签取该区间最后一个交易日
+    cur.count += 1;
+  });
+  if (cur) out.push(cur);
+
+  return out.filter(b => Number.isFinite(b.open) && Number.isFinite(b.close)).map(b => ({
+    date: b.date,
+    open: b.open,
+    close: b.close,
+    high: b.high,
+    low: b.low,
+    volume: b.volume,
+    // 需求REQ-042/043: 区间内日线成交额相加；一根都不可得时才为空（绝不以 0 充当成交额）。
+    // amount_derived 标记本聚合根的成交额中含估算日线，使图上的「含估算 N 根」标注可追溯。
+    amount_yi: b.amountResolved > 0 ? Number(b.amountYi.toFixed(4)) : null,
+    amount_derived: b.amountDerivedDays > 0,
+    amount_derived_days: b.amountDerivedDays,
+    amount_missing_days: b.amountMissing,
+    amount_partial: b.amountMissing > 0,
+    amounts_summed: b.amountResolved,
+    change_pct: b.open > 0 ? Number((((b.close - b.open) / b.open) * 100).toFixed(2)) : null,
+    turnover_rate: resolveItemTurnoverRate(b),
+    aggregated_from: b.count
+  }));
+}
+
+/** 需求REQ-035: 取某面板当前颗粒度的全部可用K线（不做窗口裁剪） */
+function panelAvailableBars(stock, st) {
+  const period = panelPeriodKey(st);
+  if (period === 'timeline') {
+    const tl = (stock && stock.timeline_data) || {};
+    return Array.isArray(tl.items) ? tl.items : [];
+  }
+  if (isMinuteKlinePeriod(period)) {
+    return currentMinuteKlineBars(stock, period) || [];
+  }
+  const daily = (stock && Array.isArray(stock.daily_bars)) ? stock.daily_bars : [];
+  if (period === 'klinedaily') return daily;
+  if (!stock) return [];
+  stock.__groupBars = stock.__groupBars || {};
+  if (!stock.__groupBars[st.klineGroup]) {
+    stock.__groupBars[st.klineGroup] = aggregateBarsForGroup(daily, st.klineGroup);
+  }
+  return stock.__groupBars[st.klineGroup];
+}
+
+/** 需求REQ-035: 视窗根数生效值 = clamp(N, 30, 全部可用根数) */
+function panelEffectiveCount(st, availableCount) {
+  const maxN = Math.max(MIN_PANEL_BARS, Number(availableCount) || 0);
+  const n = Number(st.klineCount) > 0 ? Number(st.klineCount) : MIN_PANEL_BARS;
+  return Math.max(MIN_PANEL_BARS, Math.min(maxN, Math.round(n)));
+}
+
+/** 需求REQ-035/需求5/6: 按视窗根数与平移偏移量取窗口数据（不足时返回全部，右侧留白由几何层处理） */
+function panelWindowBars(allBars, st) {
+  const list = Array.isArray(allBars) ? allBars : [];
+  const N = panelEffectiveCount(st, list.length);
+  const shown = Math.min(N, list.length);
+  const maxOffset = Math.max(0, list.length - shown);
+  const offset = Math.max(0, Math.min(maxOffset, Number(st.panOffset) || 0));
+  st.panOffset = offset;
+  const endIdx = list.length - offset;
+  const startIdx = Math.max(0, endIdx - shown);
+  return {
+    bars: list.slice(startIdx, endIdx),
+    N,
+    available: list.length,
+    offset,
+    maxOffset
+  };
+}
+
+/** 需求REQ-034: 把面板状态载入 appState（渲染与交互函数沿用既有 appState 口径，实现两图隔离） */
+function syncPanelToAppState(panel) {
+  const st = panel.st;
+  appState.chartPanelSlot = panel.slot;
+  appState.chartPeriod = panelPeriodKey(st);
+  appState.chartSubplot = st.subplot;
+  // lineLayers/chanlunLayers 传引用：改动直接落到本面板，不与其他面板共享
+  appState.lineLayers = st.lineLayers;
+  appState.lineZCounter = st.lineZCounter;
+  appState.topLineId = st.topLineId;
+  appState.chanlunLayers = st.chanlunLayers;
+  appState.showChanlunDraw = st.showChanlunDraw;
+  // 需求REQ-040: 买卖点显示等级随面板切换（两图各自独立）
+  appState.bsBuyLevel = st.bsBuyLevel;
+  appState.bsSellLevel = st.bsSellLevel;
+  appState.drawHLineMode = st.drawHLineMode;
+  appState.autoLinesCount = st.autoLinesCount;
+  appState.autoLinesBlockedReason = st.autoLinesBlockedReason;
+  appState.windowAmountSummary = st.windowAmountSummary;
+}
+
+/** 需求REQ-034: 把 appState 上的变更写回本面板（标量字段需显式回写，引用字段已共享） */
+function persistPanelFromAppState(panel) {
+  const st = panel.st;
+  st.subplot = appState.chartSubplot;
+  st.bsBuyLevel = appState.bsBuyLevel;
+  st.bsSellLevel = appState.bsSellLevel;
+  st.lineZCounter = appState.lineZCounter;
+  st.topLineId = appState.topLineId;
+  st.showChanlunDraw = appState.showChanlunDraw;
+  st.drawHLineMode = appState.drawHLineMode;
+  st.autoLinesCount = appState.autoLinesCount;
+  st.autoLinesBlockedReason = appState.autoLinesBlockedReason;
+  st.windowAmountSummary = appState.windowAmountSummary;
+}
+
+/** 需求REQ-034: 在指定面板上下文内执行一段逻辑，随后写回状态并重绘本面板 */
+function withChartPanel(slot, fn, opts = {}) {
+  const panel = panelBySlot(slot);
+  syncPanelToAppState(panel);
+  let result;
+  try {
+    result = fn(panel);
+  } finally {
+    persistPanelFromAppState(panel);
+  }
+  if (opts.render !== false) renderChartPanel(panel.slot);
+  return result;
+}
+
+/** 需求REQ-029: 判定周期是否为分钟K线 */
+function isMinuteKlinePeriod(period) {
+  return Object.prototype.hasOwnProperty.call(KLINE_MINUTE_INTERVALS, String(period || ''));
+}
+
+/**
+ * 需求REQ-029: 当前周期「铺满」所需根数。
+ * 自定义缩放（滚轮）优先；其余按 Tab 默认根数；「全部」＝200 根。
+ */
+function currentKlineWindowCount(period, customZoomCount) {
+  const zoom = Number(customZoomCount) || 0;
+  if (zoom > 0) return Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, zoom));
+  const preset = KLINE_PERIOD_COUNTS[String(period || '')];
+  return preset || STANDARD_KLINE_VIEW_COUNT;
+}
+
+/**
+ * 需求REQ-029: 槽宽基准根数 = 该周期「铺满」的根数。
+ * 20 天周期 → 按 20 根等分绘图区；不足 20 根时仍按 20 根槽宽绘制、右侧留白。
+ * 分钟K线与全部周期 → 200 根基准（不足 200 根时同样右侧留白）。
+ */
+function klineSlotBasisCount(period, customZoomCount) {
+  const zoom = Number(customZoomCount) || 0;
+  if (zoom > 0) return STANDARD_KLINE_VIEW_COUNT;
+  return KLINE_PERIOD_COUNTS[String(period || '')] || STANDARD_KLINE_VIEW_COUNT;
+}
+
 /** 需求REQ-023: 绘图区内宽（个股 860 - 65 - 65 = 730） */
 function klinePlotInnerWidth(width, margin) {
   const inner = Number(width) - Number(margin.left) - Number(margin.right);
   return inner > 0 ? inner : 0;
 }
 
-/** 需求REQ-023: 标准槽宽 = 绘图区内宽 / 200；n>200 时才按需等比压缩 */
-function klineSlotWidth(width, margin, visibleCount) {
+/** 需求REQ-023/029: 槽宽 = 绘图区内宽 / 基准根数 */
+function klineSlotWidth(width, margin, visibleCount, basisCount) {
   const inner = klinePlotInnerWidth(width, margin);
   if (inner <= 0) return 0;
-  const standard = inner / STANDARD_KLINE_VIEW_COUNT;
+  const basis = Number(basisCount) > 0 ? Number(basisCount) : STANDARD_KLINE_VIEW_COUNT;
   const n = Number(visibleCount) || 0;
-  if (n > STANDARD_KLINE_VIEW_COUNT) return inner / n;
-  // 根数不足 200 时仍使用标准槽宽：剩余宽度一律留白
-  return standard;
+  if (n > basis) return inner / n;
+  // 根数不足基准时仍使用基准槽宽：剩余宽度一律留白
+  return inner / basis;
 }
 
-/** 需求REQ-023: 槽位几何（含主图蜡烛与副图柱的同一基准） */
-function klineSlotGeometry(width, margin, visibleCount) {
+/** 需求REQ-023/029: 槽位几何（含主图蜡烛与副图柱的同一基准） */
+function klineSlotGeometry(width, margin, visibleCount, basisCount) {
   const innerW = klinePlotInnerWidth(width, margin);
-  const slot = klineSlotWidth(width, margin, visibleCount);
+  const basis = Number(basisCount) > 0 ? Number(basisCount) : STANDARD_KLINE_VIEW_COUNT;
+  const slot = klineSlotWidth(width, margin, visibleCount, basis);
   const barW = Math.max(1, Math.min(14, slot * 0.72));
   return {
     innerW: innerW,
+    basisCount: basis,
     slot: slot,
     barW: barW,
     candleW: barW,
-    // 根数不足 200 时，K线从绘图区左缘起向右逐根排列，右侧留白
+    // 根数不足基准时，K线从绘图区左缘起向右逐根排列，右侧留白
     xOf: (idx) => margin.left + (idx + 0.5) * slot,
     rightPadding: Math.max(0, innerW - slot * (Number(visibleCount) || 0)),
-    partial: (Number(visibleCount) || 0) < STANDARD_KLINE_VIEW_COUNT
+    partial: (Number(visibleCount) || 0) < basis
   };
+}
+
+/** 需求REQ-029/035: 当前周期的槽宽基准与视窗根数（渲染/十字光标/自动线共用同一口径）
+ *  需求REQ-035: 个股双图面板下，槽宽基准＝该面板当前视窗根数 N（内宽 / N 等分，不足则右侧留白）；
+ *  指数页保持旧的「标准 200 根基准」口径不变。 */
+function currentKlineSlotBasis() {
+  const slot = appState.chartPanelSlot;
+  if (slot && chartPanels[slot]) {
+    const st = chartPanels[slot].st;
+    return panelEffectiveCount(st, st.availableCount);
+  }
+  return klineSlotBasisCount(appState.chartPeriod, appState.chartCustomZoomCount);
+}
+
+function currentKlineWindow() {
+  const slot = appState.chartPanelSlot;
+  if (slot && chartPanels[slot]) {
+    const st = chartPanels[slot].st;
+    return panelEffectiveCount(st, st.availableCount);
+  }
+  return currentKlineWindowCount(appState.chartPeriod, appState.chartCustomZoomCount);
+}
+
+/** 需求REQ-029: 指数侧同口径（独立状态对象） */
+function currentIndexWindow() {
+  return currentKlineWindowCount(indexState.period, indexState.customZoomCount);
+}
+
+function currentIndexSlotBasis() {
+  return klineSlotBasisCount(indexState.period, indexState.customZoomCount);
 }
 
 /**
@@ -5131,35 +6676,63 @@ function findFirstCrossIndex(klines, price) {
 }
 
 /**
- * 需求REQ-026: 计算辅助线的交易面积
- * 定义：从首个与K线交汇的交易日到今天，剔除该线自身交汇的交易日之后，剩余K线成交额之和
- * 铁律：① 累计口径不受缩放窗口影响（由调用方传入全量K线与锚定索引保证）
+ * 需求REQ-030: 计算辅助线的交易面积（窗口口径）
+ * 定义：交易面积 = 本线「首个交汇日 → 当前窗口最后一个交易日」区间内的成交额之和 − 该线自身交汇日的成交额
+ * 铁律：① 统计区间以窗口为准，放大缩小必须随窗口变动（不再锚定全量历史）
  *      ② 必须剔除该线自身交汇的交易日
- *      ③ 覆盖不完整时显式标注，不以 0 补齐
+ *      ③ 必须给出未交汇天数
+ *      ④ 覆盖不完整时显式标注，不以 0 补齐
+ *      ⑤ 窗口内从未交汇 → 返回 null 由 formatTradeArea 显示「未交汇」，不得以 0 冒充
  */
-function computeTradeArea(klines, price, firstCrossIndex) {
+function computeTradeArea(klines, price, firstCrossIndex, opts) {
   const list = klines || [];
+  // 需求REQ-032: 指数交易面积只采信来源原始披露成交额；点位×成交量的估算值与全市场成交额不是同一量纲，
+  //   一旦参与求和会得出量纲错误的天文数字，因此 disclosedOnly 口径下把估算值视为「不可得」。
+  const disclosedOnly = !!(opts && opts.disclosedOnly);
+  const amountOf = (item) => {
+    const resolved = resolveKlineAmount(item);
+    if (resolved.amountYi === null) return null;
+    if (disclosedOnly && resolved.derived) return null;
+    return resolved.amountYi;
+  };
   const anchor = Number.isInteger(firstCrossIndex) ? firstCrossIndex : findFirstCrossIndex(list, price);
   if (anchor < 0 || anchor >= list.length) {
-    return { tradeAreaYi: null, excludedDays: 0, countedDays: 0, incomplete: false, reason: '该辅助线尚未与任何K线交汇' };
+    return { tradeAreaYi: null, totalAmountYi: null, intersectAmountYi: null, excludedDays: 0, countedDays: 0,
+             incomplete: false, reason: '该辅助线在当前显示区间内尚未与任何K线交汇' };
   }
   const p = Number(price);
-  let sum = 0;
+  let totalAmountYi = 0;
+  let intersectAmountYi = 0;
   let excludedDays = 0;
   let countedDays = 0;
   let incomplete = false;
   for (let i = anchor; i < list.length; i++) {
     const item = list[i];
+    const amountYi = amountOf(item);
+    if (amountYi === null) incomplete = true;
     const h = Number(item.high !== undefined ? item.high : item.price);
     const l = Number(item.low !== undefined ? item.low : item.price);
-    if (Number.isFinite(h) && Number.isFinite(l) && l <= p && p <= h) { excludedDays++; continue; }
-    const resolved = resolveKlineAmount(item);
-    if (resolved.amountYi === null) { incomplete = true; continue; }
-    sum += resolved.amountYi;
-    countedDays++;
+    const hit = Number.isFinite(h) && Number.isFinite(l) && l <= p && p <= h;
+    if (hit) {
+      excludedDays++;
+      if (amountYi !== null) intersectAmountYi += amountYi;
+      continue;
+    }
+    if (amountYi !== null) { totalAmountYi += amountYi; countedDays++; }
   }
+  // 需求REQ-026/032: 整个区间一段可用成交额都没有（来源未披露 / 只有估算值）时，交易面积必须如实「不出数」，
+  //   绝不以 0.00亿 冒充「面积为 0」这一截然不同的结论。
+  if (countedDays === 0 && intersectAmountYi === 0) {
+    return { tradeAreaYi: null, totalAmountYi: null, intersectAmountYi: null, excludedDays: excludedDays, countedDays: 0,
+             incomplete: true,
+             reason: disclosedOnly ? '该辅助线区间内成交额来源未披露（估算值不参与统计），交易面积不出数'
+                                   : '该辅助线区间内成交额全部不可得，交易面积不出数' };
+  }
+  const windowTotal = totalAmountYi + intersectAmountYi;
   return {
-    tradeAreaYi: Number(sum.toFixed(2)),
+    tradeAreaYi: Number(totalAmountYi.toFixed(2)),
+    windowTotalAmountYi: Number(windowTotal.toFixed(2)),
+    intersectAmountYi: Number(intersectAmountYi.toFixed(2)),
     excludedDays: excludedDays,
     countedDays: countedDays,
     incomplete: incomplete,
@@ -5167,7 +6740,95 @@ function computeTradeArea(klines, price, firstCrossIndex) {
   };
 }
 
-/** 需求REQ-026: 统一的交易面积展示文案（未交汇 / 覆盖不完整 都必须显式区分） */
+/**
+ * 需求REQ-031: 当前显示窗口内的总成交额（图上所有交易日成交额之和）
+ * 铁律：不可得的交易日不计入并显式标记覆盖不完整，绝不以 0 充当成交额。
+ */
+function computeWindowTotalAmount(klines) {
+  const list = klines || [];
+  let sum = 0;
+  let days = 0;
+  let missing = 0;
+  let derived = 0;
+  list.forEach(k => {
+    const r = resolveKlineAmount(k);
+    if (r.amountYi === null) { missing++; return; }
+    sum += r.amountYi;
+    days++;
+    if (r.derived || (k && k.amount_derived === true)) derived++;
+  });
+  return {
+    totalAmountYi: Number(sum.toFixed(2)),
+    days: days,
+    missingDays: missing,
+    derivedDays: derived,
+    incomplete: missing > 0,
+    reason: missing > 0 ? `窗口内 ${missing} 个交易日成交额不可得，总成交额为不完全覆盖口径` : null
+  };
+}
+
+/**
+ * 需求REQ-031/032: 总成交额展示文案
+ * 铁律：成交额不可得时必须显示原因，绝不以 0 充当成交额，也不把估算值说成真实值。
+ */
+function formatTotalAmount(summary) {
+  if (!summary || summary.totalAmountYi === null || summary.totalAmountYi === undefined || summary.days === 0) {
+    return `总成交额: 不可得${summary && summary.note ? `（${summary.note}）` : ''}`;
+  }
+  const base = `总成交额: ${Number(summary.totalAmountYi).toFixed(2)}亿 (${summary.days}个交易日)`;
+  const parts = [];
+  if (summary.derivedDays > 0) parts.push(`含估算 ${summary.derivedDays} 根`);
+  if (summary.incomplete) parts.push(`覆盖不完整·缺 ${summary.missingDays} 天`);
+  return parts.length ? `${base} · ${parts.join(' · ')}` : base;
+}
+
+/**
+ * 需求REQ-032: 指数成交额口径（执行阻塞点，已与需求方确认）
+ * 背景：指数日K来源从未披露成交额（2560/2560 根 amount_yi 为空），而「点位 × 成分股成交量」与全市场
+ *       成交额不是同一量纲（实测近 200 根兜底合计 4,898,273 亿 vs 当日快照 9,941.69 亿，相差约 493 倍）。
+ * 口径：① 历史交易日成交额不可得 → 显示「不可得」并写明原因，绝不以估算值充当真实成交额；
+ *       ② 窗口末端为当日时显示来源实时快照的真实成交额，并明确标注「仅当日、历史日K未披露」。
+ */
+function indexWindowAmountSummary(klines, indexData, opts = {}) {
+  const list = klines || [];
+  const isMinute = opts.isMinute === true;
+  const unit = isMinute ? '分钟' : '交易日';
+  const snapshot = Number((indexData || {}).turnover_yi);
+  const lastBar = list.length ? list[list.length - 1] : null;
+  const lastDate = lastBar ? String(lastBar.date || lastBar.time || '') : '';
+  const today = new Date().toISOString().slice(0, 10);
+  const coversToday = !!lastDate && lastDate === today;
+  const scaleNote = isMinute
+    ? '该指数分钟K线来源未披露成交额，且指数点位×成分股成交量与全市场成交额不是同一量纲，故分时区间不参与求和'
+    : '该指数历史日K未披露成交额，且指数点位×成分股成交量与全市场成交额不是同一量纲，故历史日不参与求和';
+  if (coversToday && Number.isFinite(snapshot) && snapshot > 0) {
+    return {
+      totalAmountYi: snapshot, days: 1, missingDays: list.length - 1, derivedDays: 0,
+      incomplete: list.length > 1,
+      note: `来源实时快照仅提供当日成交额（本窗口 ${list.length} 个${unit}中的 1 ${isMinute ? '个时间区间（即当日）' : '天'}）；` + scaleNote,
+      reason: '指数历史成交额来源未披露'
+    };
+  }
+  return {
+    totalAmountYi: null, days: 0, missingDays: list.length, derivedDays: 0, incomplete: true,
+    note: coversToday ? '来源未提供实时快照成交额' : (isMinute ? '来源未披露该指数分钟成交额' : '来源未披露该指数历史成交额'),
+    reason: '指数历史成交额来源未披露'
+  };
+}
+
+/**
+ * 需求REQ-032: 指数成交额样本口径 —— 只采信「来源原始披露」的成交额。
+ * 「指数点位数 × 成分股成交量」与全市场成交额不是同一量纲（实测偏差数百至数千倍），
+ * 因此由 resolveKlineAmount 兜底出来的估算值必须整段剔除，不得参与任何统计或展示。
+ */
+function indexDisclosedAmountSamples(klines) {
+  return (klines || []).map(k => {
+    const r = resolveKlineAmount(k);
+    return (r.amountYi == null || r.derived) ? null : Number(r.amountYi);
+  }).filter(v => v != null && Number.isFinite(v));
+}
+
+/** 需求REQ-026/030: 统一的交易面积展示文案（未交汇 / 覆盖不完整 都必须显式区分） */
 function formatTradeArea(area) {
   if (!area || area.tradeAreaYi === null || area.tradeAreaYi === undefined) {
     return '交易面积: 未交汇';
@@ -5176,6 +6837,16 @@ function formatTradeArea(area) {
   return area.incomplete ? `${base}·覆盖不完整` : base;
 }
 
+/**
+ * 需求REQ-047: SVG 文本宽度估算（用于把副图标题与统计项按实测宽度「平铺」排布，杜绝文字重叠）
+ * 口径：CJK 全角字符按 1em、ASCII/半角按 0.6em、全角标点按 0.9em，再乘 1.05 安全系数（宁可多留白，不可重叠）。
+ */
+/**
+ * 需求REQ-047: 副图标题 + 统计概要「平铺」排布器。
+ * - 标题与每个统计项按实测宽度顺序定位（每项各自独立 x），任意标题长度下都不会与统计项重叠；
+ * - 超出绘图区右缘时先压缩项间距，仍放不下则换行（最多 maxRows 行），绝不覆盖、绝不丢项；
+ * - 返回 { svg, rows, endX }，调用方按 rows 预留行高（多行时相应压缩副图柱高度，避免压住柱子）。
+ */
 /** 需求REQ-025: 依据样本判定整段成交额是否为估算口径（用于标题/图例统一标注） */
 function amountCoverageFlags(klines) {
   const list = klines || [];
@@ -5191,15 +6862,17 @@ function amountCoverageFlags(klines) {
   return { derived: derived, missing: missing, anyDerived: derived > 0, anyMissing: missing > 0 };
 }
 
-function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=null) {
+function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=null, slot='right', overlay=null, periodKey='klinedaily') {
   if (!klines || klines.length === 0) {
     return '<div style="padding: 2rem; color: var(--text-muted);">暂无K线数据</div>';
   }
 
   const innerW = w - m.left - m.right;
   const n = klines.length;
-  // 需求REQ-022/023: 视窗标准 200 根槽位；缩放只改根数、不改槽宽；不足 200 根时右侧留白
-  const slotGeo = klineSlotGeometry(w, m, n);
+  // 需求REQ-035: 槽宽基准＝本面板当前视窗根数 N（绘图区内宽按 N 等分）；
+  // 真实根数不足 N 根时仍按 N 根槽宽绘制、右侧留白，绝不拉伸、绝不补足。
+  const slotBasis = currentKlineSlotBasis();
+  const slotGeo = klineSlotGeometry(w, m, n, slotBasis);
   const stepX = slotGeo.slot;
   const barW = slotGeo.barW;
   const candleWidth = slotGeo.candleW;
@@ -5208,8 +6881,20 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
 
   const highs = klines.map(d => d.high);
   const lows = klines.map(d => d.low);
-  const maxPrice = Math.max(...highs);
-  const minPrice = Math.min(...lows);
+  let maxPrice = Math.max(...highs);
+  let minPrice = Math.min(...lows);
+  // 需求REQ-036: 重合图下价格轴必须同时容纳K线与当日分时，两条曲线共用同一价格轴
+  const overlayPrices = (overlay && Array.isArray(overlay.items))
+    ? overlay.items.map(it => Number(it.price)).filter(v => Number.isFinite(v)) : [];
+  const overlayPreClose = overlay ? Number(overlay.preClose) : NaN;
+  if (overlayPrices.length) {
+    maxPrice = Math.max(maxPrice, ...overlayPrices);
+    minPrice = Math.min(minPrice, ...overlayPrices);
+    if (Number.isFinite(overlayPreClose) && overlayPreClose > 0) {
+      maxPrice = Math.max(maxPrice, overlayPreClose);
+      minPrice = Math.min(minPrice, overlayPreClose);
+    }
+  }
   const pad = Math.max((maxPrice - minPrice) * 0.08, maxPrice * 0.001, 0.01);
   const pTop = maxPrice + pad;
   const pBottom = Math.max(0.1, minPrice - pad);
@@ -5218,68 +6903,128 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
 
   const subTopY = m.top + mh + 25;
   const isVol = (subplotType === 'vol');
+  const isTurn = (subplotType === 'turnover_rate');
+  const resolveSubVal = (d) => {
+    if (isTurn) {
+      return (d.turnover_rate !== undefined && d.turnover_rate !== null) ? Number(d.turnover_rate) : 0.0;
+    }
+    return isVol ? d.volume : resolveKlineAmount(d).amountYi;
+  };
   // 需求REQ-025: 副图成交额同样走兜底口径，仅在均价与成交量均缺失时才留下空柱
-  const subVals = klines.map(d => isVol ? d.volume : resolveKlineAmount(d).amountYi);
-  const missingAmount = !isVol && subVals.some(v => v === null || v === undefined);
-  const maxSubVal = Math.max(...subVals, 0.1) * 1.1;
-  const subValToH = (v) => (v / maxSubVal) * (sh - 10);
+  const subVals = klines.map(d => resolveSubVal(d));
+  const missingAmount = !isVol && !isTurn && subVals.some(v => v === null || v === undefined);
+  const maxSubVal = Math.max(...subVals, isTurn ? 0.5 : 0.1) * 1.1;
 
-  // 需求1/2: 统计当前可视K线窗口内副图的四维分布概要 (平均、最小、最大、中位数)
+  // 需求REQ-031: 总成交额（亿）与累计换手率必须早于「四维分布概要」计算 ——
+  //   下方的换手率分支与成交额分支都要用到这两个值，若声明写在后面会触发 TDZ
+  //   （ReferenceError: Cannot access 'windowAmount'/'totalTurnover' before initialization），
+  //   异常会中断整张 SVG 的渲染，导致个股详情图整体加载失败。
+  const windowAmount = computeWindowTotalAmount(klines);
+  const totalTurnover = isTurn ? subVals.reduce((acc, v) => acc + (Number(v) || 0), 0) : 0;
+
+  // 需求REQ-025: 副图标题必须自带口径后缀，使估算值与来源原始披露值一眼可辨
+  //   （R04 验收口径为「（含估算：均价×成交量）」，不得简写为「（含估算）」）
+  const amountDerivedNote = (!isVol && !isTurn && amountFlags.anyDerived) ? '（含估算：均价×成交量）' : '';
+  const subTitle = isTurn ? '副图：换手率' : (isVol ? '副图：成交量' : `副图：成交额${amountDerivedNote}`);
+  const subUnit = isTurn ? '%' : (isVol ? '手' : '亿元');
+  const fmtSubVol = (val) => {
+    if (val >= 100000000) return (val / 100000000).toFixed(2) + '亿手';
+    if (val >= 10000) return (val / 10000).toFixed(1) + '万手';
+    return Math.round(val) + '手';
+  };
+
+  // 需求REQ-047: 副图标题 + 四维分布概要「平铺」排布 —— 逐项按实测宽度定位，任何标题长度都不重叠
   const subStats = calculateDistributionSummary(subVals);
-  let summaryBadgesSvg = '';
-  if (isVol) {
-    // 交易量四维分布概要 (万手折算或手)
-    const fmtVol = (val) => {
-      if (val >= 100000000) return (val / 100000000).toFixed(2) + '亿手';
-      if (val >= 10000) return (val / 10000).toFixed(1) + '万手';
-      return Math.round(val) + '手';
-    };
-    summaryBadgesSvg = `
-      <g class="sub-summary-group">
-        <text x="${m.left + 115}" y="${subTopY + 14}" fill="#38bdf8" font-size="10" font-family="monospace">
-          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#38bdf8">${fmtVol(subStats.mean)}</tspan>
-          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${fmtVol(subStats.min)}</tspan>
-          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${fmtVol(subStats.max)}</tspan>
-          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${fmtVol(subStats.median)}</tspan>
-        </text>
-      </g>
-    `;
+  let headerItems = [];
+  if (isTurn) {
+    headerItems = [
+      { label: '总和:', value: `${totalTurnover.toFixed(2)}%`, fill: '#f59e0b' },
+      { label: '平均:', value: `${subStats.mean.toFixed(2)}%`, fill: '#c084fc' },
+      { label: '地量(最小):', value: `${subStats.min.toFixed(2)}%`, fill: '#10b981' },
+      { label: '天量(最大):', value: `${subStats.max.toFixed(2)}%`, fill: '#ef4444' },
+      { label: '中位数:', value: `${subStats.median.toFixed(2)}%`, fill: '#facc15' }
+    ];
+  } else if (isVol) {
+    const totalVol = klines.reduce((acc, d) => acc + (Number(d.volume) || 0), 0);
+    headerItems = [
+      { label: '总和:', value: fmtSubVol(totalVol), fill: '#f59e0b' },
+      { label: '平均:', value: fmtSubVol(subStats.mean), fill: '#38bdf8' },
+      { label: '地量(最小):', value: fmtSubVol(subStats.min), fill: '#10b981' },
+      { label: '天量(最大):', value: fmtSubVol(subStats.max), fill: '#ef4444' },
+      { label: '中位数:', value: fmtSubVol(subStats.median), fill: '#facc15' }
+    ];
   } else {
-    // 交易额四维分布概要 (单位: 亿)
-    summaryBadgesSvg = `
-      <g class="sub-summary-group">
-        <text x="${m.left + 115}" y="${subTopY + 14}" fill="#f59e0b" font-size="10" font-family="monospace">
-          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#f59e0b">${subStats.mean.toFixed(2)}亿</tspan>
-          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${subStats.min.toFixed(2)}亿</tspan>
-          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${subStats.max.toFixed(2)}亿</tspan>
-          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${subStats.median.toFixed(2)}亿</tspan>
-        </text>
-      </g>
-    `;
+    // 需求REQ-025/047: 总和与下方「总成交额」必须同源同口径（computeWindowTotalAmount 的字段是 totalAmountYi）
+    const amtStr = windowAmount && Number.isFinite(windowAmount.totalAmountYi) && windowAmount.days > 0
+      ? `${windowAmount.totalAmountYi.toFixed(2)}亿${windowAmount.derivedDays > 0 ? '（含估算）' : ''}`
+      : '--';
+    headerItems = [
+      { label: '总和:', value: amtStr, fill: '#f59e0b' },
+      { label: '平均:', value: `${subStats.mean.toFixed(2)}亿`, fill: '#f59e0b' },
+      { label: '地量(最小):', value: `${subStats.min.toFixed(2)}亿`, fill: '#10b981' },
+      { label: '天量(最大):', value: `${subStats.max.toFixed(2)}亿`, fill: '#ef4444' },
+      { label: '中位数:', value: `${subStats.median.toFixed(2)}亿`, fill: '#facc15' }
+    ];
   }
+  const subHeader = layoutSubplotHeader({
+    x0: m.left + 8,
+    y: subTopY + 14,
+    title: subTitle,
+    items: headerItems,
+    maxRight: m.left + innerW - 6,
+    fontSize: 10
+  });
+  let summaryBadgesSvg = subHeader.svg;
+  // 多行表头时按行数压缩副图柱高度，保证表头文字永远不压住柱子
+  const subHeaderRows = subHeader.rows;
+  const subValToH = (v) => (v / maxSubVal) * Math.max(20, sh - 10 - (subHeaderRows - 1) * 12);
 
+  // 需求1/2/3: 统计当前可视K线窗口内副图的四维分布概要 (平铺排列，绝不叠在一起)
   if (missingAmount) {
-    summaryBadgesSvg = `<text x="${m.left + 100}" y="${subTopY + 14}" fill="#94a3b8" font-size="12">当前来源未提供完整成交额，且均价或成交量缺失无法兜底推算</text>`;
-  } else if (!isVol && amountFlags.anyDerived) {
+    // 需求REQ-047: 缺失提示同样走实测宽度平铺，紧跟标题之后，绝不与标题重叠
+    summaryBadgesSvg = layoutSubplotHeader({
+      x0: m.left + 8,
+      y: subTopY + 14,
+      title: subTitle,
+      items: [{ label: '当前来源未提供完整成交额，且均价或成交量缺失无法兜底推算', value: null, fill: '#94a3b8' }],
+      maxRight: m.left + innerW - 6,
+      fontSize: 10
+    }).svg;
+  } else if (!isVol && !isTurn && amountFlags.anyDerived) {
     // 需求REQ-025: 兜底估算值必须可区分，不允许与真实成交额混为一谈
+    // 需求REQ-042/043: 与左下角「总成交额」同行绘制时必须右对齐，否则两段文字会重叠成一片
     summaryBadgesSvg += `
-      <text x="${m.left + 8}" y="${subTopY + sh + 11}" fill="#fbbf24" font-size="10">
+      <text x="${m.left + innerW - 8}" y="${subTopY + sh + 11}" fill="#fbbf24" font-size="10" text-anchor="end">
         ⚠️ 其中 ${amountFlags.derived} 根成交额为估算（均价 × 成交量），非来源原始披露
       </text>
     `;
   } else if (isVol && amountFlags.anyDerived) {
     // 需求REQ-025: 副图显示成交量时，成交额兜底口径同样必须主图可见（不得因切换副图而失去标注）
     summaryBadgesSvg += `
-      <text x="${m.left + 8}" y="${subTopY + sh + 11}" fill="#fbbf24" font-size="10">
+      <text x="${m.left + innerW - 8}" y="${subTopY + sh + 11}" fill="#fbbf24" font-size="10" text-anchor="end">
         ⚠️ 成交额由来源缺失后兜底：其中 ${amountFlags.derived} 根按（均价 × 成交量）估算，非来源原始披露
       </text>
     `;
   }
 
+  // 需求REQ-031: 总成交额（亿）= 当前图上所有交易日成交额之和；换手率模式下显示累计换手率
+  //   （windowAmount / totalTurnover 已在上方「四维分布概要」之前声明，此处只使用不再重复声明）
+  const totalAmountSvg = isTurn ? `
+    <text x="${m.left + 8}" y="${subTopY + sh + 11}" fill="#c084fc" font-size="10" font-weight="700" class="sub-total-amount">
+      区间累计换手率: ${totalTurnover.toFixed(2)}% (${klines.length}个周期)
+    </text>
+  ` : `
+    <text x="${m.left + 8}" y="${subTopY + sh + 11}" fill="#f59e0b" font-size="10" font-weight="700" class="sub-total-amount">
+      ${formatTotalAmount(windowAmount)}
+    </text>
+  `;
+
   let candles = '';
   let subBars = '';
   let ma5Path = '';
   let ma10Path = '';
+
+  const effortData = appState.showEffortDraw ? calculateWyckoffEffortResult(klines) : null;
 
   klines.forEach((d, idx) => {
     const xMid = slotGeo.xOf(idx);
@@ -5300,12 +7045,17 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
     const bH = Math.max(1.0, Math.abs(yO - yC));
     candles += `<rect x="${xMid - candleWidth * 0.5}" y="${bTop}" width="${candleWidth}" height="${bH}" fill="${color}"/>`;
 
-    // 副图柱子 (与主图蜡烛共用同一槽位与宽度基准)
-    const val = isVol ? d.volume : resolveKlineAmount(d).amountYi;
+    // 副图柱子 (与主图蜡烛共用同一槽位与宽度基准；格式塔共同命运: 努力异动柱高亮显示)
+    const val = resolveSubVal(d);
     if (val !== null && val !== undefined) {
       const sH = Math.max(1.0, subValToH(val));
       const sY = subTopY + sh - sH;
-      subBars += `<rect x="${xMid - candleWidth * 0.5}" y="${sY}" width="${candleWidth}" height="${sH}" fill="${color}" opacity="0.85"/>`;
+      if (effortData && effortData.anomalyIndices.has(idx)) {
+        subBars += `<rect x="${xMid - candleWidth * 0.5}" y="${sY}" width="${candleWidth}" height="${sH}" fill="${color}" opacity="0.95" stroke="#f59e0b" stroke-width="1.2"/>`;
+        subBars += `<text x="${xMid}" y="${sY - 3}" fill="#f59e0b" font-size="9" text-anchor="middle" font-weight="700">⚡</text>`;
+      } else {
+        subBars += `<rect x="${xMid - candleWidth * 0.5}" y="${sY}" width="${candleWidth}" height="${sH}" fill="${color}" opacity="0.85"/>`;
+      }
     }
 
     // 均线计算
@@ -5323,12 +7073,76 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
     }
   });
 
-  const subUnit = isVol ? '手' : '亿元';
-  const amountDerivedNote = (!isVol && amountFlags.anyDerived) ? '（含估算：均价×成交量）' : '';
-  const subTitle = isVol ? '副图：成交量 (手)' : `副图：成交额 (亿元)${amountDerivedNote}`;
+  // 需求REQ-047: 原「subSumBadge」死代码块已删除 —— 它从未渲染到页面，且引用字段名错误（totalYi 不存在），
+  //   保留只会让后续优化者误判「总和」已有实现；当前「总和」统一由上方 layoutSubplotHeader 的统计项输出。
+
+  // 需求REQ-025/047: subUnit / amountDerivedNote / subTitle 已在副图表头排布处统一定义，此处不再重复声明
+
+  // 需求REQ-036: 重合图（方案A）—— 当日分时折线叠加在日K之上，两条曲线共用同一价格轴
+  //   口径说明：分时按「分钟」铺满整个绘图区宽度，其时间轴与日K的时间轴并不对应，
+  //   因此图上必须显式标注，避免被误读为同一时间刻度。
+  let overlayIntradaySvg = '';
+  if (overlay && Array.isArray(overlay.items) && overlay.items.length > 0) {
+    const stepT = innerW / Math.max(1, overlay.items.length - 1);
+    const overlayPath = overlay.items.map((it, i) =>
+      `${i === 0 ? 'M' : 'L'} ${(m.left + i * stepT).toFixed(2)} ${priceToY(Number(it.price)).toFixed(2)}`
+    ).join(' ');
+    const preY = Number.isFinite(overlayPreClose) && overlayPreClose > 0 ? priceToY(overlayPreClose) : null;
+    overlayIntradaySvg = `
+      <g class="overlay-intraday-layer">
+        ${preY === null ? '' : `<line x1="${m.left}" y1="${preY.toFixed(2)}" x2="${m.left + innerW}" y2="${preY.toFixed(2)}" stroke="#64748b" stroke-dasharray="4,4" opacity="0.8"/>`}
+        <path d="${overlayPath}" fill="none" stroke="#facc15" stroke-width="1.6" opacity="0.95"/>
+        <text x="${m.left + 8}" y="${m.top + 42}" fill="#facc15" font-size="10" font-weight="600">🔀 重合图：当日分时折线（横向铺满，时间轴与日K不对应，仅价格轴对齐）</text>
+      </g>
+    `;
+  } else if (overlay && overlay.note) {
+    overlayIntradaySvg = `<text x="${m.left + 8}" y="${m.top + 42}" fill="#94a3b8" font-size="10">🔀 ${overlay.note}</text>`;
+  }
+
+  // 需求REQ-034: 分钟K线的横轴必须显示到分钟；否则同一天的几十根K线会全部标成同一个日期
+  const isMinuteSeries = klines.some(k => k && k.time);
+  const axisLabelOf = (k) => {
+    if (!k) return '';
+    if (isMinuteSeries && k.time) {
+      const d = String(k.date || '');
+      return d.length >= 10 ? `${d.slice(5)} ${k.time}` : String(k.time);
+    }
+    return String(k.date || '');
+  };
+
+  // 需求REQ-034: 颗粒度与视窗口径标注（必须让用户看清「每根K线代表多长时间」）
+  const granularityLabel = {
+    klinem1: '1分K线 · 每根＝1分钟真实区间',
+    klinem5: '5分K线 · 每根＝5分钟真实区间',
+    klinedaily: '日线图 · 每根＝1个交易日',
+    klineweekly: '周线图 · 每根＝1个自然周（由真实日K聚合）',
+    klinequarterly: '季线图 · 每根＝1个自然季度（由真实日K聚合）'
+  }[periodKey] || '';
+
+  // 需求REQ-042/043: 周/季成交额＝区间内日线成交额逐日相加，口径与兜底根数必须在图上可见
+  let aggregateAmountNote = '';
+  if (periodKey === 'klineweekly' || periodKey === 'klinequarterly') {
+    const derivedDays = klines.reduce((s, k) => s + (Number(k.amount_derived_days) || 0), 0);
+    const missingDays = klines.reduce((s, k) => s + (Number(k.amount_missing_days) || 0), 0);
+    const parts = ['成交额＝区间内日线成交额逐日相加'];
+    if (derivedDays > 0) parts.push(`含估算 ${derivedDays} 根日线（均价×成交量）`);
+    if (missingDays > 0) parts.push(`覆盖不完整·${missingDays} 根日线成交额不可得未计入`);
+    aggregateAmountNote = ` ｜ ${parts.join('，')}`;
+  }
+
+  // 需求REQ-042/043: 聚合口径必须画在图上（主图与副图之间的空行，右对齐，不遮挡K线与副图柱）
+  const aggregateAmountSvg = aggregateAmountNote
+    ? `<text class="aggregate-amount-note" x="${m.left + innerW - 8}" y="${m.top + mh + 4}" fill="#fbbf24" font-size="10" text-anchor="end">📐 ${aggregateAmountNote.replace(/^ ｜ /, '')}</text>`
+    : '';
+
+  // 需求REQ-041: 图上的买卖点必须标明「属于哪个级别 + 六类各识别几个」，避免与日线信号混读
+  const bsSummaryText = chanlunBsSummaryText(analysis, periodKey);
+  const bsSummarySvg = bsSummaryText
+    ? `<text class="chanlun-bs-summary" x="${m.left + 8}" y="${m.top + mh + 4}" fill="#c084fc" font-size="10">${bsSummaryText}</text>`
+    : '';
 
   return `
-    <svg id="stockInteractiveSvg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background-color: #0b1329; border-radius: 8px; cursor: crosshair;">
+    <svg id="stockInteractiveSvg_${slot}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background-color: #0b1329; border-radius: 8px; cursor: crosshair;">
       <!-- 主图网格 -->
       <rect x="${m.left}" y="${m.top}" width="${innerW}" height="${mh}" fill="#0f172a" stroke="#1e293b"/>
       
@@ -5337,28 +7151,37 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
         <tspan fill="#f59e0b">● MA5</tspan>
         <tspan dx="10" fill="#38bdf8">● MA10</tspan>
       </text>
-      ${slotGeo.partial ? `<text x="${m.left + innerW - 4}" y="${m.top + 14}" fill="#64748b" font-size="10" text-anchor="end">标准视窗 ${STANDARD_KLINE_VIEW_COUNT} 根 · 当前显示 ${n} 根（右侧留白）</text>` : ''}
+      <text x="${m.left + innerW - 4}" y="${m.top + 14}" fill="#64748b" font-size="10" text-anchor="end">${granularityLabel} ｜ 视窗 ${slotBasis} 根 · 实绘 ${n} 根${slotGeo.partial ? '（不足，右侧留白）' : ''}</text>
 
       <!-- 蜡烛线与均线 -->
       ${candles}
       <path d="${ma5Path}" fill="none" stroke="#f59e0b" stroke-width="1.3"/>
       <path d="${ma10Path}" fill="none" stroke="#38bdf8" stroke-width="1.3"/>
+      ${overlayIntradaySvg}
 
       <!-- 需求4: 缠论笔与买卖点标记图层 (开启时渲染) -->
-      <defs><clipPath id="chanlunClip"><rect x="${m.left}" y="${m.top}" width="${innerW}" height="${mh}"/></clipPath></defs><g clip-path="url(#chanlunClip)">${appState.showChanlunDraw ? generateChanlunOverlaySVG(klines, (i) => m.left + i * stepX + stepX / 2, priceToY, analysis) : ''}</g>
+      <defs><clipPath id="chanlunClip_${slot}"><rect x="${m.left}" y="${m.top}" width="${innerW}" height="${mh}"/></clipPath></defs><g clip-path="url(#chanlunClip_${slot})">${(appState.showChanlunDraw || chartBsLevelActive()) ? generateChanlunOverlaySVG(klines, (i) => m.left + i * stepX + stepX / 2, priceToY, analysis, chanlunLevelLabel(analysis, periodKey)) : ''}</g>
+
+      <!-- 第一性原理图层 (方法1: 拍卖价值区AMT / 方法8: 威科夫努力与结果Effort) -->
+      ${(appState.showAmtDraw || appState.showEffortDraw) ? generateFirstPrinciplesOverlaySVG(klines, (i) => slotGeo.xOf(i), priceToY, innerW, mh, m, slot) : ''}
 
       <!-- 十字光标虚线 -->
-      <line id="crosshairX" x1="0" y1="${m.top}" x2="0" y2="${subTopY + sh}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
-      <line id="crosshairY" x1="${m.left}" y1="0" x2="${m.left + innerW}" y2="0" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
+      <line id="crosshairX_${slot}" x1="0" y1="${m.top}" x2="0" y2="${subTopY + sh}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
+      <line id="crosshairY_${slot}" x1="${m.left}" y1="0" x2="${m.left + innerW}" y2="0" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" style="display:none;"/>
 
       <!-- 主图 Y 坐标 -->
       <text x="${m.left - 8}" y="${m.top + 12}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">¥${maxPrice.toFixed(2)}</text>
       <text x="${m.left - 8}" y="${m.top + mh}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">¥${minPrice.toFixed(2)}</text>
 
-      <!-- 横轴时间刻度 (需求REQ-023: 右侧留白区段不再摊薄刻度位置) -->
-      <text x="${m.left}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="start">${klines[0].date}</text>
-      <text x="${slotGeo.xOf(Math.floor((n - 1) / 2))}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[Math.floor(n / 2)].date}</text>
-      <text x="${slotGeo.xOf(n - 1)}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${klines[n - 1].date}</text>
+      <!-- 横轴时间刻度 (需求REQ-023/034: 右侧留白区段不再摊薄刻度位置；分钟K线精确到分钟) -->
+      <text x="${m.left}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="start">${axisLabelOf(klines[0])}</text>
+      <text x="${slotGeo.xOf(Math.floor((n - 1) / 2))}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${axisLabelOf(klines[Math.floor(n / 2)])}</text>
+      <text x="${slotGeo.xOf(n - 1)}" y="${m.top + mh + 14}" fill="#64748b" font-size="10" text-anchor="middle">${axisLabelOf(klines[n - 1])}</text>
+
+      <!-- 需求REQ-042/043: 周/季成交额聚合成因（日线逐日相加 + 含估算根数） -->
+      ${aggregateAmountSvg}
+      <!-- 需求REQ-041: 本图买卖点级别与六类识别数量（只报真实识别结果，识别不到即 0） -->
+      ${bsSummarySvg}
 
       <!-- 需求REQ-014/015: 统一渲染多模型辅助线（自动多阶线/手动压力线/手动支撑线共存，按 zIndex 分层） -->
       ${buildHorizontalLinesSVG({
@@ -5370,12 +7193,13 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
 
       <!-- 副图区域 -->
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
-      <text x="${m.left + 8}" y="${subTopY + 14}" fill="#94a3b8" font-size="10" font-weight="600">${subTitle}</text>
+      <!-- 需求REQ-047: 副图标题由 summaryBadgesSvg 内的平铺排布器统一输出，此处不再重复绘制 -->
       ${summaryBadgesSvg}
       <text x="${m.left - 8}" y="${subTopY + 14}" fill="#64748b" font-size="10" text-anchor="end" font-family="monospace">${maxSubVal.toFixed(1)}${subUnit}</text>
       
       <!-- 副图柱状图 -->
       ${subBars}
+      ${totalAmountSvg}
     </svg>
   `;
 }
@@ -6035,28 +7859,33 @@ function renderActiveIndexChart() {
       </svg>
     `;
   } else {
-    // 渲染 K 线图 (5天、10天、20天、60天、全部K线)
-    let klines = (indexData.daily_bars && Array.isArray(indexData.daily_bars) && indexData.daily_bars.length > 0)
-      ? indexData.daily_bars
-      : null;
+    // 渲染 K 线图（分钟K线 / 20天、60天、120天、180天、全部K线）
+    const useMinuteIndex = isMinuteKlinePeriod(indexState.period);
+    let klines = useMinuteIndex
+      ? currentMinuteKlineBars(indexData, indexState.period)
+      : ((indexData.daily_bars && Array.isArray(indexData.daily_bars) && indexData.daily_bars.length > 0) ? indexData.daily_bars : null);
+
+    if (useMinuteIndex) {
+      // 需求REQ-028: 首次进入该周期时按需拉取；失败或无数据一律如实提示，绝不伪造分钟K线
+      loadIndexMinuteKlines(indexData.code, indexState.period);
+    }
 
     if (!klines || klines.length === 0) {
-      dom.indexChartSvgContainer.innerHTML = '<div style="padding: 3rem; text-align: center; color: var(--text-muted);">⚠️ 暂无官方真实大盘日K数据源</div>';
+      const minuteLabel = { kline5m: '5 分钟', kline15m: '15 分钟', kline30m: '30 分钟' }[indexState.period] || '';
+      const entry = ((indexData.minute_kline_loaders || {})[indexState.period]) || {};
+      const loader = useMinuteIndex && entry.loading === true;
+      dom.indexChartSvgContainer.innerHTML = `
+        <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
+          <div style="font-size: 2rem; margin-bottom: 0.6rem;">${loader ? '⏳' : '⚠️'}</div>
+          <div style="font-weight: 700; color: #f8fafc;">${loader ? `正在调取 ${minuteLabel}K线真实数据…` : (useMinuteIndex ? `暂无官方真实 ${minuteLabel}K线数据源` : '暂无官方真实大盘日K数据源')}</div>
+          <div style="font-size: 0.85rem; margin-top: 0.4rem;">${useMinuteIndex ? (entry.error || '该指数分钟K线来源当前不可用，系统绝不伪造分钟K线。') : ''}</div>
+        </div>
+      `;
       return;
     }
 
-    // 需求REQ-022: 指数切片 (需求REQ-022: 标准视窗 200 根，缩放上限严格 200 根)
-    let winCount = STANDARD_KLINE_VIEW_COUNT;
-    if (indexState.customZoomCount > 0) {
-      winCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, indexState.customZoomCount));
-    } else if (indexState.period === 'kline5') winCount = 5;
-    else if (indexState.period === 'kline10') winCount = 10;
-    else if (indexState.period === 'kline20') winCount = 20;
-    else if (indexState.period === 'kline60') winCount = 60;
-    else if (indexState.period === 'kline120') winCount = 120;
-    else if (indexState.period === 'kline180') winCount = 180;
-    else winCount = STANDARD_KLINE_VIEW_COUNT;
-
+    // 需求REQ-029: 指数切片同口径 —— 各 Tab 默认显示对应根数，缩放上限严格 200 根
+    const winCount = currentIndexWindow();
     if (klines.length > winCount) {
       klines = klines.slice(klines.length - winCount);
     }
@@ -6065,7 +7894,12 @@ function renderActiveIndexChart() {
     // 指数来源的 amount_yi 长期缺失而 volume 可得，因此这里的兜底是副图能否显示金额的唯一路径。
     const indexKlinesWithAmount = klines.map(withResolvedAmount);
     const indexAnchorKlines = indexData.daily_bars.map(withResolvedAmount);
-    const indexAmountFlags = amountCoverageFlags(indexKlinesWithAmount);
+    // 需求REQ-032: 指数成交额口径判定（来源未披露 → 不可得，不以估算值充当）
+
+    // 需求REQ-032: 副图刻度同样只允许采信来源原始披露的成交额；
+    //   估算值（点位数×成分股成交量）会得到「3,943,379.8亿」这类量纲错误的刻度，必须整段剔除。
+    const indexDisclosedAmounts = indexDisclosedAmountSamples(klines);
+    const indexAmountAvailable = indexDisclosedAmounts.length > 0;
 
     let minPrice = Infinity;
     let maxPrice = -Infinity;
@@ -6073,8 +7907,8 @@ function renderActiveIndexChart() {
     indexKlinesWithAmount.forEach(k => {
       if (k.low < minPrice) minPrice = k.low;
       if (k.high > maxPrice) maxPrice = k.high;
-      if (k.amount_yi != null && k.amount_yi > maxAmount) maxAmount = k.amount_yi;
     });
+    if (indexAmountAvailable) maxAmount = Math.max(...indexDisclosedAmounts);
 
     const pPad = (maxPrice - minPrice) * 0.08 || 5;
     minPrice = Math.floor(minPrice - pPad);
@@ -6083,26 +7917,38 @@ function renderActiveIndexChart() {
     const plotWidth = width - margin.left - margin.right;
     const n = klines.length;
     // 需求REQ-022/023: 指数K线同样采用「标准 200 根槽位」，不足 200 根时右侧留白
-    const indexSlotGeo = klineSlotGeometry(width, margin, n);
+    const indexSlotBasis = currentIndexSlotBasis();
+    const indexSlotGeo = klineSlotGeometry(width, margin, n, indexSlotBasis);
     const candleWidth = indexSlotGeo.candleW;
     const getX = idx => indexSlotGeo.xOf(idx);
     const getY = p => margin.top + (1 - (p - minPrice) / (maxPrice - minPrice)) * (mainHeight - margin.top);
     const getSubY = a => subTop + (1 - (a / maxAmount)) * subHeight;
 
-    // 需求1: 计算大盘指数K线当前可视周期内成交额的四维分布概要 (平均、最小、最大、中位数)
-    const indexAmtStats = calculateDistributionSummary(klines.map(k => k.amount_yi));
-    let indexSummarySvg = `
-      <g class="sub-summary-group">
-        <text x="${margin.left + 160}" y="${subTop + 16}" fill="#f59e0b" font-size="10" font-family="monospace">
-          <tspan fill="#94a3b8">平均:</tspan> <tspan font-weight="700" fill="#f59e0b">${indexAmtStats.mean.toFixed(2)}亿</tspan>
-          <tspan dx="10" fill="#94a3b8">地量(最小):</tspan> <tspan font-weight="700" fill="#10b981">${indexAmtStats.min.toFixed(2)}亿</tspan>
-          <tspan dx="10" fill="#94a3b8">天量(最大):</tspan> <tspan font-weight="700" fill="#ef4444">${indexAmtStats.max.toFixed(2)}亿</tspan>
-          <tspan dx="10" fill="#94a3b8">中位数:</tspan> <tspan font-weight="700" fill="#facc15">${indexAmtStats.median.toFixed(2)}亿</tspan>
-        </text>
-      </g>
-    `;
+    // 需求1 & 需求REQ-047: 指数K线副图标题与四维分布概要按实测宽度「平铺」排布，绝不重叠。
+    // 需求REQ-032: 指数成交额只采信来源原始披露值；「点位数 × 成分股成交量」与全市场成交额不是同一量纲，
+    //   实测偏差数百至数千倍，因此估算值必须整段剔除 —— 无样本时如实标注「不可得」，绝不以 0 或推测值充当。
+    const indexAmtSamples = indexDisclosedAmountSamples(klines);
+    const indexAmtStats = calculateDistributionSummary(indexAmtSamples);
+    const indexHeaderItems = indexAmtSamples.length === 0
+      ? [{ label: '当前来源未披露该指数成交额，四维分布不可得（不以点位×成交量推测值充当）', value: null, fill: '#94a3b8' }]
+      : [
+          { label: '平均:', value: `${indexAmtStats.mean.toFixed(2)}亿`, fill: '#f59e0b' },
+          { label: '地量(最小):', value: `${indexAmtStats.min.toFixed(2)}亿`, fill: '#10b981' },
+          { label: '天量(最大):', value: `${indexAmtStats.max.toFixed(2)}亿`, fill: '#ef4444' },
+          { label: '中位数:', value: `${indexAmtStats.median.toFixed(2)}亿`, fill: '#facc15' }
+        ];
+    const indexSummarySvg = layoutSubplotHeader({
+      x0: margin.left + 8,
+      y: subTop + 16,
+      title: '💰 副图: 成交金额 (亿元)',
+      titleFill: '#f59e0b',
+      titleFontSize: 11,
+      items: indexHeaderItems,
+      maxRight: margin.left + plotWidth - 6,
+      fontSize: 10
+    }).svg;
 
-    if (klines.some(k => k.amount_yi == null)) indexSummarySvg = `<text x="${margin.left + 100}" y="${subTop + 14}" fill="#94a3b8" font-size="12">当前来源未提供完整成交额</text>`;
+
     // 蜡烛与仅成交金额柱
     let candlesSvg = '';
     let subBarsSvg = '';
@@ -6124,8 +7970,9 @@ function renderActiveIndexChart() {
       const hRect = Math.max(1.5, Math.abs(yOpen - yClose));
       candlesSvg += `<rect x="${x - candleWidth / 2}" y="${yTop}" width="${candleWidth}" height="${hRect}" fill="${color}" opacity="0.9"/>`;
 
-      // 副图柱 (仅成交金额；需求REQ-025: 走兜底口径，仅当均价与成交量同时缺失时才留空)
-      const subAmount = (indexKlinesWithAmount[idx] || {}).amount_yi;
+      // 副图柱（仅成交金额）：指数来源未披露成交额，「点位×成分股成交量」实测与真实成交额相差数百至数千倍，
+      // 依 REQ-032 不得以该值充当成交额，故指数副图在无真实来源时留空并不出数。
+      const subAmount = null;
       if (subAmount != null) {
         const ySub = getSubY(subAmount);
         const hSub = Math.max(1, subTop + subHeight - ySub);
@@ -6134,10 +7981,13 @@ function renderActiveIndexChart() {
     });
 
     // 需求REQ-014/015: 指数多阶自动画线 (1~4 根筹码中枢线) —— 写入独立图层模型，按 zIndex 参与层级排序
-    // 需求REQ-025/026: 兜底口径的 indexKlinesWithAmount / indexAnchorKlines 已在上方统一构造，此处复用
+    // 需求REQ-029/030: 压力线与其指标一律按当前显示窗口测算与展示（放大缩小随之变动）
+    const indexWindowAmount = indexWindowAmountSummary(indexKlinesWithAmount, indexData, { isMinute: useMinuteIndex });
+    indexState.windowAmountSummary = indexWindowAmount;
     if (indexState.showAutoLines && indexState.autoLinesCount > 0) {
       const autoLevels = calculateAutoSupportResistanceLevels(indexKlinesWithAmount, indexData.price, indexState.autoLinesCount);
-      attachTradeAreaToLines(autoLevels, indexAnchorKlines);
+      // 需求REQ-032: 指数辅助线的交易面积同样只采信来源原始披露成交额
+      attachTradeAreaToLines(autoLevels, klines, { disclosedOnly: true });
       indexState.lineLayers.auto.lines = autoLevels.map((line, idx) => ({
         ...line,
         id: `index_auto_${line.rank || idx + 1}_${Math.round(line.price * 100)}`,
@@ -6213,14 +8063,18 @@ function renderActiveIndexChart() {
 
         <!-- 副图网格 (仅成交金额) -->
         <rect x="${margin.left}" y="${subTop}" width="${plotWidth}" height="${subHeight}" fill="none" stroke="rgba(51, 65, 85, 0.4)"/>
-        <text x="${margin.left + 8}" y="${subTop + 16}" fill="#f59e0b" font-size="11" font-weight="700">💰 副图: 成交金额 (亿元)${indexAmountFlags.anyDerived ? '（含估算：均价×成交量）' : ''}</text>
-        ${indexAmountFlags.anyDerived ? `<text x="${margin.left + 8}" y="${subTop + subHeight + 11}" fill="#fbbf24" font-size="10">⚠️ 其中 ${indexAmountFlags.derived} 根成交额为估算（均价 × 成交量），非来源原始披露</text>` : ''}
-        ${indexSlotGeo.partial ? `<text x="${margin.left + plotWidth - 6}" y="${subTop + 16}" fill="#64748b" font-size="10" text-anchor="end">标准视窗 ${STANDARD_KLINE_VIEW_COUNT} 根 · 当前显示 ${klines.length} 根（右侧留白）</text>` : ''}
+        <!-- 需求REQ-047: 副图标题由 indexSummarySvg 内的平铺排布器统一输出（标题+统计项实测宽度不重叠） -->
+        ${indexWindowAmount.reason ? `<text x="${margin.left + 8}" y="${subTop + 30}" fill="#94a3b8" font-size="10">当前来源未披露该指数成交额，副图不出数（不以推测值充当真实成交额）</text>` : ''}
+        ${indexSlotGeo.partial ? `<text x="${margin.left + plotWidth - 6}" y="${subTop + 16}" fill="#64748b" font-size="10" text-anchor="end">本周期基准 ${indexSlotBasis} 根 · 当前显示 ${klines.length} 根（右侧留白）</text>` : ''}
         ${indexSummarySvg}
 
         <!-- 蜡烛与副图 -->
         ${candlesSvg}
         ${subBarsSvg}
+        <text x="${margin.left + 8}" y="${subTop + subHeight + 24}" fill="#f59e0b" font-size="10" font-weight="700" class="sub-total-amount">
+          ${indexWindowAmount.totalAmountYi == null ? formatTotalAmount(indexWindowAmount) : `总成交额: ${Number(indexWindowAmount.totalAmountYi).toFixed(2)}亿 (${indexWindowAmount.days}个交易日)`}
+        </text>
+        ${indexWindowAmount.note ? `<text x="${margin.left + 8}" y="${subTop + subHeight + 36}" fill="#fbbf24" font-size="10" class="sub-total-amount-note">⚠️ ${indexWindowAmount.note}</text>` : ''}
 
         <!-- 需求REQ-014/015: 多模型辅助线（自动线与手动线共存，按 zIndex 分层） -->
         ${autoLinesSvg}
@@ -6230,7 +8084,7 @@ function renderActiveIndexChart() {
         <text x="${margin.left - 8}" y="${getY((maxPrice + minPrice) / 2) + 4}" fill="#64748b" font-size="11" text-anchor="end" font-family="monospace">${((maxPrice + minPrice) / 2).toFixed(2)}</text>
         <text x="${margin.left - 8}" y="${mainHeight}" fill="#94a3b8" font-size="11" text-anchor="end" font-family="monospace">${minPrice.toFixed(2)}</text>
 
-        <text x="${margin.left - 8}" y="${subTop + 14}" fill="#f59e0b" font-size="10" text-anchor="end" font-family="monospace">${maxAmount.toFixed(1)}亿</text>
+        <text x="${margin.left - 8}" y="${subTop + 14}" fill="#f59e0b" font-size="10" text-anchor="end" font-family="monospace">${indexAmountAvailable ? maxAmount.toFixed(1) + '亿' : '不可得'}</text>
         <text x="${margin.left - 8}" y="${subTop + subHeight}" fill="#94a3b8" font-size="10" text-anchor="end" font-family="monospace">0</text>
       </svg>
     `;
@@ -6289,7 +8143,7 @@ function renderActiveIndexChart() {
               crossedAmountYi: Number(crossedAmountYi.toFixed(2)),
               zIndex: nextIndexLineZ()
             };
-            attachTradeAreaToLines([newLine], indexAnchorKlines);
+            attachTradeAreaToLines([newLine], indexData.daily_bars, { disclosedOnly: true });
             indexState.lineLayers.manual.lines.push(newLine);
             indexState.topLineId = newLine.id;
             setIndexDrawingMode('none');
@@ -6333,10 +8187,6 @@ function closeStockDetailPage() {
 function closeStockDetail() {
   closeStockDetailPage();
 }
-
-function formatReal(value,digits=2) { return value == null || !Number.isFinite(Number(value)) ? '未获取' : Number(value).toLocaleString(undefined,{maximumFractionDigits:digits}); }
-
-function escapeHtml(value) { return escapeActionText(String(value ?? "")); }
 
 function changeShareholderPage(delta) { const page=shareholderState.page+delta; if(page<1||page>Math.ceil(shareholderState.total/shareholderState.pageSize))return;shareholderState.page=page;loadShareholdersOverview(); }
 

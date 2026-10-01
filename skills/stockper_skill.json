@@ -1,0 +1,33 @@
+{
+  "name": "stockper",
+  "version": "1.0.0",
+  "description": "A股信息权威调研与数据抓取智能体，负责调研大宗交易、十大流通股东占比、分红、K线图、财务报表等公开渠道与横向对比，并负责获取真实数据",
+  "author": "DSH Quant Ecosystem",
+  "entrypoint": "scripts/stockper_agent.py",
+  "capabilities": [
+    {
+      "name": "survey_data_sources",
+      "description": "调研 A 股五大核心信息公开渠道名称、接口、有效性、风险点及优劣势",
+      "when_to_use": "用户询问数据源权威度、接口详情或对比各渠道优劣势时使用",
+      "cli_command": "python3 scripts/stockper_agent.py survey [dimension]"
+    },
+    {
+      "name": "compare_channels",
+      "description": "输出同一信息在不同公开渠道抓取情况的横向对比矩阵",
+      "when_to_use": "需要比对官方交易所、门户中心与开源库的抓取差异时使用",
+      "cli_command": "python3 scripts/stockper_agent.py compare [dimension]"
+    },
+    {
+      "name": "ask_stockper",
+      "description": "自然语言问询数据获取渠道，并可自动附带股票代码直接抓取真实数据",
+      "when_to_use": "用户以自然语言咨询从哪里获取数据，或边问边要求获取某股票的数据时使用",
+      "cli_command": "python3 scripts/stockper_agent.py ask \"<query>\""
+    },
+    {
+      "name": "fetch_stock_data",
+      "description": "负责直接抓取指定股票的大宗交易、十大流通股东占比、分红、K线图或财务报表真实数据",
+      "when_to_use": "需要获取具体股票的某维度真实数据时使用",
+      "cli_command": "python3 scripts/stockper_agent.py fetch <dimension> <code> [--limit N]"
+    }
+  ]
+}

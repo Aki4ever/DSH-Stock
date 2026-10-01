@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-24T16:09:09+08:00",
+  "entry": {
+    "type": "web",
+    "url": "http://127.0.0.1:8888/",
+    "bind": "127.0.0.1:8888 (loopback only)"
+  },
+  "api_version": {
+    "version": "v5.5.0",
+    "info": {
+      "version": "v5.5.0",
+      "app_name": "A股多维量化筛选器",
+      "subtitle": "DSH Stock Web",
+      "release_date": "2026-09-24",
+      "description": "R10 批次（v5.5.0，工程加固，无行情口径变更）：① 新增 CLI 子命令"
+    }
+  },
+  "listener": "python3.1 7033 linqiyu    4u  IPv4 0x4eedc670b10942ac      0t0  TCP 127.0.0.1:8888 (LISTEN)",
+  "page_title": "【v5.5.0】A股多维量化筛选器 - DSH Stock Web"
+}

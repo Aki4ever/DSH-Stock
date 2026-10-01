@@ -4,3 +4,16 @@
 {"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"naming","exit":0,"at":"2026-10-01T16:25:11Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
 {"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"lock","exit":0,"at":"2026-10-01T16:25:11Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
 {"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"todo","exit":0,"at":"2026-10-01T16:25:11Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"naming","exit":0,"at":"2026-10-01T22:19:52Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"lock","exit":0,"at":"2026-10-01T22:19:52Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"todo","exit":0,"at":"2026-10-01T22:19:52Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"naming","exit":1,"at":"2026-10-01T23:36:56Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"lock","exit":0,"at":"2026-10-01T23:36:56Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"todo","exit":1,"at":"2026-10-01T23:36:57Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"naming","exit":1,"at":"2026-10-01T23:36:57Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"lock","exit":0,"at":"2026-10-01T23:36:57Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"todo","exit":1,"at":"2026-10-01T23:36:57Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"check","exit":1,"at":"2026-10-01T23:37:40Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"version-version","exit":0,"at":"2026-10-01T23:37:40Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"scope-scope","exit":0,"at":"2026-10-01T23:37:45Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}
+{"unit":"control-shell","project":"/Users/linqiyu/Documents/DSH/DSH股票","action":"check","exit":0,"at":"2026-10-01T23:41:02Z","cwd":"/Users/linqiyu/Documents/DSH/DSH股票"}

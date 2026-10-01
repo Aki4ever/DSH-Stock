@@ -1,0 +1,28 @@
+$ python3 scripts/dsh_stock_cli.py db-archive --label r10-baseline --compact
+
+[32m[1m✅ 归档完成（源库零写入）：[0m
+  • 归档件    : /tmp/r10-evidence-archive/stock_database-20260924-160909-r10-evidence.db
+  • 体积/行数 : 57.57 MB / 28575 行 · integrity=ok
+  • 源库哈希  : ok → 归档后源库未变更：True
+  • 紧凑副本  : /tmp/r10-evidence-archive/stock_database-20260924-160909-r10-evidence-compacted.db
+               54.92 MB（较完整副本省 2.65 MB；VACUUM INTO，源库不变）
+  • 清单文件  : /tmp/r10-evidence-archive/stock_database-20260924-160909-r10-evidence.manifest.json
+  • 保留策略  : 只增不删（默认）；需要滚动保留请显式加 --keep N
+
+$ ls -la /tmp/r10-evidence-archive
+ 
+160 .
+736 ..
+57585664 stock_database-20260924-160909-r10-evidence-compacted.db
+60362752 stock_database-20260924-160909-r10-evidence.db
+1762 stock_database-20260924-160909-r10-evidence.manifest.json
+
+$ python3 -c "...热生效实测：改写 config/version.json 描述后接口立即反映..."
+改动前: R10 批次（v5.5.0，工程加固，无行情口径
+改动后: （热生效探针）R10 批次（v5.5.0，工程加
+未重启即生效: True
+配置已还原
+
+$ tests/load_web_sources.js 清单 vs index.html 脚本顺序（静态套件已断言）
+2557:  <script src="/web/modules/util.js?v=5.5.0"></script>
+2558:  <script src="/web/app.js?v=5.5.0"></script>

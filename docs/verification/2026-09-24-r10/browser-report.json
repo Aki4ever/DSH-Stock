@@ -1,0 +1,88 @@
+{
+  "at": "2026-09-24T08:01:17.290Z",
+  "base": "http://127.0.0.1:8888",
+  "total": 15,
+  "passed": 15,
+  "failed": 0,
+  "consoleErrors": [],
+  "shots": [
+    "01-util-module-live-page.png"
+  ],
+  "results": [
+    {
+      "name": "headless Chrome 已就绪",
+      "ok": true,
+      "detail": "Chrome/148.0.7778.96"
+    },
+    {
+      "name": "页面加载成功",
+      "ok": true,
+      "detail": "【v5.5.0】A股多维量化筛选器 - DSH Stock Web"
+    },
+    {
+      "name": "REQ-053 拆出的 /web/modules/util.js 可访问且为 JS",
+      "ok": true,
+      "detail": "HTTP 200 · application/javascript; charset=utf-8"
+    },
+    {
+      "name": "REQ-053 页面脚本顺序为 util.js → app.js",
+      "ok": true,
+      "detail": "/web/modules/util.js?v=5.5.0 → /web/app.js?v=5.5.0"
+    },
+    {
+      "name": "REQ-053 10 个迁出函数在真实页面窗口全部可用",
+      "ok": true,
+      "detail": "全部可用（含 2 个脚本标签）"
+    },
+    {
+      "name": "REQ-053 迁出函数在页面内可正常求值（真实调用）",
+      "ok": true,
+      "detail": "estimateSvgTextWidth('副图：成交额',10)=61.95 · layoutSubplotHeader rows=1"
+    },
+    {
+      "name": "REQ-053 拆分后真实个股日K副图表头照常渲染（标题 + 统计概要出数）",
+      "ok": true,
+      "detail": "副图：成交额（含估算：均价×成交量） · 统计项 5 个"
+    },
+    {
+      "name": "REQ-053 拆分后页面无脚本错误（零未捕获异常）",
+      "ok": true,
+      "detail": "0 条"
+    },
+    {
+      "name": "REQ-052 CLI db-archive 输出结构化结果",
+      "ok": true,
+      "detail": "status=available"
+    },
+    {
+      "name": "REQ-052 归档件真实存在且完整性 ok",
+      "ok": true,
+      "detail": "stock_database-20260924-160116-r10-verify.db · 57.57MB · integrity=ok"
+    },
+    {
+      "name": "REQ-052 归档行数与源库一致（逐表核验）",
+      "ok": true,
+      "detail": "源库 28575 行 → 归档 28575 行"
+    },
+    {
+      "name": "REQ-052 源库以只读打开且未写入产品库（哈希变化时须有诚实说明）",
+      "ok": true,
+      "detail": "只读=true · 源库哈希未变=true · 归档期间源库哈希未变（源库当时处于静止状态）"
+    },
+    {
+      "name": "REQ-052 归档清单落盘可追溯",
+      "ok": true,
+      "detail": "stock_database-20260924-160116-r10-verify.manifest.json"
+    },
+    {
+      "name": "REQ-052 归档前后服务端仍健康（未影响运行中的实例）",
+      "ok": true,
+      "detail": "running · v5.5.0 · 标的 4601"
+    },
+    {
+      "name": "控制台无脚本错误",
+      "ok": true,
+      "detail": "0 条"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 // R03 (REQ-014/015) 图层交互回归：全部为构造数据，只在隔离的 vm 上下文中执行，不触碰产品库与浏览器。
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
-const src = fs.readFileSync('web/app.js', 'utf8');
+const { loadWebSource, loadIndexHtml } = require('./load_web_sources');
+const src = loadWebSource();  // 需求REQ-053: 按页面顺序装载 util.js + app.js
 
 function firstIndex(list) {
   return list.map(s => src.indexOf(s)).filter(i => i >= 0).sort((a, b) => a - b)[0];
@@ -23,6 +24,18 @@ ctx.globalThis = ctx;
 // 渲染入口在真实页面中由 app.js 提供；测试只关心状态机，用桩函数记录调用
 ctx.renderActiveStockChart = () => { ctx.__renders++; };
 ctx.__renders = 0;
+// 需求REQ-034: 图层函数已按「面板槽位」隔离；沙箱提供与页面 chartPanels 等价的最小桩，
+// 使原有「单面板状态机」断言在新架构下继续成立（右侧面板即原单面板语义）
+ctx.PANEL_SLOTS = ['left', 'right'];
+ctx.chartPanels = {
+  right: { slot: 'right', layerPanelId: 'chartLayerPanelRight', autoCountControlId: 'autoLinesCountControl_right' },
+  left: { slot: 'left', layerPanelId: 'chartLayerPanelLeft', autoCountControlId: 'autoLinesCountControl_left' }
+};
+ctx.panelBySlot = (slot) => ctx.chartPanels[slot] || ctx.chartPanels.right;
+ctx.withChartPanel = (slot, fn) => fn(ctx.panelBySlot(slot));
+ctx.syncPanelToAppState = () => {};
+ctx.persistPanelFromAppState = () => {};
+ctx.renderChartPanel = () => {};
 vm.createContext(ctx);
 vm.runInContext(layerCode, ctx);
 
@@ -98,20 +111,20 @@ const align = () => ctx.getVisibleChartLines().forEach(l => { l._svgY = 100; l._
 
 // 点击重合线本体 → 轮换置顶：最低层级者被提到最顶层
 align();
-ctx.handleChartLineClick(300, 100, 860, 440, { top: 20, left: 65, right: 65 }, 270);
+ctx.handleChartLineClick('right', 300, 100, 860, 440, { top: 20, left: 65, right: 65 }, 270);
 assert.deepEqual(ids(), ['m1', 'm2', 'a1'], '第一次点击应把 a1 置顶');
 
 align();
-ctx.handleChartLineClick(300, 100, 860, 440, { top: 20, left: 65, right: 65 }, 270);
+ctx.handleChartLineClick('right', 300, 100, 860, 440, { top: 20, left: 65, right: 65 }, 270);
 assert.deepEqual(ids(), ['m2', 'a1', 'm1'], '第二次点击应把 m1 置顶');
 
 align();
-ctx.handleChartLineClick(300, 100, 860, 440, { top: 20, left: 65, right: 65 }, 270);
+ctx.handleChartLineClick('right', 300, 100, 860, 440, { top: 20, left: 65, right: 65 }, 270);
 assert.deepEqual(ids(), ['a1', 'm1', 'm2'], '第三次点击应把 m2 置顶，完成一轮巡览');
 
 // 点击标签徽章 → 精准置顶指定的一条重合线
 align();
-ctx.handleChartLineClick(720, 100, 860, 440, { top: 20, left: 65, right: 65 }, 270);
+ctx.handleChartLineClick('right', 720, 100, 860, 440, { top: 20, left: 65, right: 65 }, 270);
 const tagTop = Array.from(ctx.getVisibleChartLines()).slice(-1)[0];
 assert.ok(['a1', 'm1', 'm2'].includes(tagTop.id), '标签命中必须置顶其中一条具体辅助线');
 
@@ -120,7 +133,7 @@ reset();
 ctx.addChartLine('auto', mk('solo', 30, '最强压力'));
 const solo = ctx.appState.lineLayers.auto.lines[0];
 solo._svgY = 60; solo._tagX = 700; solo._tagW = 200;
-ctx.handleChartLineClick(300, 60, 860, 440, { top: 20, left: 65, right: 65 }, 270);
+ctx.handleChartLineClick('right', 300, 60, 860, 440, { top: 20, left: 65, right: 65 }, 270);
 assert.equal(ctx.appState.topLineId, 'solo', '唯一命中应被置顶并高亮');
 
 // 未命中任何线 → 不改变任何状态
@@ -128,7 +141,7 @@ reset();
 ctx.addChartLine('auto', mk('far', 30, '最强压力'));
 ctx.appState.lineLayers.auto.lines[0]._svgY = 60;
 const zBefore = ctx.appState.lineLayers.auto.lines[0].zIndex;
-ctx.handleChartLineClick(300, 400, 860, 440, { top: 20, left: 65, right: 65 }, 270);
+ctx.handleChartLineClick('right', 300, 400, 860, 440, { top: 20, left: 65, right: 65 }, 270);
 assert.equal(ctx.appState.lineLayers.auto.lines[0].zIndex, zBefore, '未命中不得改变层级');
 assert.equal(ctx.appState.topLineId, null, '未命中不得改变置顶高亮');
 
@@ -157,7 +170,7 @@ vm.runInContext(src.slice(faStart, src.indexOf('function amountCoverageFlags(', 
 
 const panelEl = { innerHTML: '' };
 const prevGetById = ctx.document.getElementById;
-ctx.document.getElementById = (id) => (id === 'chartLayerPanel' ? panelEl : null);
+ctx.document.getElementById = (id) => (id === 'chartLayerPanelRight' ? panelEl : null);
 
 reset();
 A.autoLinesCount = 0;
@@ -170,7 +183,7 @@ ctx.addChartLine('manual_down', {
   id: 'dn1', price: 12, type: '支撑位', crossedDays: 0, crossedAmountYi: 0,
   tradeAreaYi: null, tradeAreaDays: 0, tradeAreaExcludedDays: 0, tradeAreaIncomplete: false
 });
-ctx.renderLineLayerPanel(null);
+ctx.renderLineLayerPanel(ctx.chartPanels.right, null);
 assert(/id="btnLineMetricHelp"/.test(panelEl.innerHTML), '图层面板标题旁必须存在「!」指标说明按钮');
 assert(/! 指标说明/.test(panelEl.innerHTML), '按钮文案必须可辨识为指标说明');
 assert(/openLineMetricHelp\(\)/.test(panelEl.innerHTML), '「!」按钮必须绑定指标说明弹窗入口');
@@ -184,7 +197,7 @@ assert(/交易面积: 88\.50亿/.test(labelSvg), '图内辅助线标签必须追
 ctx.document.getElementById = prevGetById;
 
 // ---------------- REQ-026 「!」弹窗内容：交易面积公式必须可见 ----------------
-const html = fs.readFileSync('web/index.html', 'utf8');
+const html = loadIndexHtml();
 const modalStart = html.indexOf('id="lineMetricHelpModal"');
 assert(modalStart >= 0, '页面必须包含「!」指标说明弹窗容器');
 const modal = html.slice(modalStart, html.indexOf('</div>\n  </div>\n\n  <script', modalStart)).replace(/\u00a0/g, ' ');

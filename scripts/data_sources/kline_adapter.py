@@ -89,6 +89,7 @@ class KlineAdapter:
                     "turnover": float(parts[6]) if len(parts) > 6 else 0.0,
                     "amplitude": float(parts[7]) if len(parts) > 7 else 0.0,
                     "change_pct": float(parts[8]) if len(parts) > 8 else 0.0,
+                    "turnover_rate": float(parts[10]) if len(parts) > 10 else 0.0,
                 })
 
         return results

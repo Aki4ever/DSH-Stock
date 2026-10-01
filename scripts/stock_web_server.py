@@ -102,7 +102,30 @@ def load_version_info() -> Dict[str, Any]:
     }
 
 VERSION_INFO = load_version_info()
-APP_VERSION = VERSION_INFO.get("version", "v1.2.0")
+APP_VERSION = VERSION_INFO.get("version", "v1.2.0")   # 仅作进程启动日志的初始值
+
+# 需求REQ-054: config/version.json 是**唯一版本权威**，且必须在运行期即时生效。
+# 历史缺陷（BUG-006）：版本在模块导入时被读进内存，发布新版本后运行中的服务端仍返回旧版本，
+# 导致「页面徽标/标题 = 旧版本」而「config/version.json = 新版本」的不一致状态，直到手工重启才恢复。
+# 现改为按文件 mtime+size 做失效判断：文件一改，下一个请求即返回新版本，无需重启。
+_VERSION_CACHE: Dict[str, Any] = {"stamp": None, "info": VERSION_INFO}
+
+
+def current_version_info() -> Dict[str, Any]:
+    """返回**当前**版本信息；文件被改动后立即生效（mtime+size 作为失效判据）。"""
+    try:
+        stat = os.stat(VERSION_FILE)
+        stamp = (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return _VERSION_CACHE["info"]
+    if _VERSION_CACHE["stamp"] != stamp:
+        _VERSION_CACHE["info"] = load_version_info()
+        _VERSION_CACHE["stamp"] = stamp
+    return _VERSION_CACHE["info"]
+
+
+def current_version() -> str:
+    return current_version_info().get("version", APP_VERSION)
 
 # 服务运行状态机 (running: 引擎运行并抓取 | stopped: 引擎休眠暂停但保持 Web 控制中枢监听)
 SERVER_STATE = "running"
@@ -208,6 +231,20 @@ class StockDataManager:
         # 3. 需求1/2/3: 日K线查询 - 本地数据库优先 (Local-DB-First)
         history = get_daily_history(norm, refresh=refresh)
         daily_bars = history["bars"]
+        # 为每根日K线补全换手率 (turnover_rate, 单位 %)
+        circ_cap_val = float(stock.get("circulating_cap") or 0.0)
+        price_val = float(stock.get("price") or 0.0)
+        circ_shares = (circ_cap_val * 100000000.0 / price_val) if (circ_cap_val > 0 and price_val > 0) else 0.0
+        latest_turnover_rate = float(stock.get("turnover_rate") or 0.0)
+        if daily_bars:
+            for idx, b in enumerate(daily_bars):
+                if b.get("turnover_rate") is None or b.get("turnover_rate") == 0.0:
+                    if idx == len(daily_bars) - 1 and latest_turnover_rate > 0:
+                        b["turnover_rate"] = latest_turnover_rate
+                    elif circ_shares > 0:
+                        b["turnover_rate"] = round((float(b.get("volume") or 0.0) * 100.0 / circ_shares) * 100.0, 2)
+                    else:
+                        b["turnover_rate"] = 0.0
 
         # 4. 需求1/2/3: 分时数据查询 - 本地数据库优先 (Local-DB-First)
         # 旧分时缓存同样没有来源证明，不再参与详情；仅使用本次真实来源响应。
@@ -406,6 +443,7 @@ class StockDataManager:
             "snapshot_date": real_snapshot_date,
             "snapshot_source": caliber["snapshot_source"],
             "quote_date": caliber["quote_date"],
+            "quote_datetime": caliber["quote_datetime"],
             "baseline": caliber["baseline"],
             "page": page,
             "page_size": page_size,
@@ -479,6 +517,77 @@ def build_intraday_chanlun(code: str) -> Dict[str, Any]:
     analysis["level_note"] = "分时级别：笔＝分钟级笔，不等于日线级别，不可与日线信号混读"
     analysis["source"] = timeline.get("source")
     analysis["trade_date"] = trade_date
+    return analysis
+
+
+# ============================================================
+# 需求REQ-028: 分钟K线（5/15/30 分钟）端点实现
+# 口径: 每根K线 = 一个真实时间区间（开/收/高/低/量）；成交额一律由该K线均价×成交量推出并标记为估算。
+# ============================================================
+
+def build_minute_kline(code: str, interval: str, limit: int = 200) -> Dict[str, Any]:
+    """需求REQ-028: 分钟K线数据（唯一取数入口，端点与测试共用）。"""
+    from scripts.real_chart_engine import fetch_real_minute_kline, MINUTE_KLINE_INTERVALS
+    interval = str(interval or "m5").lower().strip()
+    if interval not in MINUTE_KLINE_INTERVALS:
+        raise ValueError("不支持的分钟周期，仅支持 m1 / m5 / m15 / m30")
+    result = fetch_real_minute_kline(code, interval, limit=limit)
+    result["level"] = f"{MINUTE_KLINE_INTERVALS[interval]}minute"
+    result["level_note"] = (f"{MINUTE_KLINE_INTERVALS[interval]} 分钟级别：每根K线为一个真实时间区间"
+                            "（开/收/高/低/量），不等于日线级别，不可与日线信号混读")
+    result["amount_note"] = ("来源未提供可互相印证的成交额字段，成交额由本K线均价 × 成交量推出并标记为估算"
+                             "（amount_derived=true）；来源自带的第8字段与成交量/成交价无法印证，故不采信")
+    return result
+
+
+# ============================================================
+# 需求REQ-041: 任意真实K线序列的缠论分析（周线 / 季线 / 5分K线）
+# 背景: 周线与季线由前端用真实日K现场聚合（本项目对这两个颗粒度不落库），
+#       5分K线为区间接口返回，三者都没有「日线历史」那样的后端缓存，
+#       因此新增本纯计算入口，供前端把真实K线序列提交回来做缠论判定。
+# 铁律:
+#   1. 复用 scripts.chanlun_analysis.analyze_bars 同一套形态学/动力学算法，
+#      买卖点仍由同一 build_buy_sell_points 严格按缠论定义产出，绝不另起一套、绝不放宽判定；
+#   2. 只接受调用方提交的真实K线：价格缺失/非数值、日期重复或乱序一律拒绝（400），
+#      绝不用日线结果或任何推测数据冒充该级别的结构；
+#   3. 本入口只做计算，不写数据库、不落缓存（保持「零数据库写入」口径）。
+# ============================================================
+
+CHANLUN_BARS_MAX = 20000
+
+CHANLUN_LEVEL_NOTES = {
+    "weekly": "周线级别：每根K线＝1个自然周（由真实日K现场聚合），笔＝周线笔，不可与日线信号混读",
+    "quarterly": "季线级别：每根K线＝1个自然季度（由真实日K现场聚合），笔＝季线笔，不可与日线信号混读",
+    "m5": "5分级别：每根K线＝5分钟真实时间区间，笔＝5分钟笔，不可与日线信号混读",
+}
+
+
+def build_chanlun_from_bars(code: str, bars, level: str) -> Dict[str, Any]:
+    """需求REQ-041: 由调用方提交的真实K线序列现场计算缠论（唯一计算入口，端点与测试共用）。"""
+    level_key = str(level or "").strip().lower()
+    if level_key not in CHANLUN_LEVEL_NOTES:
+        raise ValueError("不支持的缠论级别，仅支持 weekly / quarterly / m5")
+    if not isinstance(bars, list) or not bars:
+        raise ValueError("未提交任何K线，无法进行缠论判定")
+    if len(bars) > CHANLUN_BARS_MAX:
+        raise ValueError(f"提交的K线根数({len(bars)})超过上限 {CHANLUN_BARS_MAX}")
+    normalized = []
+    for item in bars:
+        if not isinstance(item, dict):
+            raise ValueError("K线数据格式不正确，必须是对象数组")
+        normalized.append({
+            "date": item.get("date"),
+            "open": item.get("open"),
+            "close": item.get("close"),
+            "high": item.get("high"),
+            "low": item.get("low"),
+            "volume": item.get("volume") or 0,
+        })
+    from scripts.chanlun_analysis import analyze_bars
+    analysis = analyze_bars(normalized, code=code or "")
+    analysis["level"] = level_key
+    analysis["level_note"] = CHANLUN_LEVEL_NOTES[level_key]
+    analysis["submitted_bars"] = len(normalized)
     return analysis
 
 
@@ -648,6 +757,49 @@ def current_quote_date() -> Optional[str]:
     return normalize_crawl_date(quote_dates[-1])
 
 
+def parse_quote_timestamp(raw: Any) -> Optional[Dict[str, Any]]:
+    """
+    需求REQ-046: 把来源行情时间戳解析为「精确到分」的真实快照时间。
+    来源给到 14 位（YYYYMMDDHHMMSS）时精确到分；只给 8 位（YYYYMMDD）时如实降级为「日」；
+    无法解析时返回 None（前端显示「未获取」，绝不用本地时钟或基准批次冒充行情时间）。
+    """
+    digits = "".join(ch for ch in str(raw or "") if ch.isdigit())
+    if len(digits) < 8:
+        return None
+    date = f"{digits[0:4]}-{digits[4:6]}-{digits[6:8]}"
+    if len(digits) >= 12:
+        hhmm = f"{digits[8:10]}:{digits[10:12]}"
+        return {
+            "raw": str(raw),
+            "date": date,
+            "time": hhmm,
+            "datetime": f"{date} {hhmm}",
+            "display": f"{int(digits[0:4])}年{int(digits[4:6])}月{int(digits[6:8])}日 {hhmm}",
+            "precision": "minute",
+            "source": "quote_snapshot",
+        }
+    return {
+        "raw": str(raw),
+        "date": date,
+        "time": None,
+        "datetime": date,
+        "display": f"{int(digits[0:4])}年{int(digits[4:6])}月{int(digits[6:8])}日",
+        "precision": "day",
+        "source": "quote_snapshot",
+    }
+
+
+def current_quote_datetime() -> Optional[Dict[str, Any]]:
+    """读取当前行情快照的真实时间（取全部标的中最新的来源时间戳，精确到分）。"""
+    stamps = [
+        str(s.get("timestamp"))
+        for s in DATA_MANAGER.stocks_dict.values() if s.get("timestamp")
+    ]
+    if not stamps:
+        return None
+    return parse_quote_timestamp(max(stamps))
+
+
 def serialize_baseline(record: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """把基准审计记录序列化为前端可用结构"""
     if not record:
@@ -682,6 +834,8 @@ def resolve_data_caliber() -> Dict[str, Any]:
     return {
         "baseline": serialize_baseline(baseline),
         "quote_date": quote_date,
+        # 需求REQ-046: 真实行情快照时间（精确到分）；来源只给日期时 precision=day
+        "quote_datetime": current_quote_datetime(),
         "snapshot_date": normalize_crawl_date(baseline.get("crawl_date")) if baseline else None,
         "snapshot_source": "baseline" if baseline else "unavailable",
     }
@@ -754,9 +908,10 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
 
         # 3. 版本同步端点 /api/version
         if url_path == "/api/version":
+            # 需求REQ-054: 逐请求读取权威文件，版本变更无需重启
             self._send_json(200, {
-                "version": APP_VERSION,
-                "info": VERSION_INFO
+                "version": current_version(),
+                "info": current_version_info()
             })
             return
 
@@ -873,6 +1028,22 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        # 需求REQ-028: 指数分钟K线端点 /api/index/<code>/minute-kline（与个股同一口径与同一来源）
+        if url_path.startswith("/api/index/") and url_path.endswith("/minute-kline"):
+            query = parse_qs(urlsplit(self.path).query)
+            symbol = url_path.replace("/api/index/", "").replace("/minute-kline", "").strip()
+            interval = (query.get("interval") or ["m5"])[0]
+            try:
+                limit = int((query.get("limit") or ["200"])[0])
+            except (TypeError, ValueError):
+                limit = 200
+            try:
+                self._send_json(200, {"code": 200, "symbol": symbol,
+                                      "data": build_minute_kline(symbol, interval, limit=limit)})
+            except (ValueError, TypeError) as exc:
+                self._send_json(400, {"code": 400, "message": str(exc)})
+            return
+
         if url_path.startswith("/api/index/"):
             from scripts.index_engine import IndexEngine
             code = url_path.replace("/api/index/", "").strip()
@@ -928,7 +1099,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 # 默认导出 JSON
                 export_pack = {
                     "export_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "version": APP_VERSION,
+                    "version": current_version(),
                     "total_universe_count": len(all_stocks),
                     "fingerprint_engine": "采集批次标识；真实字段来源见quote_meta",
                     "crawler_snapshot": CRAWLER_JOB.get_snapshot(),
@@ -960,7 +1131,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             dashboard_data = compute_market_overview(all_stocks, start_date=s_date, end_date=e_date)
             self._send_json(200, {
                 "code": 200,
-                "version": APP_VERSION,
+                "version": current_version(),
                 "data": dashboard_data
             })
             return
@@ -982,7 +1153,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             world_data = WorldMacroEngine.get_world_macro_intelligence(start_date=s_date, end_date=e_date)
             self._send_json(200, {
                 "code": 200,
-                "version": APP_VERSION,
+                "version": current_version(),
                 "data": world_data
             })
             return
@@ -1220,7 +1391,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             data = {
                 "status": curr_state,
                 "service": "DSH Stock Web Server",
-                "version": APP_VERSION,
+                "version": current_version(),
                 "pid": os.getpid(),
                 "port": self.server.server_port,
                 "uptime_seconds": uptime,
@@ -1232,6 +1403,8 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "snapshot_date": caliber["snapshot_date"],
                 "snapshot_source": caliber["snapshot_source"],
                 "quote_date": caliber["quote_date"],
+                # 需求REQ-046: 真实行情快照时间（精确到分，来源只给日期时为 day 精度）
+                "quote_datetime": caliber["quote_datetime"],
                 "baseline": caliber["baseline"],
                 "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
@@ -1241,12 +1414,12 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
         # 5. 动态配置元数据 Schema
         if url_path == "/api/filter_schema":
             schema = {
-                "version": APP_VERSION,
+                "version": current_version(),
                 "dimensions": [
                     {"id": "shareholder_action", "name": "股东行为", "type": "select", "options": [{"value": "all", "label": "全部"}, {"value": "increase", "label": "增持"}, {"value": "decrease", "label": "减持"}, {"value": "both", "label": "同时增减持"}]},
                     {"id": "market", "name": "股市分类", "type": "select", "options": [{"value": "all", "label": "全部 A 股"}, {"value": "sh", "label": "上证"}, {"value": "sz", "label": "深圳"}]},
                     {"id": "board", "name": "板块分类", "type": "select", "options": [{"value": "all", "label": "全部板块"}, {"value": "main", "label": "主板"}, {"value": "chinext", "label": "创业板"}]},
-                    {"id": "constituent", "name": "成分股", "type": "select", "options": [{"value": "all", "label": "全部(不限)"}, {"value": "csi50", "label": "中证50"}, {"value": "csi100", "label": "中证100"}]},
+                    {"id": "constituent", "name": "成分股", "type": "select", "options": [{"value": "all", "label": "全部(不限)"}, {"value": "csi50", "label": "中证A50"}, {"value": "csi100", "label": "中证A100"}]},
                     {"id": "price", "name": "股价区间", "type": "range", "unit": "元"},
                     {"id": "market_cap", "name": "总市值区间", "type": "range", "unit": "亿元"},
                     {"id": "circ_cap", "name": "流通市值区间", "type": "range", "unit": "亿元"},
@@ -1271,6 +1444,24 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             symbol = parts[3] if len(parts) >= 4 else ""
             try:
                 self._send_json(200, {"code": 200, "symbol": symbol, "data": build_intraday_chanlun(symbol)})
+            except (ValueError, TypeError) as exc:
+                self._send_json(400, {"code": 400, "message": str(exc)})
+            return
+
+        # 3.10 需求REQ-028: 分钟K线端点 /api/stock/<code>/minute-kline?interval=m5|m15|m30&limit=200
+        # 口径: 每根K线为一个真实时间区间；成交额由均价×成交量推出并标记为估算，端点内不做任何拟合或填充。
+        if url_path.startswith("/api/stock/") and url_path.endswith("/minute-kline"):
+            parts = url_path.split("/")
+            symbol = parts[3] if len(parts) >= 4 else ""
+            query = parse_qs(urlsplit(self.path).query)
+            interval = (query.get("interval") or ["m5"])[0]
+            try:
+                limit = int((query.get("limit") or ["200"])[0])
+            except (TypeError, ValueError):
+                limit = 200
+            try:
+                self._send_json(200, {"code": 200, "symbol": symbol,
+                                      "data": build_minute_kline(symbol, interval, limit=limit)})
             except (ValueError, TypeError) as exc:
                 self._send_json(400, {"code": 400, "message": str(exc)})
             return
@@ -1394,6 +1585,17 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        # 6.5b 需求REQ-041: 任意真实K线序列的缠论分析（周线/季线/5分K线现场判定，纯计算不落库）
+        if url_path == "/api/chanlun/bars":
+            try:
+                data = build_chanlun_from_bars(
+                    str(params.get("code") or ""), params.get("bars"), params.get("level"))
+            except (ValueError, TypeError) as exc:
+                self._send_json(400, {"code": 400, "message": str(exc)})
+                return
+            self._send_json(200, {"code": 200, "message": "success", "data": data})
+            return
+
         # 6.6 需求REQ-020: 启动策略选股 (/api/screener/scan)
         if url_path == "/api/screener/scan":
             pool = params.get("codes")
@@ -1465,6 +1667,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "snapshot_date": caliber["snapshot_date"],
                 "snapshot_source": caliber["snapshot_source"],
                 "quote_date": caliber["quote_date"],
+                "quote_datetime": caliber["quote_datetime"],
             })
             return
 
@@ -1528,7 +1731,22 @@ def start_workspace_watchdog():
     pass
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8888):
+def resolve_bind_host(cli_host: str | None = None) -> str:
+    """需求REQ-049: 服务端默认**只绑定本机回环**（安全默认）。
+
+    历史默认值是 0.0.0.0（对整个局域网开放且无鉴权）。本产品是单人本机工具，
+    因此默认收紧为 127.0.0.1；确需其它设备访问时，用 `DSH_STOCK_HOST=0.0.0.0`
+    （或显式 `--host 0.0.0.0`）自行放开，并在文档中说明该决定。
+    """
+    env_host = (os.environ.get("DSH_STOCK_HOST") or "").strip()
+    if env_host:
+        return env_host
+    if cli_host and cli_host.strip():
+        return cli_host.strip()
+    return "127.0.0.1"
+
+
+def run_server(host: str = "127.0.0.1", port: int = 8888):
     global SERVER_INSTANCE
 
     signal.signal(signal.SIGINT, cleanup_and_exit)
@@ -1540,7 +1758,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8888):
     write_pid_file()
     start_workspace_watchdog()
 
-    print(f"[DSH Web Server] 正在启动 A 股全市场量化中枢 ({APP_VERSION})...")
+    print(f"[DSH Web Server] 正在启动 A 股全市场量化中枢 ({current_version()})...")
     print(f"[DSH Web Server] 本地 SQLite 库已连接: {DB_FILE} ｜ 已沉淀标的: {len(DATA_MANAGER.stocks_dict)} 只")
 
     try:
@@ -1548,8 +1766,10 @@ def run_server(host: str = "0.0.0.0", port: int = 8888):
         ThreadingHTTPServer.allow_reuse_address = True
         SERVER_INSTANCE = ThreadingHTTPServer(server_address, StockRequestHandler)
         print(f"===============================================================")
-        print(f" 🚀 DSH A股量化筛选 Web 服务端已成功就绪！版本: {APP_VERSION}")
+        print(f" 🚀 DSH A股量化筛选 Web 服务端已成功就绪！版本: {current_version()}")
         print(f" 📍 本地访问地址: http://127.0.0.1:{port}")
+        exposed = host not in ("127.0.0.1", "localhost", "::1")
+        print(f" 🔒 监听绑定    : {host}:{port}" + ("（⚠️ 已放开到非回环地址，局域网可达且当前无鉴权）" if exposed else "（仅本机回环，局域网不可达）"))
         print(f" 🟢 进程 PID    : {os.getpid()} (已写入 {PID_FILE})")
         print(f" 📡 状态常显端点: http://127.0.0.1:{port}/api/status")
         print(f" 🎛️ 双向启停端点: /api/server/start ｜ /api/server/shutdown")
@@ -1604,7 +1824,8 @@ def stop_server_by_pid(port: int = 8888):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DSH A股量化筛选与持久化服务端")
     parser.add_argument("--port", type=int, default=8888, help="HTTP 监听端口 (默认: 8888)")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="监听主机 (默认: 0.0.0.0)")
+    parser.add_argument("--host", type=str, default=None,
+                        help="监听主机 (默认: 127.0.0.1 仅本机回环；可用 DSH_STOCK_HOST 覆盖，放开到 0.0.0.0 即局域网可达)")
     parser.add_argument("--status", action="store_true", help="查询服务端运行状态")
     parser.add_argument("--stop", action="store_true", help="安全停止服务端")
     args = parser.parse_args()
@@ -1620,4 +1841,4 @@ if __name__ == "__main__":
     elif args.stop:
         stop_server_by_pid(args.port)
     else:
-        run_server(host=args.host, port=args.port)
+        run_server(host=resolve_bind_host(args.host), port=args.port)
