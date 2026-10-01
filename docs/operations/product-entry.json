@@ -16,7 +16,7 @@
   "built_at": "2026-10-02",
   "source": {
     "vcs": "git",
-    "revision": "PENDING-COMMIT-BACKFILL",
+    "revision": "7de29d2633bea77de9257f5dc709d11914809437",
     "dirty": false,
     "dirty_note": "R05~R12 全部批次已于本次入库（工作树清零）；修订号在提交后回填，见紧随其后的回填提交",
     "fingerprints": "docs/verification/2026-09-24-r09/source-fingerprints.json"
@@ -233,7 +233,7 @@
     "evidence": "docs/baselines/2026-09-20/rollback.json"
   },
   "updated_at": "2026-10-02",
-  "revision": "PENDING-COMMIT-BACKFILL",
+  "revision": "7de29d2633bea77de9257f5dc709d11914809437",
   "verification_dir": "docs/verification/2026-10-01-r11/",
   "fingerprints": {
     "captured_at": "2026-09-24T16:09:09+08:00",
