@@ -90,7 +90,7 @@ function barsWithAnomalyButNoSignal() {
 }
 
 const M13 = { top: 20, right: 65, bottom: 25, left: 112 };   // REQ-098: 左边距 65→112（容纳 20px 刻度标签）
-const W = 920, H = 656, MH = 350, SH = 190;                  // REQ-098: 540→620；REQ-101: 620→656（底部信息条放大后需 36px 余量）
+const W = 920, H = 690, MH = 350, SH = 190;                  // REQ-098: 540→620；REQ-101: 620→656→690（底部两行信息条 + 下伸部 + 余量）
 const appSrc = fs.readFileSync(path.join(__dirname, '..', 'web', 'app.js'), 'utf8');
 
 // ================= REQ-097-①②：阈值口径单一事实来源 =================
@@ -216,14 +216,48 @@ bottomTexts.forEach(m => {
   assert(y + fs * 1.25 <= prodHeight + 0.01,
     `底部信息条基线 ${y} + 下伸部 ${(fs * 1.25).toFixed(1)} 超出画布高 ${prodHeight}（会被 viewBox 下缘裁掉）`);
 });
-// 生产「含估算」提示（右对齐那条）同样必须 20px 且不越界 —— 用带兜底日线的构造逼出该分支
+// 生产「含估算」提示（右对齐那条）同样必须 20px 且不越界 —— 用**带估算来源标记**的日线逼出该分支
+//   （口径：`amountCoverageFlags` 优先采信对象自身的 `amount_derived === true`；
+//    若用「amount_yi 全 null」去逼，会先命中「成交额与成交量均缺失」的缺失提示分支，反而拿不到该行）
 const derivedSvg = run('generateDailyKlineSVG')(
-  bars30.map(b => Object.assign({}, b, { amount_yi: null, amount: null })), 'amt', W, H, MH, SH, M13, null, 'right', null, 'klinedaily');
-const derivedNote = derivedSvg.match(/<text x="[\d.]+" y="([\d.]+)" fill="#fbbf24" font-size="([\d.]+)" text-anchor="end">\s*⚠️ 其中/);
+  bars30.map(b => Object.assign({}, b, { amount_derived: true })), 'amt', W, H, MH, SH, M13, null, 'right', null, 'klinedaily');
+const derivedNote = derivedSvg.match(/<text x="[\d.]+" y="([\d.]+)" fill="#fbbf24" font-size="([\d.]+)" text-anchor="end"[^>]*class="sub-total-amount-note"[^>]*>\s*⚠️ 其中/);
 assert(derivedNote, '存在兜底估算日线时必须输出「⚠️ 其中 N 根成交额为估算」提示');
 assert.equal(Number(derivedNote[2]), 20, '「含估算」提示字号必须同为 20');
 assert(Number(derivedNote[1]) + 20 * 1.25 <= prodHeight + 0.01,
   `「含估算」提示基线 ${derivedNote[1]} 超出画布高 ${prodHeight}`);
+
+// 4c) 需求REQ-101（真机截图抓出的真实缺陷）：底部两段文案放大到 20px 后**同行必然重叠**，
+//     故必须分行。判据不是「我没看到重叠」，而是①基线相差一行行距；②按真实字宽估算，两段总宽本就超过绘图区内宽。
+const totalText = (svg.match(/class="sub-total-amount"[^>]*>\s*([^<]+)/) || [])[1];
+// 注意：note 必须从 derivedFlagSvg 取（derivedSvg 就是同一个构造），且 `⚠️ 其中` 前可能有空白
+const noteText = (derivedSvg.match(/class="sub-total-amount-note"[^>]*>\s*([^<]+)/) || [])[1];
+assert(totalText && noteText, '必须能取到两段底部文案（总成交额 / 含估算）');
+assert.equal(Number(derivedNote[1]), Number(bottomTexts[0][1]) + 22,
+  `「含估算」必须独立成行：基线应为总成交额基线 + 22（行距与 SUBPLOT_HEADER_ROW_PITCH 同源），实际 ${derivedNote[1]} vs ${bottomTexts[0][1]}`);
+const innerW13 = W - M13.left - M13.right;
+const totalW = run('estimateSvgTextWidth')(totalText.trim(), 20);
+const noteW = run('estimateSvgTextWidth')(noteText.trim(), 20);
+assert(totalW + noteW > innerW13,
+  `本用例的前提必须成立：两段 20px 文案总宽 ${(totalW + noteW).toFixed(0)} 必须大于绘图区内宽 ${innerW13}`
+  + '（若宽度降下来了说明可回到同行排布，应同步复核 REQ-101 的分行决策）');
+
+// 4d) 真机截图（旧资源）里看到的是「两段文案同一行互相压字」—— 该分支的触发条件是存在**估算来源**日线
+//     （amount_derived=true）。这里直接用该构造渲染，断言两段文案必然落在不同基线，绝不允许再同行。
+const derivedFlagSvg = run('generateDailyKlineSVG')(
+  bars30.map(b => Object.assign({}, b, { amount_derived: true })), 'amt', W, H, MH, SH, M13, null, 'right', null, 'klinedaily');
+const bothTexts = [...derivedFlagSvg.matchAll(/<text x="([\d.]+)" y="([\d.]+)" fill="(#(?:f59e0b|c084fc|fbbf24))" font-size="([\d.]+)"[^>]*class="(sub-total-amount|sub-total-amount-note)"[^>]*>\s*([^<]*)/g)]
+  .map(m => ({ x: Number(m[1]), y: Number(m[2]), cls: m[5], text: m[6].trim(), fs: Number(m[4]) }));
+assert(bothTexts.length >= 2,
+  `存在估算来源日线时必须同时输出「总成交额」与「含估算」两段（实际 ${bothTexts.length} 段：`
+  + bothTexts.map(t => `${t.cls}:${t.text.slice(0, 12)}`).join(' | ') + '）');
+assert.equal(new Set(bothTexts.map(t => t.y)).size, bothTexts.length,
+  `两段文案必须分属不同基线（放大后同行必重叠），实际基线 ${JSON.stringify(bothTexts.map(t => t.y))}`);
+assert.equal(Number(bothTexts.find(t => t.cls === 'sub-total-amount-note').y),
+  Number(bothTexts.find(t => t.cls === 'sub-total-amount').y) + 22,
+  '「含估算」必须位于「总成交额」正下方一行（行距 22px）');
+bothTexts.forEach(t => assert(t.y + t.fs * 1.25 <= prodHeight + 0.01,
+  `底部信息条（${t.cls}）下缘 ${(t.y + t.fs * 1.25).toFixed(1)} 超出画布高 ${prodHeight}`));
 
 // 5) 分时图副图表头同样必须是 20（两图同源）
 const tlItems = quietBars(60).map((b, i) => Object.assign({}, b, { time: `09:${String(i % 60).padStart(2, '0')}` }));
@@ -244,13 +278,13 @@ assert.doesNotMatch(appSrc, /subTopY \+ sh \+ 11\}/, '副图底部不得残留�
 const literalTenCalls = (appSrc.match(/fontSize: 10\b/g) || []).length;
 assert.equal(literalTenCalls, 1, `个股图表不得再残留 fontSize: 10；仅指数页（本轮范围外）保留 1 处，实际 ${literalTenCalls}`);
 assert.match(appSrc, /effortThresholdText\(/, '阈值文案必须走 effortThresholdText（禁止手写复述）');
-assert.match(appSrc, /const height = 656;/, '画布高必须为 656（REQ-098 的 620 + REQ-101 底部信息条预留 36）');
+assert.match(appSrc, /const height = 690;/, '画布高必须为 690（REQ-098 的 620 + REQ-101 底部两行信息条预留 70）');
 assert.match(appSrc, /const subHeight = 190;/, '副图高必须为 190（REQ-098 同步放大）');
 
-// 需求REQ-101: 指数详情页同源文案（全域同权）—— 该页K线分支画布高 480→500，
+// 需求REQ-101: 指数详情页同源文案（全域同权）—— 该页K线分支画布高 480→520，
 //   底部信息条两处 font-size 必须同为 20；因指数页在 headless 下切颗粒度会卡住主线程（既有缺陷，
 //   见需求台账），本项以源码级断言兜底真机读数。
-assert.match(appSrc, /const height = 500;/, '指数K线画布高必须为 500（REQ-101 为第二条底部信息条留出 48px 行距）');
+assert.match(appSrc, /const height = 520;/, '指数K线画布高必须为 520（REQ-101 为第二条底部信息条留出 48px 行距）');
 // 指数页K线分支的定位锚：`indexWindowAmount.note` 只在该分支出现（唯一）
 const indexBranchAt = appSrc.indexOf('indexWindowAmount.note');
 assert(indexBranchAt > 0, '必须能定位指数页K线分支（indexWindowAmount.note）');

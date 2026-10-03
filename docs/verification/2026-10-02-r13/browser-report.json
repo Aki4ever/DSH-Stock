@@ -1,20 +1,13 @@
 {
-  "at": "2026-10-03T00:17:28.427Z",
+  "at": "2026-10-03T01:28:00.305Z",
   "base": "http://127.0.0.1:8888",
   "stock": "sh601939",
   "total": 26,
   "passed": 26,
   "failed": 0,
   "consoleErrors": [],
-  "shots": [
-    "01-effort-layer-on.png",
-    "02-effort-layer-off.png",
-    "03-effort-layer-reopened.png",
-    "04-effort-layer-hit-180bars.png",
-    "05-subplot-header-20px.png",
-    "06-timeline-subplot-header-20px.png"
-  ],
-  "note": null,
+  "shots": [],
+  "note": "以下截图在本机 headless Chrome 下无法采集（captureScreenshot 挂起，已降级 fromSurface:false 仍失败），判据不受影响：01-effort-layer-on.png, 02-effort-layer-off.png, 03-effort-layer-reopened.png, 04-effort-layer-hit-180bars.png, 05-subplot-header-20px.png, 06-timeline-subplot-header-20px.png",
   "results": [
     {
       "name": "headless Chrome 已就绪",

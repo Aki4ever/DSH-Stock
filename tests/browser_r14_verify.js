@@ -112,13 +112,21 @@ const panelProbe = (slot) => `(() => {
   const ctm = svg.getScreenCTM();
   const scale = ctm ? ctm.a : 1;
   const vbH = Number(svg.getAttribute('height')) || null;
-  // 底部信息条：class 明确标记，避免与表头混淆
+  // 底部信息条：class 明确标记，避免与表头混淆；同时记录真实包围盒（用于判「两段文案是否互相压字」）
   const bottoms = [...svg.querySelectorAll('text.sub-total-amount, text.sub-total-amount-note')].map(t => {
     const b = t.getBBox();
     return { text: t.textContent.replace(/\\s+/g, ' ').trim().slice(0, 60), attr: Number(t.getAttribute('font-size')),
-             y: Number(t.getAttribute('y')), boxBottom: Number(b.y.toFixed(2)) + Number(b.height.toFixed(2)),
+             y: Number(t.getAttribute('y')), x: Number(b.x.toFixed(2)), right: Number((b.x + b.width).toFixed(2)),
+             boxBottom: Number((b.y + b.height).toFixed(2)),
              effPx: Number((Number(t.getAttribute('font-size')) * scale).toFixed(2)) };
   });
+  // 需求REQ-101（真机截图抓出的缺陷）：底部两段文案放大后若仍同行，必然互相压字 —— 逐对做真实包围盒相交判定
+  const bottomOverlaps = [];
+  for (let i = 0; i < bottoms.length; i++) for (let j = i + 1; j < bottoms.length; j++) {
+    const a = bottoms[i], c = bottoms[j];
+    const inter = Math.min(a.right, c.right) - Math.max(a.x, c.x);
+    if (inter > 0.5 && Math.abs(a.y - c.y) <= 20) bottomOverlaps.push({ a: a.text.slice(0, 20), b: c.text.slice(0, 20), px: Number(inter.toFixed(1)) });
+  }
   const headerTexts = [...svg.querySelectorAll('g.sub-summary-group text')].map(t => {
     const b = t.getBBox();
     return { text: t.textContent.replace(/\\s+/g, ' ').trim(), baseline: Number(t.getAttribute('y')),
@@ -135,7 +143,7 @@ const panelProbe = (slot) => `(() => {
   return {
     windowLabel, viewCount: windowLabel ? Number((windowLabel.match(/视窗\s*(\\d+)\s*根/) || [])[1]) : null,
     axisLeft, panOffset: chartPanels.${slot}.st.panOffset, klineGroup: chartPanels.${slot}.st.klineGroup,
-    scale: Number(scale.toFixed(4)), vbH, bottomCount: bottoms.length, bottoms,
+    scale: Number(scale.toFixed(4)), vbH, bottomCount: bottoms.length, bottoms, bottomOverlaps,
     minBarTop, lastHeaderBaseline,
     groupButtons: [...document.querySelectorAll('#klineGroupControl .seg-btn')].map(b => b.getAttribute('data-group'))
   };
@@ -193,6 +201,11 @@ const touchSwipeBy = (slot, perFramePx, frames) => `(() => {
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
     await cdp.send('Log.enable');
+    // 实测坑（2026-10-03）：页面引用 `/web/app.js?v=5.6.0-r12`（固定 query），
+    //   headless 会命中**上一次运行留下的 HTTP 缓存**，于是真机读数跑在旧资源上（截图里版本徽标仍是 v5.7.0）。
+    //   这是最危险的一类假绿：DOM 断言全过、但验的不是本轮代码。故先强制停用缓存。
+    await cdp.send('Network.enable');
+    await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
     cdp.ws.addEventListener('message', ev => {
       const m = JSON.parse(ev.data);
       if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error') consoleErrors.push(m.params.entry.text);
@@ -204,6 +217,12 @@ const touchSwipeBy = (slot, perFramePx, frames) => `(() => {
     // 页面必须真的是本轮改动后的资源（防空跑旧缓存）
     const zoomFn = await cdp.eval(`typeof klineZoomStep === 'function' && typeof KLINE_PAN_PX_PER_BAR === 'number'`);
     check('页面已装载本轮改动（klineZoomStep / KLINE_PAN_PX_PER_BAR 存在）', zoomFn === true, String(zoomFn));
+    // 更强的资源新鲜度判据：这两个常量只在本轮 R14 引入；再核对页面版本徽标与版本权威同源
+    const freshConsts = await cdp.eval(`typeof SUBPLOT_BOTTOM_NOTE_BASELINE_OFFSET === 'number' && typeof KLINE_PAN_PX_PER_BAR === 'number'`);
+    check('页面 JS 是本轮构建（R14 新增常量存在，未命中旧缓存）', freshConsts === true, String(freshConsts));
+    const expectVersion = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config', 'version.json'), 'utf8')).version;
+    const pageVer = await cdp.eval(`(document.title.match(/v[\\d.]+/) || [])[0] || null`);
+    check('页面版本徽标与 config/version.json 同源', pageVer === expectVersion, `页面 ${pageVer} · 权威 ${expectVersion}`);
 
     await cdp.eval(`openStockDetail('${STOCK}')`);
     await sleep(12000);
@@ -340,6 +359,47 @@ const touchSwipeBy = (slot, perFramePx, frames) => `(() => {
       check('REQ-101 底部信息条与副图表头不同行（零重叠）',
         fp.lastHeaderBaseline === null || Math.abs(lowestBaseline - fp.lastHeaderBaseline) > 5,
         `表头基线 ${fp.lastHeaderBaseline} · 信息条基线 ${lowestBaseline}`);
+      // 真机截图抓出的真实缺陷回归：两段底部文案在 20px 下若仍同行会**互相压字**
+      check('REQ-101 底部两段文案互不压字（放大后必须分行）',
+        (fp.bottomOverlaps || []).length === 0,
+        (fp.bottomOverlaps || []).length
+          ? `仍存在重叠：${JSON.stringify(fp.bottomOverlaps)}`
+          : `0 处重叠 · 基线 ${JSON.stringify(fp.bottoms.map(b => b.y))} · x 区间 ${JSON.stringify(fp.bottoms.map(b => [b.x, b.right]))}`);
+      if (fp.bottoms.length >= 2) {
+        const ys = [...new Set(fp.bottoms.map(b => b.y))].sort((a, b) => a - b);
+        check('REQ-101 两段文案必须分行（第二行位于第一行下方一行行距 22px）',
+          ys.length === 2 && Math.abs((ys[1] - ys[0]) - 22) < 0.6,
+          `基线集合 ${JSON.stringify(ys)}`);
+      }
+    }
+
+    // REQ-101 反向用例：真实数据里若没有估算来源日线，「含估算」那一段根本不渲染（上面的重叠判据会空跑）。
+    //   故用真实渲染管线（renderChartPanel）喂一版 amount_derived=true 的窗口，逼出该分支后再实测两段几何。
+    await cdp.eval(`(() => {
+      const daily = (appState.activeDetailStock.daily_bars || []).slice(-30).map(b => Object.assign({}, b, { amount_derived: true }));
+      chartPanels.right.st.dimension = 'kline';
+      chartPanels.right.st.klineGroup = 'daily';
+      chartPanels.right.st.klineCount = 30;
+      chartPanels.right.st.panOffset = 0;
+      chartPanels.right.st.subplot = 'amt';
+      appState.activeDetailStock = Object.assign({}, appState.activeDetailStock, { __groupBars: {}, daily_bars: daily });
+      renderChartPanel('right');
+      return true;
+    })()`);
+    await sleep(1500);
+    const fpDerived = await cdp.eval(panelProbe('right'));
+    check('REQ-101 「含估算」分支真机渲染两段（构造估算来源日线）',
+      !fpDerived.error && (fpDerived.bottoms || []).length >= 2,
+      fpDerived.error || `底部文案 ${(fpDerived.bottoms || []).map(b => `${b.attr}px@y=${b.y}:${b.text.slice(0, 14)}`).join(' | ')}`);
+    if (!fpDerived.error && (fpDerived.bottoms || []).length >= 2) {
+      const ys = [...new Set(fpDerived.bottoms.map(b => b.y))].sort((a, b) => a - b);
+      check('REQ-101 两段文案真机分行且互不压字（0 处包围盒重叠）',
+        (fpDerived.bottomOverlaps || []).length === 0 && ys.length === 2 && Math.abs((ys[1] - ys[0]) - 22) < 0.6,
+        `重叠 ${JSON.stringify(fpDerived.bottomOverlaps || [])} · 基线 ${JSON.stringify(ys)} · x 区间 ${JSON.stringify(fpDerived.bottoms.map(b => [b.x, b.right]))}`);
+      check('REQ-101 两段文案下缘均不出 viewBox',
+        fpDerived.bottoms.every(b => b.boxBottom <= fpDerived.vbH + 0.01),
+        `下缘 ${JSON.stringify(fpDerived.bottoms.map(b => b.boxBottom))} / 画布高 ${fpDerived.vbH}`);
+      shots.push(await cdp.shot('05-subplot-bottom-two-lines.png'));
     }
     await cdp.eval(`(() => { const el = document.getElementById('chartPanelRow'); if (el) el.scrollIntoView({ block: 'center' }); return !!el; })()`);
     await sleep(400);

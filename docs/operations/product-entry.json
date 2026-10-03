@@ -29,7 +29,8 @@
       "changes": [
         "REQ-100：± 按钮同源 · 同量级 · 严格可逆 —— 根因实测 `zoomKlineChart` 原步长 `max(5, round(cur*0.15))` 挂在**当前值**上，同一次正反步长不等（**47 →➕→ 40 →➖→ 46**，回来少 1 根、多次往返必漂移），且指数页另立 `round(curCount*0.05)` 第二套公式；现收敛为唯一权威源 `klineZoomStep(anchor)`（按固定锚点分档、恒返回整数 `KLINE_ZOOM_STEP_SMALL=15` / `KLINE_ZOOM_STEP_LARGE=30`），个股浮动 ± 与指数页滚轮共用同一函数，未触界时 `N − step + step === N` 严格成立；下限 30 根 / 上限可用根数（个股 200 封顶）不变",
         "REQ-099：K 线图左右滑动平移（日/周/季全覆盖）—— 根因实测三处缺陷：① `bindChartZoomAndDrawing` 每次重绘都把 `mousemove`/`mouseup` 挂到 `window` 且从不解绑 → 重绘 N 次即 N 份监听器，同一次拖拽被平移 N 次（越滑越快）；② 触摸侧每帧重置基准，慢滑（每帧 <1 根）`round` 后恒 0 →「手指划完一根不动」；③ `touchmove` 监听器**根本没绑**，且鼠标 `/10` 与触摸 `/12` 两套灵敏度分叉。现改为同名函数先解绑再绑定（任意时刻唯一）、触摸位移累积（只消费整根、余量留到下一帧）、补绑 `touchmove`（`passive:true`，纵向滚动归页面）、灵敏度收敛为 `KLINE_PAN_PX_PER_BAR=10`、平移量取整并钳制 `[0, available−N]`、分时图显式排除",
-        "REQ-101：副图底部信息条文字放大一倍 —— REQ-098 只放大了**表头**，副图底部「总成交额 / 区间累计换手率」与「⚠️ 其中 N 根成交额为估算」仍是 `font-size=\"10\"`，且基线 `副图底 + 11` 是按 10px 设计的（放大即被 viewBox 下缘裁切）；现 4 处字号走唯一常量 `SUBPLOT_HEADER_FONT_SIZE`（20）、基线收敛为 `SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET=20`、画布 620→656；指数页同源文案一并放大（画布 480→500，修掉原第二行基线 481 越出 viewBox 的 1px 裁切）",
+        "REQ-101：副图底部信息条文字放大一倍 —— REQ-098 只放大了**表头**，副图底部「总成交额 / 区间累计换手率」与「⚠️ 其中 N 根成交额为估算」仍是 `font-size=\"10\"`，且基线 `副图底 + 11` 是按 10px 设计的（放大即被 viewBox 下缘裁切）；现 4 处字号走唯一常量 `SUBPLOT_HEADER_FONT_SIZE`（20）、基线收敛为 `SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET=20`、画布 620→656。**真机截图又抓出第二处真实缺陷**：放大后两段文案同行必然互相压字（20px 下左段≈435 + 右段≈226 > 绘图区内宽 743）→ 改为**分两行**（总成交额基线 605 / 含估算基线 627，行距 22px 与表头同源），画布 656→690；指数页同源文案一并放大且分行（画布 480→520，修掉原第二行 481 越出 viewBox 的 1px 裁切）",
+        "假绿防御（本轮最贵教训）：首轮真机读数跑在**旧缓存资源**上（页面引用 `/web/app.js?v=5.6.0-r12` 固定 query ＋ headless HTTP 缓存，截图里版本徽标仍是 v5.7.0），DOM 断言全绿却验错对象；现 `Network.setCacheDisabled(true)` 强制停用缓存、缓存串升到 `?v=5.8.0-r14`，并新增两条资源新鲜度断言（R14 新增常量存在 / 页面徽标 = `config/version.json`），全部真机判据已重跑",
         "测试资产：新增静态 `tests/test_r14_kline_pan_zoom_font.js`（步长同源/可逆、三颗粒度平移、到界钳制、监听器不累积、触摸累积）与真机 `tests/browser_r14_verify.js`（31 项）；`tests/test_r13_*.js` 增补底部信息条字号/基线/画布几何断言与指数页源码级断言（可被回退实验判红）；前端静态套件 9 → **10 套**",
         "数据口径变更：无（零行情数据口径变更；成交额三级兜底、REQ-025/031/032/042 全部原样）"
       ],
@@ -47,7 +48,7 @@
       "verification_gates": {
         "python_unittest": "311 PASS (skipped 2)",
         "js_static_suites": "10/10 PASS",
-        "browser_r14": "31/31 PASS",
+        "browser_r14": "38/38 PASS",
         "browser_r13": "26/26 PASS",
         "console_errors": 0,
         "screenshots": "2（headless Chrome 148 下 captureScreenshot 仍偶发挂起，已在脚本内降级跳过；判据为 DOM/getBBox/getScreenCTM 实测）",

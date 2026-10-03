@@ -5014,8 +5014,10 @@ function renderChartPanel(slot) {
   //   （"19.5亿元" 在 20px 下约需 92px 宽，65px 边距会被画布左缘裁掉）。
   // 需求REQ-101: 620 只够到副图底（585）+35px，而底部信息条基线 605、文字下缘 609，
   //   加上下伸部与安全余量后画布高 620→656（底部注释预留 36px），否则该行必被 viewBox 下缘裁切。
+  //   真机截图又抓出「两段文案 20px 同行必重叠」→ 改为分两行（基线 605 / 627，行距 22），
+  //   画布高 656→690（底部预留 70px = 两行 + 下伸部 + 安全余量）。
   const width = 920;
-  const height = 656;
+  const height = 690;
   const mainHeight = 350;
   const subHeight = 190;
   const margin = { top: 20, right: 65, bottom: 25, left: 112 };
@@ -5578,8 +5580,13 @@ const SUBPLOT_HEADER_ROW_PITCH = SUBPLOT_HEADER_FONT_SIZE + 2;
 
 /** 需求REQ-101: 副图「底部信息条」（左下总成交额/累计换手率 + 右下含估算提示）的基线偏移。
  *  口径推导：字号与表头同为 20px，基线 = 副图底 + OFFSET；文字下缘另有约 0.22em（≈4px）下伸部，
- *  故画布必须再留出 `OFFSET + 字号×1.25` 的高度，否则这行会被 viewBox 下缘裁掉（原 OFFSET=11 是给 10px 用的）。 */
+ *  故画布必须再留出 `OFFSET + 字号×1.25` 的高度，否则这行会被 viewBox 下缘裁掉（原 OFFSET=11 是给 10px 用的）。
+ *  实测踩坑（2026-10-03，真机截图抓出）：两段文案在 20px 下同一行必然**互相重叠** ——
+ *  左「总成交额: 340.60亿 (30个交易日) · 含估算 30 根」20px 实宽 ≈404、右「⚠️ 其中 N 根成交额为估算…」≈367，
+ *  绘图区内宽仅 743 → 需求 771 > 743。原 10px 时代总宽 ≈386 尚能同行，放大一倍后必须**分行**：
+ *  第一行＝总成交额（左对齐），第二行＝含估算提示（右对齐），行距 22px（与 SUBPLOT_HEADER_ROW_PITCH 同源）。 */
 const SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET = 20;
+const SUBPLOT_BOTTOM_NOTE_BASELINE_OFFSET = SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET + SUBPLOT_HEADER_ROW_PITCH;
 
 function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, analysis=null, slot='left') {
   if (!items || items.length === 0) {
@@ -7136,18 +7143,17 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
     }).svg;
   } else if (!isVol && !isTurn && amountFlags.anyDerived) {
     // 需求REQ-025: 兜底估算值必须可区分，不允许与真实成交额混为一谈
-    // 需求REQ-042/043: 与左下角「总成交额」同行绘制时必须右对齐，否则两段文字会重叠成一片
-    // 需求REQ-101: 本行属「副图底部信息条」，与表头同为红框口径 → 字号必须同为 SUBPLOT_HEADER_FONT_SIZE（原 10）；
-    //   基线同步下移到 SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET（副图底 +20），原 +11 是给 10px 用的，放大后会顶到 30px 处被画布下缘裁掉
+    // 需求REQ-101: 放大到 20px 后与左下「总成交额」**同行必然重叠**（两段实宽之和 771 > 绘图区内宽 743），
+    //   故改为第二行右对齐独立成行（行距 22px 与表头同源），杜绝文字互相压字
     summaryBadgesSvg += `
-      <text x="${m.left + innerW - 8}" y="${subTopY + sh + SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET}" fill="#fbbf24" font-size="${SUBPLOT_HEADER_FONT_SIZE}" text-anchor="end">
+      <text x="${m.left + innerW - 8}" y="${subTopY + sh + SUBPLOT_BOTTOM_NOTE_BASELINE_OFFSET}" fill="#fbbf24" font-size="${SUBPLOT_HEADER_FONT_SIZE}" text-anchor="end" class="sub-total-amount-note">
         ⚠️ 其中 ${amountFlags.derived} 根成交额为估算（均价 × 成交量），非来源原始披露
       </text>
     `;
   } else if (isVol && amountFlags.anyDerived) {
     // 需求REQ-025: 副图显示成交量时，成交额兜底口径同样必须主图可见（不得因切换副图而失去标注）
     summaryBadgesSvg += `
-      <text x="${m.left + innerW - 8}" y="${subTopY + sh + SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET}" fill="#fbbf24" font-size="${SUBPLOT_HEADER_FONT_SIZE}" text-anchor="end">
+      <text x="${m.left + innerW - 8}" y="${subTopY + sh + SUBPLOT_BOTTOM_NOTE_BASELINE_OFFSET}" fill="#fbbf24" font-size="${SUBPLOT_HEADER_FONT_SIZE}" text-anchor="end" class="sub-total-amount-note">
         ⚠️ 成交额由来源缺失后兜底：其中 ${amountFlags.derived} 根按（均价 × 成交量）估算，非来源原始披露
       </text>
     `;
@@ -7907,9 +7913,10 @@ function renderActiveIndexChart() {
   if (!indexData || !dom.indexChartSvgContainer) return;
 
   const width = dom.indexChartSvgContainer.clientWidth || 920;
-  // 需求REQ-101: 底部信息条（总成交额 / 含估算说明）放大到 20px 后，480 高下第二行基线 481 会越出 viewBox（被裁 1px），
-  //   故画布高 480→500，两行基线 469 / 493 全部落在画布内（底部另留 7px 安全余量）。
-  const height = 500;
+  // 需求REQ-101: 底部信息条（总成交额 / 含估算说明）放大到 20px 后必须分两行
+  //   （第一行基线 469、第二行 493，行距 22 与表头同源），且 480 高下第二行文字下缘 497 会越出 viewBox，
+  //   故画布高 480→520（底部另留 23px 安全余量）。
+  const height = 520;
   const margin = { top: 30, right: 90, bottom: 35, left: 60 };
   const mainHeight = 310;
   const subHeight = 90;
@@ -8223,7 +8230,6 @@ function renderActiveIndexChart() {
           ${indexWindowAmount.totalAmountYi == null ? formatTotalAmount(indexWindowAmount) : `总成交额: ${Number(indexWindowAmount.totalAmountYi).toFixed(2)}亿 (${indexWindowAmount.days}个交易日)`}
         </text>
         ${indexWindowAmount.note ? `<text x="${margin.left + 8}" y="${subTop + subHeight + 48}" fill="#fbbf24" font-size="${SUBPLOT_HEADER_FONT_SIZE}" class="sub-total-amount-note">⚠️ ${indexWindowAmount.note}</text>` : ''}
-
         <!-- 需求REQ-014/015: 多模型辅助线（自动线与手动线共存，按 zIndex 分层） -->
         ${autoLinesSvg}
 
