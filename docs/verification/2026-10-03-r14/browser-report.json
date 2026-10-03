@@ -198,5 +198,6 @@
       "ok": true,
       "detail": "0 条"
     }
-  ]
+  ],
+  "note": "本机 headless Chrome 148 下 Page.captureScreenshot 已连续多轮挂起（shots 为空），旧轮次留下的 PNG 是**修复前**渲染的误导证据，已删除；本轮全部判据为 DOM/getBBox/getScreenCTM 实测。"
 }
