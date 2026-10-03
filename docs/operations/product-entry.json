@@ -16,9 +16,9 @@
   "built_at": "2026-10-03",
   "source": {
     "vcs": "git",
-    "revision": "0ad9bf20420cd261b4a8df006a61f7b1bdcb7e82",
+    "revision": "add6ae4d5eb52f2634a13b0877fe95726fea17ea",
     "dirty": false,
-    "dirty_note": "R13 + R14 批次已入库推送（commit 0ad9bf2 · origin/main ebcbf70..0ad9bf2）；工作树在回填本行前仅剩该回填本身",
+    "dirty_note": "R13 + R14 批次已入库推送（R14 修复提交 add6ae4）；工作树在回填本行前仅剩该回填本身",
     "fingerprints": "docs/verification/2026-09-24-r09/source-fingerprints.json"
   },
   "classification": "latest-verified",
