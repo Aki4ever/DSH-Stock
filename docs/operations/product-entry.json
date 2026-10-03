@@ -16,9 +16,9 @@
   "built_at": "2026-10-03",
   "source": {
     "vcs": "git",
-    "revision": "ebcbf70e4b97eea7a5607c8914ec042bca0bb962",
-    "dirty": true,
-    "dirty_note": "R14 批次改动尚未入库（web/app.js、tests/test_r13_*.js、tests/test_r14_*.js、tests/browser_r14_verify.js、config/version.json、docs/*）；修订号为打包时 HEAD，入库后需回填",
+    "revision": "0ad9bf20420cd261b4a8df006a61f7b1bdcb7e82",
+    "dirty": false,
+    "dirty_note": "R13 + R14 批次已入库推送（commit 0ad9bf2 · origin/main ebcbf70..0ad9bf2）；工作树在回填本行前仅剩该回填本身",
     "fingerprints": "docs/verification/2026-09-24-r09/source-fingerprints.json"
   },
   "classification": "latest-verified",
