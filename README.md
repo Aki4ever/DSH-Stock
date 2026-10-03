@@ -1,7 +1,7 @@
 # DSH 股票量化监控与投资组合分析工程 (DSH Stock)
 
 > ### 🏷️ **版本信息与实施追踪**
-> - **当前系统实施总版本**：`v5.6.0`（R11 stockper 权威调研与抓取 Agent + R12 会话与产品全域管控纳管对齐，权威来源 `config/version.json`，运行期即时生效）
+> - **当前系统实施总版本**：`v5.7.0`（R13 K线图可读性与图层反馈修复：REQ-097「努力与结果」图层开关零反馈、REQ-098 副图信息条字号放大一倍，权威来源 `config/version.json`，运行期即时生效）
 > - **维护团队**：DSH 量化生态与智能体工程组
 > - **最后更新日期**：2026-10-02
 > - **版本状态**：`[Release 稳定生效]`
@@ -133,10 +133,10 @@ python3 scripts/dsh_stock_cli.py status
 ```bash
 python3 -m unittest discover -s tests -p "test_*.py" -v
 ```
-> **当前门禁状态（2026-09-24 实测，全部全绿）**：Python 单测 **266 项 PASS**；前端静态套件 **7 套全 PASS**；真机验收 **R10 15/15 · R09 28/28 · R08 40/40 · R07 44/44 · R06 39/39**；服务端默认仅监听 `127.0.0.1:8888`（`DSH_STOCK_HOST=0.0.0.0` 可放开），`server.log` 超 5MB 自动轮转。R06/R07 探针漂移、R05 台账缺口、入口记录落后均已收口（详见 [`docs/handoff/README.md`](docs/handoff/README.md)）。
+> **当前门禁状态（2026-10-02 R13 实测，全部全绿）**：Python 单测 **311 项 PASS（skipped 2）**；前端静态套件 **9 套全 PASS**（新增 `test_r13_effort_layer_feedback_and_font.js`）；真机验收 **R13 26/26 · R09 28/28（本轮复跑）· R11 25/25 · R10 15/15 · R08 40/40 · R07 44/44 · R06 39/39**，控制台 0 异常；服务端默认仅监听 `127.0.0.1:8888`（`DSH_STOCK_HOST=0.0.0.0` 可放开），`server.log` 超 5MB 自动轮转。**本轮已知边界**：本机 headless Chrome 148 下 `Page.captureScreenshot` 会无限挂起 → 真机报告的截图项为空（已加超时/降级并登记），判据全部为 DOM/`getBBox()`/`getScreenCTM()` 实测。
 
 
-## v5.6.0 当前入口与接手入口
+## v5.7.0 当前入口与接手入口
 
 - 产品入口（本地网页）：[打开产品](http://127.0.0.1:8888/)｜保活命令：`bash scripts/ensure_server.sh`｜停止：`bash scripts/stop_server.sh`
 - 接手文档：[接手与对接总览](docs/handoff/README.md)｜[当前真实架构](docs/handoff/architecture-current.md)｜[二次开发与优化指南](docs/handoff/optimization-guide.md)｜[产品文案包](docs/handoff/product-copy.md)

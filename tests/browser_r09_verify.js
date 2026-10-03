@@ -66,7 +66,20 @@ class CDP {
     return r.result.value;
   }
   async shot(name) {
-    const r = await this.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    // 实测坑（2026-10-02）：headless Chrome 148 下 `Page.captureScreenshot` 会**无限挂起**，旧实现无超时，
+    // 导致整套真机验证卡死在第一张截图。现加超时 + 失败快速跳过（判据是 DOM/getBBox 实测，截图只是证据附件）。
+    if (shotFailures.length >= 2) { shotFailures.push(name); return null; }
+    const tryShot = async (params) => Promise.race([
+      this.send('Page.captureScreenshot', params),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('captureScreenshot 超时(6s)')), 6000))
+    ]);
+    let r = null;
+    try { r = await tryShot({ format: 'png', captureBeyondViewport: false }); }
+    catch (_) {
+      try { r = await tryShot({ format: 'png', captureBeyondViewport: false, fromSurface: false }); }
+      catch (_) { r = null; }
+    }
+    if (!r || !r.data) { shotFailures.push(name); return null; }
     fs.mkdirSync(OUT, { recursive: true });
     const file = path.join(OUT, name);
     fs.writeFileSync(file, Buffer.from(r.data, 'base64'));
@@ -75,6 +88,7 @@ class CDP {
 }
 
 const results = [];
+const shotFailures = [];
 function check(name, ok, detail = '') {
   results.push({ name, ok: !!ok, detail });
   console.log(`${ok ? '✅' : '❌'} ${name}${detail ? ' — ' + detail : ''}`);
@@ -98,7 +112,7 @@ function headerProbe(hostId) {
     const svgs = [...host.querySelectorAll('svg')];
     const svg = svgs[svgs.length - 1];
     if (!svg) return { error: '未渲染 SVG' };
-    const box = (t) => { const b = t.getBBox(); return { x: b.x, right: b.x + b.width, y: b.y, bottom: b.y + b.height, w: b.width, h: b.height }; };
+    const box = (t) => { const b = t.getBBox(); return { x: b.x, right: b.x + b.width, y: b.y, bottom: b.y + b.height, w: b.width, h: b.height, baseline: Number(t.getAttribute('y')) }; };
     const items = [];
     [...svg.querySelectorAll('g.sub-summary-group text')].forEach(t => {
       const b = box(t);
@@ -121,13 +135,18 @@ function headerProbe(hostId) {
       }
     });
     const overlaps = [];
+    const crossRow = [];
     for (let i = 0; i < items.length; i++) {
       for (let j = i + 1; j < items.length; j++) {
         const a = items[i], b = items[j];
-        const sameRow = !(a.bottom <= b.y + 0.5 || b.bottom <= a.y + 0.5);
-        if (!sameRow) continue;
+        // 同行判定必须用**基线相等**（layoutSubplotHeader 同一行输出同一基线 y）。
+        // 实测坑（2026-10-02，REQ-098 字号 10→20 后暴露）：用「包围盒纵向相交」判定同行，
+        // 在字号 20 时行距 22px < 字框高 23.8px，相邻两行会被误判为同一行而报出大量假重叠。
+        const sameRow = Math.abs((a.baseline || a.y) - (b.baseline || b.y)) <= 0.5;
         const inter = Math.min(a.right, b.right) - Math.max(a.x, b.x);
-        if (inter > 0.5) overlaps.push({ a: a.text, b: b.text, px: Number(inter.toFixed(2)) });
+        if (inter <= 0.5) continue;
+        if (sameRow) overlaps.push({ a: a.text, b: b.text, px: Number(inter.toFixed(2)) });
+        else crossRow.push({ a: a.text, b: b.text, px: Number(inter.toFixed(2)), dy: Number(Math.abs((a.baseline || a.y) - (b.baseline || b.y)).toFixed(1)) });
       }
     }
     const overflow = panel ? items.filter(i => i.right > panel.right + 0.5).map(i => ({ text: i.text, right: Number(i.right.toFixed(1)) })) : [];
@@ -135,7 +154,7 @@ function headerProbe(hostId) {
       count: items.length,
       titles: items.filter(i => i.kind === 'title').map(i => i.text),
       stats: items.filter(i => i.kind === 'stat').map(i => i.text),
-      overlaps, overflow,
+      overlaps, overflow, crossRow,
       panel: panel ? { right: Number(panel.right.toFixed(1)), top: Number(panel.top.toFixed(1)), h: Number(panel.h.toFixed(1)) } : null,
       maxRight: items.length ? Number(Math.max(...items.map(i => i.right)).toFixed(1)) : null,
       text: svg.textContent.replace(/\\s+/g, ' ').trim()
@@ -304,7 +323,9 @@ const subplotText = `(() => {
   const report = {
     at: new Date().toISOString(), base: BASE, total: results.length,
     passed: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length,
-    consoleErrors, shots: shots.map(s => path.basename(s)), results
+    consoleErrors, shots: shots.filter(Boolean).map(s => path.basename(s)),
+    note: shotFailures.length ? `以下截图在本机 headless Chrome 下无法采集（captureScreenshot 挂起，已降级 fromSurface:false 仍失败），判据不受影响：${shotFailures.join(', ')}` : null,
+    results
   };
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, 'browser-report.json'), JSON.stringify(report, null, 2));

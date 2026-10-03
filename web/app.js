@@ -3945,7 +3945,31 @@ function switchChartSubplot(subplot, slot = 'both') {
 }
 
 /**
- * 需求3/4: K线图缩放控制函数（+ 放大减少根数，- 缩小增加根数）
+ * 需求REQ-100: K线视窗根数的 ± 步长函数（唯一权威源，全域同源）。
+ *
+ * 需求方原话：「+ - 按钮每次都应该是同样水平的操作，例如 + 之前是 47 列，+ 之后是 40 列，那么再 - 也应该是 47 列；
+ *            + - 应该同源以及同数量级」。
+ *
+ * 旧口径的物理缺陷：`step = max(5, round(cur * 0.15))` —— 步长挂在「当前值」上，于是同一次 +/− 的正反步长不等，
+ * 47 → ➕(step=7) → 40 → ➖(step=6) → 46，「回来少了 1 根」，多次往返必漂移。
+ *
+ * 本口径三条铁律：
+ *   ① 同源：本函数是 K 线面板浮动 ± 按钮与指数页滚轮缩放的**唯一**步长入口，禁止任何地方另立 `cur * x` 公式；
+ *   ② 同数量级：按**固定锚点**（下限 30 / 标准窗 200）分档，不再随当前值浮动，
+ *      使 30~200 全域步长恒在 15~30 根（实测占视窗 7.5%~100% → 各档均为「同样的水平」）；
+ *   ③ 可逆：步长恒为**整数**，于是 `N - step + step === N`（未触上下限时）严格成立。
+ */
+const KLINE_ZOOM_STEP_SMALL = 15;   // 锚点 ≤ 100 根档位
+const KLINE_ZOOM_STEP_LARGE = 30;   // 锚点 > 100 根档位
+function klineZoomStep(anchorCount) {
+  const anchor = Number(anchorCount) > 0 ? Number(anchorCount) : STANDARD_KLINE_VIEW_COUNT;
+  const mid = (MIN_PANEL_BARS + STANDARD_KLINE_VIEW_COUNT) / 2;
+  return anchor > mid ? KLINE_ZOOM_STEP_LARGE : KLINE_ZOOM_STEP_SMALL;
+}
+
+/**
+ * 需求3/4/REQ-100: K线图缩放控制函数（+ 放大减少根数，- 缩小增加根数）
+ * 同源可逆口径见 klineZoomStep：正反共用同一个整数步长，未触界时严格回到原值。
  */
 function zoomKlineChart(dir, slot = 'right') {
   withChartPanel(slot, (panel) => {
@@ -3957,7 +3981,8 @@ function zoomKlineChart(dir, slot = 'right') {
     const available = Math.max(st.availableCount || 0, MIN_PANEL_BARS);
     const maxN = Math.max(MIN_PANEL_BARS, available);
     let cur = panelEffectiveCount(st, available);
-    const step = Math.max(5, Math.round(cur * 0.15));
+    // 需求REQ-100: 步长锚定标准窗（不挂当前值），保证 +/− 同源同量级且严格互逆
+    const step = klineZoomStep(STANDARD_KLINE_VIEW_COUNT);
     if (dir === 'in') {
       // 需求3: + 按钮，放大图片（显示根数变少）
       cur = Math.max(MIN_PANEL_BARS, cur - step);
@@ -3978,11 +4003,15 @@ function panKlineChart(deltaBars, slot = 'right') {
   withChartPanel(slot, (panel) => {
     const st = panel.st;
     if (panelIsTimeline(st)) return;
+    // 需求REQ-099: 平移量必须是整根K线（分数偏移会让视窗与槽位几何错位）；
+    //   触摸侧只把「已消费的整根」传进来，此处再兜底取整，保证 panOffset 恒为整数。
+    const delta = Math.round(Number(deltaBars) || 0);
+    if (delta === 0) return;
     const available = Number(st.availableCount) || 0;
     const N = panelEffectiveCount(st, available);
     const maxOffset = Math.max(0, available - N);
     let curOffset = Number(st.panOffset) || 0;
-    const nextOffset = Math.max(0, Math.min(maxOffset, curOffset + deltaBars));
+    const nextOffset = Math.max(0, Math.min(maxOffset, curOffset + delta));
     if (nextOffset !== curOffset) {
       st.panOffset = nextOffset;
       hideTooltip();
@@ -4980,11 +5009,16 @@ function renderChartPanel(slot) {
   }
 
   // 需求3: k线图的整体大小放大(当前太小,看的不清晰)，从 860x440 放大至 920x540，主图高度由 270 提升至 350
+  // 需求REQ-098: 副图信息条文字放大一倍（10→20）后，原 540 高 / 125 副图高放不下换行后的表头（会压住柱子），
+  //   故画布高 540→620、副图高 125→190；左边距 65→112 是为了容纳同步放大到 20px 的副图 Y 轴刻度标签
+  //   （"19.5亿元" 在 20px 下约需 92px 宽，65px 边距会被画布左缘裁掉）。
+  // 需求REQ-101: 620 只够到副图底（585）+35px，而底部信息条基线 605、文字下缘 609，
+  //   加上下伸部与安全余量后画布高 620→656（底部注释预留 36px），否则该行必被 viewBox 下缘裁切。
   const width = 920;
-  const height = 540;
+  const height = 656;
   const mainHeight = 350;
-  const subHeight = 125;
-  const margin = { top: 20, right: 65, bottom: 25, left: 65 };
+  const subHeight = 190;
+  const margin = { top: 20, right: 65, bottom: 25, left: 112 };
 
   // ---------- 分时维度：当日分时（固定全天全景，不参与根数缩放） ----------
   if (panelIsTimeline(st)) {
@@ -5204,75 +5238,105 @@ function bindChartZoomAndDrawing(mode, dataList, preClose, w, h, mh, sh, m, slot
   if (!svg || !dataList || dataList.length === 0) return;
 
   // 需求1: 移除K线图手势缩放(双指捏合/张开手势缩放与滚轮缩放)，只支持点击浮动的 +- 按钮进行扩大和缩小图形
-  // 需求2: K线图只支持左滑和右滑手势让图形左右滑动平移查看历史/最新走势
+  // 需求2/REQ-099: K线图支持左滑和右滑手势让图形左右滑动平移查看历史/最新走势
+  //   实现铁律：视图每次因其它控件重绘时本函数都会被重新调用 →
+  //   若把监听器直接挂在 window 上，重绘一次就多挂一份，同一次拖拽会被 N 个监听器各平移一次
+  //   （表现为「越滑越快」）。故先 removeEventListener 再 addEventListener，保证任意时刻只有一份；
+  //   window 监听器一律以 === 判定避免同名函数互相摘除。
   let isDragging = false;
   let dragMoved = false;
   let mouseStartX = 0;
   let touchStartX = 0;
   let touchStartY = 0;
+  let touchPanBars = 0;
 
-  // PC 鼠标按住左键拖拽平移视口 (左滑右滑)
-  svg.addEventListener('mousedown', (e) => {
-    if (mode === 'timeline' || appState.drawHLineMode) return;
+  // 需求REQ-099: 本次手势是否参与平移（分时图固定全天走势，不参与左右平移）
+  //   注意：不加 `!appState.drawHLineMode` —— 本函数内后声明的 `const` 在需要绑定时尚未初始化会触发 TDZ（ReferenceError）。
+  //   「画线模式下不许滑动」由下方 mousemove / touchmove 处理器在**运行期**判定。
+  const panAllowed = () => !panelIsTimeline(panelBySlot(slot).st);
+
+  const onPanMouseDown = (e) => {
+    if (!panAllowed() || appState.drawHLineMode) return;
     if (e.button !== 0) return;
     isDragging = true;
     dragMoved = false;
     mouseStartX = e.clientX;
     const host = document.getElementById(panel.containerId);
     if (host) host.classList.add('is-panning');
-  });
+  };
 
-  window.addEventListener('mousemove', (e) => {
+  const onPanMouseMove = (e) => {
     if (!isDragging) return;
     const deltaX = e.clientX - mouseStartX;
-    if (Math.abs(deltaX) >= 8) {
-      dragMoved = true;
-      const bars = Math.round(deltaX / 10);
-      if (bars !== 0) {
-        // 右拖 deltaX > 0: 看左边更早K线 (panOffset 增加)
-        // 左拖 deltaX < 0: 看右边较新K线 (panOffset 减少)
-        panKlineChart(bars, slot);
-        mouseStartX = e.clientX;
-      }
+    if (Math.abs(deltaX) < 8) return;
+    dragMoved = true;
+    // 需求REQ-099: 右拖 deltaX > 0 → 看左边更早K线（panOffset 增加）；左拖 → 看右边较新K线
+    const bars = Math.round(deltaX / KLINE_PAN_PX_PER_BAR);
+    if (bars !== 0) {
+      panKlineChart(bars, slot);
+      mouseStartX = e.clientX;
     }
-  });
+  };
 
-  window.addEventListener('mouseup', () => {
-    if (isDragging) {
-      isDragging = false;
-      const host = document.getElementById(panel.containerId);
-      if (host) host.classList.remove('is-panning');
-      setTimeout(() => { dragMoved = false; }, 60);
-    }
-  });
+  const onPanMouseUp = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    const host = document.getElementById(panel.containerId);
+    if (host) host.classList.remove('is-panning');
+    // 拖拽平移结束后抑制紧随其后的 click（避免误放水平辅助线）
+    setTimeout(() => { dragMoved = false; }, 60);
+  };
 
   // 移动端 Touch 单指水平滑动左滑/右滑手势平移（已彻底移除双指缩放手势）
-  svg.addEventListener('touchstart', (e) => {
-    if (mode === 'timeline') return;
+  const onPanTouchStart = (e) => {
+    if (!panAllowed()) return;
     if (e.touches.length === 1) {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
+      touchPanBars = 0;
     }
-  }, { passive: true });
+  };
 
-  svg.addEventListener('touchmove', (e) => {
-    if (mode === 'timeline') return;
-    if (e.touches.length === 1 && !appState.drawHLineMode) {
-      // 单指平移：左滑看右边K线，右滑看左边K线
-      const curX = e.touches[0].clientX;
-      const curY = e.touches[0].clientY;
-      const deltaX = curX - touchStartX;
-      const deltaY = curY - touchStartY;
-      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
-        const bars = Math.round(deltaX / 12);
-        if (bars !== 0) {
-          panKlineChart(bars, slot);
-          touchStartX = curX;
-          touchStartY = curY;
-        }
-      }
+  const onPanTouchMove = (e) => {
+    if (!panAllowed()) return;
+    if (e.touches.length !== 1 || appState.drawHLineMode) return;
+    const curX = e.touches[0].clientX;
+    const curY = e.touches[0].clientY;
+    const deltaX = curX - touchStartX;
+    const deltaY = curY - touchStartY;
+    if (Math.abs(deltaX) <= Math.abs(deltaY) || Math.abs(deltaX) <= 10) return;
+    // 需求REQ-099: 左侧位移必须**累积**到整根K线才平移 ——
+    // 原写法每帧都 `touchStartX = curX` 重置基准，慢速滑动每帧 deltaX 恒 < 12 → round 后恒为 0，手指划完一根不动。
+    // 现改为只推进「已消费的整根K线」对应的像素量，未满一根的余量留到下一帧，慢滑/快滑均生效。
+    touchPanBars += deltaX / KLINE_PAN_PX_PER_BAR;
+    const bars = Math.trunc(touchPanBars);
+    if (bars !== 0) {
+      // 与鼠标拖拽同源：右滑看更早K线（panOffset 增加）、左滑看更新K线
+      panKlineChart(bars, slot);
+      touchPanBars -= bars;
     }
-  }, { passive: true });
+    // 纵向那一维不消费：一旦横向位移占优即把纵向基准归零，避免斜滑被纵向累积误判成纵向滚动
+    touchStartX = curX;
+    touchStartY = curY;
+  };
+
+  svg.removeEventListener('mousedown', svg.__dshPanMouseDown);
+  svg.removeEventListener('touchstart', svg.__dshPanTouchStart);
+  svg.removeEventListener('touchmove', svg.__dshPanTouchMove);
+  window.removeEventListener('mousemove', svg.__dshPanMouseMove);
+  window.removeEventListener('mouseup', svg.__dshPanMouseUp);
+  svg.__dshPanMouseDown = onPanMouseDown;
+  svg.__dshPanTouchStart = onPanTouchStart;
+  svg.__dshPanTouchMove = onPanTouchMove;
+  svg.__dshPanMouseMove = onPanMouseMove;
+  svg.__dshPanMouseUp = onPanMouseUp;
+  svg.addEventListener('mousedown', onPanMouseDown);
+  svg.addEventListener('touchstart', onPanTouchStart, { passive: true });
+  // 需求REQ-099: 横向手势由本处理器消费；纵向滚动交给页面（.chart-svg-host svg 已有 touch-action: pan-y，
+  //   故这里保持 passive 即可，不需要 preventDefault，也就不会阻断垂直滚动）
+  svg.addEventListener('touchmove', onPanTouchMove, { passive: true });
+  window.addEventListener('mousemove', onPanMouseMove);
+  window.addEventListener('mouseup', onPanMouseUp);
 
   // 2. 点击交互：绘制水平辅助线 (压力/支撑线) + 需求REQ-015 重合辅助线置顶
   //    需求REQ-034: 全部改动只落在本面板的图层模型上，另一个图完全不受影响
@@ -5503,6 +5567,20 @@ function renderTooltip(mode, d, prevD, preClose, mouseEvent = null, slot = 'righ
 /**
  * 分时走势矢量 SVG 发生器
  */
+/**
+ * 需求REQ-098: 副图信息条（「副图：xxx 总和/平均/地量/天量/中位数」那一行）字号 —— 原 10，用户要求放大一倍。
+ * 为什么必须是 20 而不是随手调大：SVG 画布 920 宽经 `.chart-svg-host svg{width:100%}` 缩放到双栏面板
+ * （≈660px，系数 ≈0.72），10px 在屏上只有 ≈7.2 CSS px —— 这是「看不清」的物理原因。
+ * 行距与 layoutSubplotHeader 内部的 `fontSize + 2` 同口径，供副图柱高压缩换算，保证表头永不压柱。
+ */
+const SUBPLOT_HEADER_FONT_SIZE = 20;
+const SUBPLOT_HEADER_ROW_PITCH = SUBPLOT_HEADER_FONT_SIZE + 2;
+
+/** 需求REQ-101: 副图「底部信息条」（左下总成交额/累计换手率 + 右下含估算提示）的基线偏移。
+ *  口径推导：字号与表头同为 20px，基线 = 副图底 + OFFSET；文字下缘另有约 0.22em（≈4px）下伸部，
+ *  故画布必须再留出 `OFFSET + 字号×1.25` 的高度，否则这行会被 viewBox 下缘裁掉（原 OFFSET=11 是给 10px 用的）。 */
+const SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET = 20;
+
 function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, analysis=null, slot='left') {
   if (!items || items.length === 0) {
     return '<div style="padding: 2rem; color: var(--text-muted);">暂无分时明细</div>';
@@ -5593,10 +5671,10 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, anal
     title: tlTitle,
     items: tlHeaderItems,
     maxRight: m.left + innerW - 6,
-    fontSize: 10
+    fontSize: SUBPLOT_HEADER_FONT_SIZE
   });
   let timelineSummarySvg = tlHeader.svg;
-  const subValToH = (v) => (v / maxSubVal) * Math.max(20, sh - 10 - (tlHeader.rows - 1) * 12);
+  const subValToH = (v) => (v / maxSubVal) * Math.max(20, sh - 8 - tlHeader.rows * SUBPLOT_HEADER_ROW_PITCH);
 
   // 需求REQ-047: 旧「固定 statStartX + dx 平铺」写法已由 layoutSubplotHeader 按实测宽度取代（本块已删除）
 
@@ -5606,7 +5684,7 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, anal
     title: tlTitle,
     items: [{ label: '当前来源未提供完整量额', value: null, fill: '#94a3b8' }],
     maxRight: m.left + innerW - 6,
-    fontSize: 10
+    fontSize: SUBPLOT_HEADER_FONT_SIZE
   }).svg;
   let subBars = '';
   items.forEach((d, idx) => {
@@ -5712,7 +5790,7 @@ function generateTimelineSVG(items, preClose, subplotType, w, h, mh, sh, m, anal
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
       <!-- 需求REQ-047: 副图标题由 timelineSummarySvg 内的平铺排布器统一输出，此处不再重复绘制 -->
       ${timelineSummarySvg}
-      <text x="${m.left - 8}" y="${subTopY + 14}" fill="#64748b" font-size="10" text-anchor="end" font-family="monospace">${maxSubVal.toFixed(1)}${subUnit}</text>
+      <text x="${m.left - 8}" y="${subTopY + 14}" fill="#64748b" font-size="${SUBPLOT_HEADER_FONT_SIZE}" text-anchor="end" font-family="monospace">${maxSubVal.toFixed(1)}${subUnit}</text>
       
       <!-- 渲染副图柱状图 -->
       ${subBars}
@@ -5963,13 +6041,19 @@ function calculateAuctionMarketProfile(klines) {
  * - 高位派发滞涨卖点: 天量长上影/涨不动, 主力利用买盘流动性大举派发
  */
 function calculateWyckoffEffortResult(klines) {
-  if (!klines || klines.length < 15) return { signals: [], anomalyIndices: new Set() };
+  // 需求REQ-097: 判定口径常量收敛到一处 —— 算法与图上文案（effortThresholdText）必须同源，
+  //   禁止在空状态/提示文案里手写复述阈值（历史缺陷：代码用 15 根切片、文案却写「20日均量」）。
+  //   常量定义在函数内部并随返回值一并输出，使静态套件的「函数体抽取沙箱」仍能独立执行。
+  const threshold = { avgBars: 20, volRatioMin: 1.65, resultRatioMax: 0.65, bodyRangeMax: 0.35 };
+  if (!klines || klines.length < threshold.avgBars + 1) {
+    return { signals: [], anomalyIndices: new Set(), threshold: threshold };
+  }
 
   const signals = [];
   const anomalyIndices = new Set();
 
-  for (let i = 10; i < klines.length; i++) {
-    const slice = klines.slice(Math.max(0, i - 15), i);
+  for (let i = threshold.avgBars; i < klines.length; i++) {
+    const slice = klines.slice(Math.max(0, i - threshold.avgBars), i);
     const avgVol = slice.reduce((acc, k) => acc + (Number(k.volume) || 0), 0) / slice.length;
     const avgSpread = slice.reduce((acc, k) => acc + Math.abs((Number(k.close || k.price) - Number(k.open || k.price))), 0) / slice.length;
 
@@ -5987,7 +6071,8 @@ function calculateWyckoffEffortResult(klines) {
     const resultRatio = avgSpread > 0 ? (currSpread / avgSpread) : 1;
 
     // 悖论判定: 成交量极大 (努力 ≥ 1.65倍均量), 但价格实体很小 (结果 ≤ 0.65倍均振幅 或 实体占振幅比例 ≤ 35%)
-    const isAnomaly = effortRatio >= 1.65 && (resultRatio <= 0.65 || (currSpread / range) <= 0.35);
+    const isAnomaly = effortRatio >= threshold.volRatioMin
+      && (resultRatio <= threshold.resultRatioMax || (currSpread / range) <= threshold.bodyRangeMax);
 
     if (isAnomaly) {
       anomalyIndices.add(i);
@@ -6005,7 +6090,7 @@ function calculateWyckoffEffortResult(klines) {
           price: currLow,
           label: '⚡吸收买',
           effortRatio: effortRatio,
-          reason: `威科夫努力与结果定律：成交量达20日均量的${effortRatio.toFixed(1)}倍(极大努力)，但实体仅${currSpread.toFixed(2)}元(极小位移)并收出下影，物理上存在超级主力冰山限价买单强力吸收全部恐慌抛盘，构成被动吸收买点。`
+          reason: `威科夫努力与结果定律：成交量达${threshold.avgBars}日均量的${effortRatio.toFixed(1)}倍(极大努力)，但实体仅${currSpread.toFixed(2)}元(极小位移)并收出下影，物理上存在超级主力冰山限价买单强力吸收全部恐慌抛盘，构成被动吸收买点。`
         });
       } else if (!isDowntrendOrPullback && upperWick >= lowerWick * 0.8) {
         signals.push({
@@ -6014,13 +6099,27 @@ function calculateWyckoffEffortResult(klines) {
           price: currHigh,
           label: '⚡滞涨卖',
           effortRatio: effortRatio,
-          reason: `威科夫努力与结果定律：高位成交量达20日均量的${effortRatio.toFixed(1)}倍(极大努力)，但价格涨不动且收出长上影(极小位移)，物理上表明主力借散户追涨狂热通过主动市价卖单大量派发出货，构成滞涨派发卖点。`
+          reason: `威科夫努力与结果定律：高位成交量达${threshold.avgBars}日均量的${effortRatio.toFixed(1)}倍(极大努力)，但价格涨不动且收出长上影(极小位移)，物理上表明主力借散户追涨狂热通过主动市价卖单大量派发出货，构成滞涨派发卖点。`
         });
       }
     }
   }
 
-  return { signals, anomalyIndices };
+  return { signals, anomalyIndices, threshold: threshold };
+}
+
+/**
+ * 需求REQ-097: 由算法自身返回的 threshold 生成阈值口径文案（图上空状态 / 徽标 title 共用）。
+ * 单一事实来源：改 calculateWyckoffEffortResult 里的常量，图上文案随之变化，杜绝两处走样。
+ */
+function effortThresholdText(threshold) {
+  const t = threshold || {};
+  const avgBars = Number(t.avgBars);
+  const volMin = Number(t.volRatioMin);
+  const resMax = Number(t.resultRatioMax);
+  const bodyMax = Number(t.bodyRangeMax);
+  if (![avgBars, volMin, resMax, bodyMax].every(Number.isFinite)) return '口径常量不可得';
+  return `量≥${volMin}×${avgBars}日均量 且 实体≤${resMax}×均实体（或实体/振幅≤${Math.round(bodyMax * 100)}%）`;
 }
 
 /**
@@ -6084,10 +6183,15 @@ function generateFirstPrinciplesOverlaySVG(klines, getX, getY, innerW, mh, m, sl
   }
 
   // 2. 威科夫努力与结果定律 (Effort vs Result) 图层
-  if (appState.showEffortDraw) {
-    const effort = calculateWyckoffEffortResult(klines);
-    if (effort && effort.signals.length) {
-      effort.signals.forEach(s => {
+  // 需求REQ-097: 本图层必须「开关必有可见反馈」——
+  //   历史缺陷：signals 为空时整段不输出任何节点，点按钮在图上"像没反应"；
+  //   现改为：无论命中与否都输出状态徽标，零命中时额外输出空状态（阈值由算法返回的 threshold 生成）。
+  const effortOn = !!appState.showEffortDraw;
+  const effort = effortOn ? calculateWyckoffEffortResult(klines) : null;
+  const effortSignals = (effort && Array.isArray(effort.signals)) ? effort.signals : [];
+  if (effortOn) {
+    if (effortSignals.length) {
+      effortSignals.forEach(s => {
         if (s.idx < 0 || s.idx >= klines.length) return;
         const cx = getX(s.idx);
         const cy = getY(s.price);
@@ -6114,6 +6218,32 @@ function generateFirstPrinciplesOverlaySVG(klines, getX, getY, innerW, mh, m, sl
     }
   }
 
+  // 需求REQ-097: 图层状态徽标（含零命中空状态）—— 「开→关」必须在图上产生可见的 DOM 差异
+  const effortAnomalyCount = effort && effort.anomalyIndices ? effort.anomalyIndices.size : 0;
+  const effortBadgeText = effortOn
+    ? `⚡ 努力与结果：已开启 ｜ 本视窗异动 ${effortAnomalyCount} 根 · 买 ${effortSignals.filter(s => s.type === 'effort_buy').length} / 卖 ${effortSignals.filter(s => s.type === 'effort_sell').length}`
+    : '⚡ 努力与结果：已关闭';
+  // 实测坑（2026-10-02 真机验证发现）：空状态原先只判「有没有买卖点」，于是出现
+  // 「徽标说异动 1 根 / 提示说未识别到异动」的自相矛盾。现按「异动柱根数」分两档如实说明：
+  //   ① 一根异动都没有 → 未识别到异动（并给出阈值口径）；
+  //   ② 有异动柱但未升级为买卖点 → 明确说明卡在哪一步（影线条件未满足），不与徽标打架。
+  const effortEmptyText = (effortOn && effortSignals.length === 0)
+    ? (effortAnomalyCount > 0
+        ? `本视窗检出 ${effortAnomalyCount} 根天量窄实体异动柱，但均未构成买/卖点（下影/上影条件未满足），已在副图高亮`
+        : `本视窗未识别到「天量窄实体」异动（口径：${effortThresholdText(effort && effort.threshold)}）`)
+    : '';
+  const effortBadgeColor = effortOn ? '#f59e0b' : '#64748b';
+  const effortBadgeW = Math.min(innerW - 12, Math.max(estimateSvgTextWidth(effortBadgeText, 12), estimateSvgTextWidth(effortEmptyText, 11)) + 18);
+  const effortBadgeH = effortEmptyText ? 40 : 22;
+  svg += `
+    <g class="effort-layer-badge" data-state="${effortOn ? 'on' : 'off'}" data-signals="${effortSignals.length}" data-anomalies="${effortAnomalyCount}">
+      <rect x="${m.left + 6}" y="${m.top + 18}" width="${effortBadgeW.toFixed(1)}" height="${effortBadgeH}" rx="4" fill="#0b1329" fill-opacity="0.85" stroke="${effortBadgeColor}" stroke-opacity="0.65"/>
+      <text x="${m.left + 14}" y="${m.top + 34}" fill="${effortBadgeColor}" font-size="12" font-weight="700">${effortBadgeText}</text>
+      ${effortEmptyText ? `<text class="effort-empty-note" x="${m.left + 14}" y="${m.top + 50}" fill="#94a3b8" font-size="11">${effortEmptyText}</text>` : ''}
+      <title>${effortOn ? `努力与结果图层已开启；判定口径：${effortThresholdText(effort && effort.threshold)}` : '努力与结果图层已关闭（点击「⚡ 努力与结果」按钮开启）'}</title>
+    </g>
+  `;
+
   return `<g class="first-principles-overlay-layer">${svg}</g>`;
 }
 
@@ -6133,7 +6263,16 @@ function toggleEffortDraw(slot) {
   syncPanelToolbar(panel);
   renderActiveStockChart();
   if (typeof showChartToast === 'function') {
-    showChartToast(`⚡ 威科夫努力与结果 (Effort vs Result): ${appState.showEffortDraw ? '已开启' : '已隐藏'}`);
+    // 需求REQ-097: toast 必须报出「本视窗命中数」，与图上徽标同源同数（同一个算法、同一个窗口）
+    let hitsText = '';
+    try {
+      const stock = appState.activeDetailStock;
+      if (stock && appState.showEffortDraw) {
+        const bars = panelWindowBars(panelAvailableBars(stock, panel.st), panel.st).bars;
+        if (bars && bars.length) hitsText = `（本视窗命中 ${calculateWyckoffEffortResult(bars).signals.length} 个）`;
+      }
+    } catch (e) { hitsText = ''; }
+    showChartToast(`⚡ 威科夫努力与结果 (Effort vs Result): ${appState.showEffortDraw ? '已开启' : '已隐藏'}${hitsText}`);
   }
 }
 
@@ -6174,6 +6313,10 @@ const KLINE_PERIOD_COUNTS = {
   kline5m: 200, kline15m: 200, kline30m: 200,
   kline20: 20, kline60: 60, kline120: 120, kline180: 180, all: 200
 };
+
+/** 需求REQ-099: 横向手势灵敏度唯一权威源 —— 每移动多少像素平移 1 根K线。
+ *  鼠标拖拽与移动端单指滑屏共用本常量，杜绝两套手感分叉（原鼠标 /10、触摸 /12）。 */
+const KLINE_PAN_PX_PER_BAR = 10;
 
 /** 需求REQ-028/034: 分钟K线周期 → 接口 interval 映射
  *  kline5m/15m/30m 沿用旧键（指数页仍在用）；klinem1/klinem5 为个股双图面板的分钟颗粒度键 */
@@ -6972,12 +7115,13 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
     title: subTitle,
     items: headerItems,
     maxRight: m.left + innerW - 6,
-    fontSize: 10
+    fontSize: SUBPLOT_HEADER_FONT_SIZE
   });
   let summaryBadgesSvg = subHeader.svg;
   // 多行表头时按行数压缩副图柱高度，保证表头文字永远不压住柱子
+  // 需求REQ-098: 压缩量必须按真实行距（fontSize+2=22）计，原写法按 12 计会在字号翻倍后让柱子顶到表头上
   const subHeaderRows = subHeader.rows;
-  const subValToH = (v) => (v / maxSubVal) * Math.max(20, sh - 10 - (subHeaderRows - 1) * 12);
+  const subValToH = (v) => (v / maxSubVal) * Math.max(20, sh - 8 - subHeaderRows * SUBPLOT_HEADER_ROW_PITCH);
 
   // 需求1/2/3: 统计当前可视K线窗口内副图的四维分布概要 (平铺排列，绝不叠在一起)
   if (missingAmount) {
@@ -6988,20 +7132,22 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
       title: subTitle,
       items: [{ label: '当前来源未提供完整成交额，且均价或成交量缺失无法兜底推算', value: null, fill: '#94a3b8' }],
       maxRight: m.left + innerW - 6,
-      fontSize: 10
+      fontSize: SUBPLOT_HEADER_FONT_SIZE
     }).svg;
   } else if (!isVol && !isTurn && amountFlags.anyDerived) {
     // 需求REQ-025: 兜底估算值必须可区分，不允许与真实成交额混为一谈
     // 需求REQ-042/043: 与左下角「总成交额」同行绘制时必须右对齐，否则两段文字会重叠成一片
+    // 需求REQ-101: 本行属「副图底部信息条」，与表头同为红框口径 → 字号必须同为 SUBPLOT_HEADER_FONT_SIZE（原 10）；
+    //   基线同步下移到 SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET（副图底 +20），原 +11 是给 10px 用的，放大后会顶到 30px 处被画布下缘裁掉
     summaryBadgesSvg += `
-      <text x="${m.left + innerW - 8}" y="${subTopY + sh + 11}" fill="#fbbf24" font-size="10" text-anchor="end">
+      <text x="${m.left + innerW - 8}" y="${subTopY + sh + SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET}" fill="#fbbf24" font-size="${SUBPLOT_HEADER_FONT_SIZE}" text-anchor="end">
         ⚠️ 其中 ${amountFlags.derived} 根成交额为估算（均价 × 成交量），非来源原始披露
       </text>
     `;
   } else if (isVol && amountFlags.anyDerived) {
     // 需求REQ-025: 副图显示成交量时，成交额兜底口径同样必须主图可见（不得因切换副图而失去标注）
     summaryBadgesSvg += `
-      <text x="${m.left + innerW - 8}" y="${subTopY + sh + 11}" fill="#fbbf24" font-size="10" text-anchor="end">
+      <text x="${m.left + innerW - 8}" y="${subTopY + sh + SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET}" fill="#fbbf24" font-size="${SUBPLOT_HEADER_FONT_SIZE}" text-anchor="end">
         ⚠️ 成交额由来源缺失后兜底：其中 ${amountFlags.derived} 根按（均价 × 成交量）估算，非来源原始披露
       </text>
     `;
@@ -7010,11 +7156,11 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
   // 需求REQ-031: 总成交额（亿）= 当前图上所有交易日成交额之和；换手率模式下显示累计换手率
   //   （windowAmount / totalTurnover 已在上方「四维分布概要」之前声明，此处只使用不再重复声明）
   const totalAmountSvg = isTurn ? `
-    <text x="${m.left + 8}" y="${subTopY + sh + 11}" fill="#c084fc" font-size="10" font-weight="700" class="sub-total-amount">
+    <text x="${m.left + 8}" y="${subTopY + sh + SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET}" fill="#c084fc" font-size="${SUBPLOT_HEADER_FONT_SIZE}" font-weight="700" class="sub-total-amount">
       区间累计换手率: ${totalTurnover.toFixed(2)}% (${klines.length}个周期)
     </text>
   ` : `
-    <text x="${m.left + 8}" y="${subTopY + sh + 11}" fill="#f59e0b" font-size="10" font-weight="700" class="sub-total-amount">
+    <text x="${m.left + 8}" y="${subTopY + sh + SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET}" fill="#f59e0b" font-size="${SUBPLOT_HEADER_FONT_SIZE}" font-weight="700" class="sub-total-amount">
       ${formatTotalAmount(windowAmount)}
     </text>
   `;
@@ -7092,11 +7238,11 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
       <g class="overlay-intraday-layer">
         ${preY === null ? '' : `<line x1="${m.left}" y1="${preY.toFixed(2)}" x2="${m.left + innerW}" y2="${preY.toFixed(2)}" stroke="#64748b" stroke-dasharray="4,4" opacity="0.8"/>`}
         <path d="${overlayPath}" fill="none" stroke="#facc15" stroke-width="1.6" opacity="0.95"/>
-        <text x="${m.left + 8}" y="${m.top + 42}" fill="#facc15" font-size="10" font-weight="600">🔀 重合图：当日分时折线（横向铺满，时间轴与日K不对应，仅价格轴对齐）</text>
+        <text x="${m.left + 8}" y="${m.top + 66}" fill="#facc15" font-size="10" font-weight="600">🔀 重合图：当日分时折线（横向铺满，时间轴与日K不对应，仅价格轴对齐）</text>
       </g>
     `;
   } else if (overlay && overlay.note) {
-    overlayIntradaySvg = `<text x="${m.left + 8}" y="${m.top + 42}" fill="#94a3b8" font-size="10">🔀 ${overlay.note}</text>`;
+    overlayIntradaySvg = `<text x="${m.left + 8}" y="${m.top + 66}" fill="#94a3b8" font-size="10">🔀 ${overlay.note}</text>`;
   }
 
   // 需求REQ-034: 分钟K线的横轴必须显示到分钟；否则同一天的几十根K线会全部标成同一个日期
@@ -7195,7 +7341,7 @@ function generateDailyKlineSVG(klines, subplotType, w, h, mh, sh, m, analysis=nu
       <rect x="${m.left}" y="${subTopY}" width="${innerW}" height="${sh}" fill="#0f172a" stroke="#1e293b"/>
       <!-- 需求REQ-047: 副图标题由 summaryBadgesSvg 内的平铺排布器统一输出，此处不再重复绘制 -->
       ${summaryBadgesSvg}
-      <text x="${m.left - 8}" y="${subTopY + 14}" fill="#64748b" font-size="10" text-anchor="end" font-family="monospace">${maxSubVal.toFixed(1)}${subUnit}</text>
+      <text x="${m.left - 8}" y="${subTopY + 14}" fill="#64748b" font-size="${SUBPLOT_HEADER_FONT_SIZE}" text-anchor="end" font-family="monospace">${maxSubVal.toFixed(1)}${subUnit}</text>
       
       <!-- 副图柱状图 -->
       ${subBars}
@@ -7761,7 +7907,9 @@ function renderActiveIndexChart() {
   if (!indexData || !dom.indexChartSvgContainer) return;
 
   const width = dom.indexChartSvgContainer.clientWidth || 920;
-  const height = 480;
+  // 需求REQ-101: 底部信息条（总成交额 / 含估算说明）放大到 20px 后，480 高下第二行基线 481 会越出 viewBox（被裁 1px），
+  //   故画布高 480→500，两行基线 469 / 493 全部落在画布内（底部另留 7px 安全余量）。
+  const height = 500;
   const margin = { top: 30, right: 90, bottom: 35, left: 60 };
   const mainHeight = 310;
   const subHeight = 90;
@@ -8071,10 +8219,10 @@ function renderActiveIndexChart() {
         <!-- 蜡烛与副图 -->
         ${candlesSvg}
         ${subBarsSvg}
-        <text x="${margin.left + 8}" y="${subTop + subHeight + 24}" fill="#f59e0b" font-size="10" font-weight="700" class="sub-total-amount">
+        <text x="${margin.left + 8}" y="${subTop + subHeight + 24}" fill="#f59e0b" font-size="${SUBPLOT_HEADER_FONT_SIZE}" font-weight="700" class="sub-total-amount">
           ${indexWindowAmount.totalAmountYi == null ? formatTotalAmount(indexWindowAmount) : `总成交额: ${Number(indexWindowAmount.totalAmountYi).toFixed(2)}亿 (${indexWindowAmount.days}个交易日)`}
         </text>
-        ${indexWindowAmount.note ? `<text x="${margin.left + 8}" y="${subTop + subHeight + 36}" fill="#fbbf24" font-size="10" class="sub-total-amount-note">⚠️ ${indexWindowAmount.note}</text>` : ''}
+        ${indexWindowAmount.note ? `<text x="${margin.left + 8}" y="${subTop + subHeight + 48}" fill="#fbbf24" font-size="${SUBPLOT_HEADER_FONT_SIZE}" class="sub-total-amount-note">⚠️ ${indexWindowAmount.note}</text>` : ''}
 
         <!-- 需求REQ-014/015: 多模型辅助线（自动线与手动线共存，按 zIndex 分层） -->
         ${autoLinesSvg}
@@ -8093,6 +8241,8 @@ function renderActiveIndexChart() {
     const svgElem = document.getElementById('indexKLineSvg');
     if (svgElem) {
       // 需求REQ-022: 指数K线同口径 —— 缩放只改根数，下限 5 根、上限严格 200 根
+      // 需求REQ-100: 步长收敛到 klineZoomStep 唯一权威源（原 `round(cur * 0.05)` 属「另立公式」且按当前值浮动，
+      //   与个股价位面板的 ± 按钮不同源、不可逆，已删除）
       svgElem.addEventListener('wheel', (e) => {
         e.preventDefault();
         let curCount = indexState.customZoomCount > 0
@@ -8100,7 +8250,7 @@ function renderActiveIndexChart() {
           : (winCount || STANDARD_KLINE_VIEW_COUNT);
         curCount = Math.max(MIN_KLINE_VIEW_COUNT, Math.min(STANDARD_KLINE_VIEW_COUNT, curCount));
 
-        const step = Math.max(1, Math.round(curCount * 0.05));
+        const step = klineZoomStep(STANDARD_KLINE_VIEW_COUNT);
         if (e.deltaY < 0) {
           // 向上滚 -> 放大 -> 数量减少
           curCount = Math.max(MIN_KLINE_VIEW_COUNT, curCount - step);

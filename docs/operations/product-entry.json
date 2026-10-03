@@ -5,24 +5,97 @@
     "form": "web+CLI"
   },
   "requirements": {
-    "current": "REQ-055 / REQ-056",
-    "current_version": "v5.6.0",
-    "previous": "REQ-052 / REQ-053 / REQ-054",
-    "previous_version": "v5.5.0",
-    "previous_id": "REQ-052,REQ-053,REQ-054",
-    "range": "REQ-001 ~ REQ-056"
+    "current": "REQ-099 / REQ-100 / REQ-101",
+    "current_version": "v5.8.0",
+    "previous": "REQ-097 / REQ-098",
+    "previous_version": "v5.7.0",
+    "previous_id": "REQ-097,REQ-098",
+    "range": "REQ-001 ~ REQ-101"
   },
-  "version": "v5.6.0",
-  "built_at": "2026-10-02",
+  "version": "v5.8.0",
+  "built_at": "2026-10-03",
   "source": {
     "vcs": "git",
-    "revision": "7de29d2633bea77de9257f5dc709d11914809437",
-    "dirty": false,
-    "dirty_note": "R05~R12 全部批次已于本次入库（工作树清零）；修订号在提交后回填，见紧随其后的回填提交",
+    "revision": "ebcbf70e4b97eea7a5607c8914ec042bca0bb962",
+    "dirty": true,
+    "dirty_note": "R14 批次改动尚未入库（web/app.js、tests/test_r13_*.js、tests/test_r14_*.js、tests/browser_r14_verify.js、config/version.json、docs/*）；修订号为打包时 HEAD，入库后需回填",
     "fingerprints": "docs/verification/2026-09-24-r09/source-fingerprints.json"
   },
   "classification": "latest-verified",
   "change_summary": {
+    "v5.8.0": {
+      "delivered_at": "2026-10-03",
+      "batch": "R14 K线左右滑动平移 / ± 按钮同源可逆 / 副图底部信息条放大（行情数据口径零变更）",
+      "changes": [
+        "REQ-100：± 按钮同源 · 同量级 · 严格可逆 —— 根因实测 `zoomKlineChart` 原步长 `max(5, round(cur*0.15))` 挂在**当前值**上，同一次正反步长不等（**47 →➕→ 40 →➖→ 46**，回来少 1 根、多次往返必漂移），且指数页另立 `round(curCount*0.05)` 第二套公式；现收敛为唯一权威源 `klineZoomStep(anchor)`（按固定锚点分档、恒返回整数 `KLINE_ZOOM_STEP_SMALL=15` / `KLINE_ZOOM_STEP_LARGE=30`），个股浮动 ± 与指数页滚轮共用同一函数，未触界时 `N − step + step === N` 严格成立；下限 30 根 / 上限可用根数（个股 200 封顶）不变",
+        "REQ-099：K 线图左右滑动平移（日/周/季全覆盖）—— 根因实测三处缺陷：① `bindChartZoomAndDrawing` 每次重绘都把 `mousemove`/`mouseup` 挂到 `window` 且从不解绑 → 重绘 N 次即 N 份监听器，同一次拖拽被平移 N 次（越滑越快）；② 触摸侧每帧重置基准，慢滑（每帧 <1 根）`round` 后恒 0 →「手指划完一根不动」；③ `touchmove` 监听器**根本没绑**，且鼠标 `/10` 与触摸 `/12` 两套灵敏度分叉。现改为同名函数先解绑再绑定（任意时刻唯一）、触摸位移累积（只消费整根、余量留到下一帧）、补绑 `touchmove`（`passive:true`，纵向滚动归页面）、灵敏度收敛为 `KLINE_PAN_PX_PER_BAR=10`、平移量取整并钳制 `[0, available−N]`、分时图显式排除",
+        "REQ-101：副图底部信息条文字放大一倍 —— REQ-098 只放大了**表头**，副图底部「总成交额 / 区间累计换手率」与「⚠️ 其中 N 根成交额为估算」仍是 `font-size=\"10\"`，且基线 `副图底 + 11` 是按 10px 设计的（放大即被 viewBox 下缘裁切）；现 4 处字号走唯一常量 `SUBPLOT_HEADER_FONT_SIZE`（20）、基线收敛为 `SUBPLOT_BOTTOM_TEXT_BASELINE_OFFSET=20`、画布 620→656；指数页同源文案一并放大（画布 480→500，修掉原第二行基线 481 越出 viewBox 的 1px 裁切）",
+        "测试资产：新增静态 `tests/test_r14_kline_pan_zoom_font.js`（步长同源/可逆、三颗粒度平移、到界钳制、监听器不累积、触摸累积）与真机 `tests/browser_r14_verify.js`（31 项）；`tests/test_r13_*.js` 增补底部信息条字号/基线/画布几何断言与指数页源码级断言（可被回退实验判红）；前端静态套件 9 → **10 套**",
+        "数据口径变更：无（零行情数据口径变更；成交额三级兜底、REQ-025/031/032/042 全部原样）"
+      ],
+      "entry": {
+        "web": {
+          "url": "http://127.0.0.1:8888/",
+          "verified": true,
+          "note": "仅监听 127.0.0.1:8888（回环）；`/api/version` 按 mtime 即时生效，版本改动无需重启"
+        },
+        "cli": {
+          "command": "python3 scripts/dsh_stock_cli.py status ｜ python3 scripts/dsh_stock_cli.py db-archive --help",
+          "verified": true
+        }
+      },
+      "verification_gates": {
+        "python_unittest": "311 PASS (skipped 2)",
+        "js_static_suites": "10/10 PASS",
+        "browser_r14": "31/31 PASS",
+        "browser_r13": "26/26 PASS",
+        "console_errors": 0,
+        "screenshots": "2（headless Chrome 148 下 captureScreenshot 仍偶发挂起，已在脚本内降级跳过；判据为 DOM/getBBox/getScreenCTM 实测）",
+        "known_gap": "指数详情页切到K线颗粒度后主线程无响应（连续 20 帧 evaluate 超时）→ 该页底部信息条真机读数未取得，由 tests/test_r13 源码级断言兜底；已登记为既有缺陷·待独立立项"
+      },
+      "evidence": {
+        "dir": "docs/verification/2026-10-03-r14/",
+        "browser_report": "docs/verification/2026-10-03-r14/browser-report.json",
+        "static_suite": "tests/test_r14_kline_pan_zoom_font.js"
+      }
+    },
+    "v5.7.0": {
+      "delivered_at": "2026-10-02",
+      "batch": "R13 K线图可读性与图层反馈修复（行情数据口径零变更）",
+      "changes": [
+        "REQ-097：「⚡ 努力与结果」图层开关在 K 线图上零反馈修复 —— 根因实测为「默认 30 根视窗下必然零命中（effort 最大 1.26× < 阈值 1.65×）＋ 零命中时图层不输出任何节点」；现新增 `effort-layer-badge` 状态徽标（`data-state=on/off` 开关必有 DOM 差异）、两档空状态 `.effort-empty-note`（阈值文案由算法返回的 `threshold` 经 `effortThresholdText()` 同源生成）、`toggleEffortDraw` toast 报出「本视窗命中 N 个」；均量基准与既有「20日均量」文案对齐（15→20 根），判定阈值本身未改",
+        "REQ-097 连带修正：真机验证抓出「徽标说异动 1 根 / 提示说未识别到异动」的自相矛盾（空状态原先只判有无买卖点），现按异动柱根数分两档如实说明",
+        "REQ-098：副图信息条文字放大一倍 —— 副图表头原 `fontSize: 10` 经画布缩放仅约 7.2 CSS px；现为 20px（真机实测屏显 7.56 → **15.13 CSS px**，严格 2×），字号收敛为常量 `SUBPLOT_HEADER_FONT_SIZE`（4 处表头 + 副图刻度标签全走常量）；画布 540→620、副图 125→190、左边距 65→112（容纳放大后的刻度标签，实测 `x=15.9` 未被裁切）；柱高压缩改按真实行距 22px 计，保证表头不压柱、零重叠、不越界",
+        "测试资产：新增静态 `tests/test_r13_effort_layer_feedback_and_font.js`（25 项断言）与真机 `tests/browser_r13_verify.js`（26 项）；前端静态 8 → **9 套**；真机新增 R13 26 项",
+        "载体修复（真机跑不动 → 判据得不出）：`Page.captureScreenshot` 在本机 headless Chrome 148 下无限挂起（R09/R13 均卡死）→ 加超时 + `fromSurface:false` 降级 + 快速跳过；R09/R13 同行判定由「包围盒纵向相交」改为**基线相等**（字号 20 后行距 22 < 字框高 23.8，原判据会把相邻行误判为同行而报假重叠）",
+        "数据口径变更：无（零行情数据口径变更；仅努力与结果算子的均量基准 15→20 根与文案对齐）"
+      ],
+      "entry": {
+        "web": {
+          "url": "http://127.0.0.1:8888/",
+          "verified": true,
+          "note": "仅监听 127.0.0.1:8888（回环）；`/api/version` 实测已即时返回 v5.7.0（REQ-054）"
+        },
+        "cli": {
+          "command": "python3 scripts/dsh_stock_cli.py status ｜ python3 scripts/dsh_stock_cli.py db-archive --help",
+          "verified": true
+        }
+      },
+      "verification_gates": {
+        "python_unittest": "311 PASS (skipped 2)",
+        "js_static_suites": "9/9 PASS",
+        "browser_r13": "26/26 PASS",
+        "browser_r09": "28/28 PASS",
+        "console_errors": 0,
+        "screenshots": "0（本机 headless Chrome 148 captureScreenshot 挂起；判据为 DOM/getBBox/getScreenCTM 实测，已在报告 note 登记）"
+      },
+      "evidence": {
+        "dir": "docs/verification/2026-10-02-r13/",
+        "browser_report": "docs/verification/2026-10-02-r13/browser-report.json",
+        "r09_rerun": "docs/verification/2026-10-02-r13/r09-rerun/browser-report.json",
+        "requirement_copy": "docs/execution/R13-kline-layer-feedback-and-font.md"
+      }
+    },
     "v5.6.0": {
       "delivered_at": "2026-10-02",
       "batch": "R11 stockper 权威调研与抓取 Agent + R12 会话与产品全域管控纳管对齐（行情口径零变更）",
@@ -203,7 +276,7 @@
         "docs/verification/2026-09-24-r10/ops-evidence.txt",
         "docs/verification/2026-09-24-r10/source-fingerprints.json"
       ],
-      "note": "v5.6.0 复核：仅监听 127.0.0.1:8888（回环）；页面徽标与 /api/version 同源；版本改动运行期即时生效"
+      "note": "v5.7.0 复核：仅监听 127.0.0.1:8888（回环）；页面徽标与 /api/version 同源（实测 v5.7.0）；版本改动运行期即时生效"
     },
     {
       "id": "cli",
@@ -217,7 +290,8 @@
   ],
   "verification_gates": {
     "python_unittest": "311 PASS (skipped 2)",
-    "js_static_suites": "8/8 PASS",
+    "js_static_suites": "9/9 PASS",
+    "browser_r13": "26/26 PASS",
     "browser_r11": "25/25 PASS",
     "browser_r10": "15/15 PASS",
     "browser_r09": "28/28 PASS",
@@ -233,8 +307,8 @@
     "evidence": "docs/baselines/2026-09-20/rollback.json"
   },
   "updated_at": "2026-10-02",
-  "revision": "7de29d2633bea77de9257f5dc709d11914809437",
-  "verification_dir": "docs/verification/2026-10-01-r11/",
+  "revision": "ebcbf70e4b97eea7a5607c8914ec042bca0bb962",
+  "verification_dir": "docs/verification/2026-10-02-r13/",
   "fingerprints": {
     "captured_at": "2026-09-24T16:09:09+08:00",
     "file": "docs/verification/2026-09-24-r10/source-fingerprints.json",
