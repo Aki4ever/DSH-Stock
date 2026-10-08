@@ -124,6 +124,23 @@ python3 scripts/dsh_stock_cli.py report
 python3 scripts/dsh_stock_cli.py status
 ```
 
+### 8. 网页服务：开机自启 + 兜底双击入口（REQ-128）
+> 为什么需要：重启电脑后 `http://127.0.0.1:8888` 曾出现 `ERR_CONNECTION_REFUSED` —— 原因是
+> 保活链路（`scripts/ensure_server.sh` + `scripts/watchdog.py`）只覆盖「进程被 kill」，
+> **重启后无人拉起**；又因 macOS TCC 保护 `~/Documents`，launchd 直跑 `/bin/bash` 会被拒（退出码 126）。
+> 故本工程用**已获文稿授权的 DSH 应用作家长进程**绕开该限制（详见 `docs/execution/R24-REQ128-需求简化文案.md`）。
+
+```bash
+# ① 主选：安装开机自启（登录即拉起 + 每 5 分钟兜底复查；唯一启动口径仍是幂等的 ensure_server.sh）
+bash scripts/install_autostart.sh install
+
+# ② 查看自启状态（plist 合法性 / launchd 装载 / 健康探针）
+bash scripts/install_autostart.sh status
+
+# ③ 兜底：访达里双击 启动DSH股票网页.command（无需授权，幂等拉起并自动打开浏览器）
+#    卸载自启：bash scripts/install_autostart.sh uninstall
+```
+
 ---
 
 ## 🧪 自动化测试与质量门禁验证

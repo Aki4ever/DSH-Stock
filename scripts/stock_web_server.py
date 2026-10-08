@@ -50,8 +50,70 @@ VERSION_FILE = os.path.join(CONFIG_DIR, "version.json")
 CONSTITUENTS_FILE = os.path.join(CONFIG_DIR, "constituents.json")
 DB_FILE = os.environ.get("DSH_STOCK_DB", os.path.join(DATA_DIR, "stock_database.db"))
 
+# 需求REQ-118: 股票列表默认每页 15 条（超出由分页控件翻页）；显式传 `page_size` 时以调用方为准
+LIST_PAGE_SIZE = 15
+
+# 需求REQ-120: 列表「全量排序」白名单（与 `web/index.html` 里带 `onclick="handleHeaderSort(...)"`
+# 的 `data-col` **逐字同名**，避免前后端两套口径）。
+# 为什么要白名单 + 显式报错：REQ-117 的教训是「参数已声明、实现里没登记」→ 传参被静默忽略，
+# 页面看起来在排序其实没排。这里非法字段一律 400，绝不静默。
+SORTABLE_TEXT_FIELDS = (
+    "raw_code", "name", "industry", "ipo_date", "report_date", "holder_num_date",
+)
+# 需求REQ-121~124: 新增四列同样可排序（值为亿元；缺失=「未获取」，排序时恒末位）
+SORTABLE_NUMERIC_FIELDS = (
+    "price", "change_pct", "market_cap", "circulating_cap", "pe", "industry_pe_score",
+    "dividend_count", "dividend_total_amount", "div_to_cap_pct", "listing_years", "div_freq",
+    "goodwill", "goodwill_to_cap_pct", "top10_circ_hold_pct", "top3_hold_pct",
+    "holder_individual_pct", "holder_institution_pct",
+    "holder_new_count", "holder_change_count", "holder_exit_count",
+    "top10_hold_pct", "holder_num_latest", "holder_num_prev", "holder_num_change",
+    "ar_current", "ar_prev", "inventory_current", "inventory_prev",
+)
+LIST_SORT_FIELDS = SORTABLE_TEXT_FIELDS + SORTABLE_NUMERIC_FIELDS
+
+
+def _sort_value(stock, field, numeric):
+    """取排序值；缺失（None/空串/无法转数）一律返回 None → 由调用方排到末位。"""
+    value = stock.get(field)
+    if value is None or value == "":
+        return None
+    if numeric:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+    return str(value)
+
+
+def sort_matched_rows(rows, sort_by, sort_dir):
+    """需求REQ-120: 对**全量命中集**排序（服务端在分页切片之前调用）。
+
+    规则（唯一口径，前端不再本地排序）：
+      · 缺失值（未获取/None/空）**恒排末位**——升序降序都一样，避免「未获取」霸屏；
+      · 同值以 `code` 升序 tie-break ⇒ 分页边界确定，翻页不重不漏；
+      · `sort_dir='desc'` 只影响有值项的相对顺序。
+    """
+    numeric = sort_by in SORTABLE_NUMERIC_FIELDS
+    present, missing = [], []
+    for stock in rows:
+        (present if _sort_value(stock, sort_by, numeric) is not None else missing).append(stock)
+    present.sort(key=lambda s: str(s.get("code") or ""))
+    present.sort(key=lambda s: _sort_value(s, sort_by, numeric), reverse=(sort_dir == "desc"))
+    missing.sort(key=lambda s: str(s.get("code") or ""))
+    return present + missing
+
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+
+# 需求REQ-102/103: 压力线连续天数筛选（算法唯一权威源在 pressure_line，取数/缓存/扫描在 pressure_scan）
+from scripts import pressure_scan
+from scripts.pressure_line import (
+    PRESSURE_WINDOW,
+    PRESSURE_MIN_WINDOW,
+    PRESSURE_MAX_WINDOW,
+    parse_streak_days,
+)
 
 from scripts.anti_crawler import (
     robust_fetch,
@@ -66,10 +128,13 @@ from scripts.stock_db import (
     save_shareholder_item,
     update_ipo_and_dividend,
     load_all_stocks_from_db,
+    load_industry_summary,
     save_daily_klines,
     load_daily_klines,
     save_stock_timeline,
-    load_stock_timeline
+    load_stock_timeline,
+    # 需求REQ-117: 底册基本面来源白名单（覆盖度统计对外展示同一口径）
+    VERIFIED_FUNDAMENTAL_SOURCES,
 )
 from scripts.stock_data_engine import (
     StockQuote,
@@ -79,7 +144,7 @@ from scripts.stock_data_engine import (
 from scripts.stock_indicators import evaluate_stock
 from scripts.stock_chart_svg import generate_stock_svg
 from scripts.manual_crawler import CRAWLER_JOB
-from scripts.real_chart_engine import fetch_real_daily_kline, fetch_real_timeline
+from scripts.real_chart_engine import fetch_real_daily_kline, fetch_real_timeline, fetch_real_timeline_history
 from scripts.history_service import get_daily_history
 from scripts.shareholder_actions import get_actions, enrich_actions
 from scripts.company_finance_engine import fetch_company_profile, fetch_financial_statements
@@ -225,11 +290,15 @@ class StockDataManager:
         if not stock:
             return None
 
-        from scripts.shareholder_engine import Top10ShareholdersEngine
-        Top10ShareholdersEngine.enrich_stock_holder_metrics(stock)
+        # 需求REQ-107: 五路取数**并行**（原先串行 ≈770ms），且各自带分级 TTL 缓存。
+        # 日K改走 kline_store 关系库快路径（读优先 / 单页有界首屏 / 增量刷新），
+        # 消灭「已缓存标的每 5 分钟重复 13 页全量回溯 ≈2.0s」这一主因。
+        from scripts.detail_fastpath import gather_detail_inputs
+        history, timeline_data, company_profile, financial_reports, enrich_error = \
+            gather_detail_inputs(norm, stock, refresh=refresh)
+        if enrich_error:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] {norm} 股东指标 enrich 降级：{enrich_error}")
 
-        # 3. 需求1/2/3: 日K线查询 - 本地数据库优先 (Local-DB-First)
-        history = get_daily_history(norm, refresh=refresh)
         daily_bars = history["bars"]
         # 为每根日K线补全换手率 (turnover_rate, 单位 %)
         circ_cap_val = float(stock.get("circulating_cap") or 0.0)
@@ -245,14 +314,6 @@ class StockDataManager:
                         b["turnover_rate"] = round((float(b.get("volume") or 0.0) * 100.0 / circ_shares) * 100.0, 2)
                     else:
                         b["turnover_rate"] = 0.0
-
-        # 4. 需求1/2/3: 分时数据查询 - 本地数据库优先 (Local-DB-First)
-        # 旧分时缓存同样没有来源证明，不再参与详情；仅使用本次真实来源响应。
-        timeline_data = fetch_real_timeline(norm)
-
-        # 5. 上市公司基本资料与深度财务报表
-        company_profile = fetch_company_profile(norm, stock["name"], stock["market"], stock["board"])
-        financial_reports = fetch_financial_statements(norm, stock["price"], stock["market_cap"], stock["pe"])
 
         # 技术面指标与评分必须基于真实历史K线数据，严禁生成任何mock假数据
         real_bars_objs = []
@@ -290,6 +351,8 @@ class StockDataManager:
         constituent = params.get("constituent", "all")
         st_filter = params.get("st", "all") # 需求4: "all" | "st" | "non_st"
         filter_date = params.get("filter_date", "")
+        # 需求REQ-111: 行业筛选（与仪表盘 REQ-110 同源同口径：stocks_master.industry 一级行业精确等值）
+        industry_filter = str(params.get("industry", "all") or "all").strip() or "all"
         shareholder_action = params.get("shareholder_action", "all")
         if shareholder_action not in ("all", "increase", "decrease", "both"):
             raise ValueError("股东行为仅支持全部、增持、减持、同时增减持")
@@ -315,6 +378,11 @@ class StockDataManager:
         f_max_top10_circ = to_float(params.get("max_top10_circ"))
         f_min_top10 = to_float(params.get("min_top10"))
         f_max_top10 = to_float(params.get("max_top10"))
+        # 需求REQ-113: 前3大股东合计持股区间 (%，闭区间；两端留空 = 不限制)
+        f_min_top3 = to_float(params.get("min_top3"))
+        f_max_top3 = to_float(params.get("max_top3"))
+        if f_min_top3 is not None and f_max_top3 is not None and f_min_top3 > f_max_top3:
+            raise ValueError("前3大股东合计持股：下限不能大于上限")
         # 需求1/2: 日交易额与日均交易额区间 (亿元)
         f_min_daily_amount = to_float(params.get("min_daily_amount"))
         f_max_daily_amount = to_float(params.get("max_daily_amount"))
@@ -323,6 +391,13 @@ class StockDataManager:
         # 需求2: 上市时长区间 (年)
         f_min_listing_years = to_float(params.get("min_listing_years"))
         f_max_listing_years = to_float(params.get("max_listing_years"))
+        # 需求REQ-117: 分红次数 / 累计分红总额区间。
+        # 这两个维度**早已在 /api/filter_schema 里声明**（type=range），但 bounds 里从未登记 →
+        # 传参被静默忽略（声明与实现不一致的"死维度"）。本批随真实值放行一并补齐。
+        f_min_dividend_count = to_float(params.get("min_dividend_count"))
+        f_max_dividend_count = to_float(params.get("max_dividend_count"))
+        f_min_dividend_total = to_float(params.get("min_dividend_total_amount"))
+        f_max_dividend_total = to_float(params.get("max_dividend_total_amount"))
         # 需求2: 个人占比与机构占比筛选区间
         f_min_individual = to_float(params.get("min_individual_pct"))
         f_max_individual = to_float(params.get("max_individual_pct"))
@@ -330,13 +405,41 @@ class StockDataManager:
         f_max_institution = to_float(params.get("max_institution_pct"))
         # 需求5: 盈利时长单选 (all / 1 / 2 / 3)
         profit_years = params.get("profit_years")
+        # 需求REQ-102/103: 压力线连续天数（连续跌破 / 连续冲高）；None = 不参与筛选
+        breakdown_days = parse_streak_days(params.get("breakdown_days"), "连续跌破天数")
+        breakout_days = parse_streak_days(params.get("breakout_days"), "连续冲高天数")
+        pressure_enabled = breakdown_days is not None or breakout_days is not None
         keyword = str(params.get("keyword", "")).strip().lower()
 
         page = int(params.get("page", 1))
-        page_size = int(params.get("page_size", 50))
+        # 需求REQ-118: 列表默认每页 15 条（显式传参仍生效，保留 CLI/导出能力，不做硬钳制）
+        page_size = int(params.get("page_size", LIST_PAGE_SIZE))
+        if page_size <= 0:
+            raise ValueError("每页条数必须为正整数")
+        if page <= 0:
+            raise ValueError("页码必须为正整数")
+        # 需求REQ-120: 全量排序参数（白名单 + 非法值显式报错，绝不静默忽略）
+        sort_by = str(params.get("sort_by") or "").strip()
+        sort_dir = str(params.get("sort_dir") or "desc").strip().lower()
+        if sort_by and sort_by not in LIST_SORT_FIELDS:
+            raise ValueError(f"不支持的排序字段：{sort_by}")
+        if sort_by and sort_dir not in ("asc", "desc"):
+            raise ValueError("排序方向仅支持 asc / desc")
 
         with self._lock:
             candidates = list(self.stocks_dict.values())
+
+        # 需求REQ-112: 行业 PE 分位（1~100）。分母恒为「该股所属行业的全行业样本」——
+        # 必须用**全市场**候选计算：先筛后算会让同一只股票在不同筛选条件下分值漂移（缺陷）。
+        from scripts.industry_pe_rank import compute_industry_pe_scores
+        industry_pe_scores = compute_industry_pe_scores(candidates)
+        for s in candidates:
+            info = industry_pe_scores.get(s["code"])
+            s["industry_pe_score"] = info["score"] if info else None
+            s["industry_pe_rank"] = info["rank"] if info else None
+            s["industry_pe_sample_size"] = info["sample_size"] if info else None
+            s["industry_pe_peers_cheaper"] = info.get("peers_cheaper") if info else None
+            s["industry_pe_industry"] = info["industry"] if info else None
 
         # 阶段 1：静态快速过滤
         filtered_candidates = []
@@ -344,6 +447,10 @@ class StockDataManager:
             if market and market != "all" and s["market_code"] != market:
                 continue
             if board and board != "all" and s["board_code"] != board:
+                continue
+            # 需求REQ-111: 行业筛选（与仪表盘 REQ-110 同一比较口径：一级行业精确等值；
+            # 行业为「未采集」的标的永不命中任何具体行业）
+            if industry_filter != "all" and (s.get("industry") or "未采集") != industry_filter:
                 continue
             if constituent == "csi50" and not s["is_csi50"]:
                 continue
@@ -375,6 +482,13 @@ class StockDataManager:
                     continue
             filtered_candidates.append(s)
 
+        # 需求REQ-102/103: 压力线连续天数判定集合 = 阶段1静态过滤后的候选；
+        # 只读「当天」缓存（未测算与无法测算必须分开统计，且都不参与命中判定）。
+        pressure_rows: Dict[str, Dict[str, Any]] = {}
+        if pressure_enabled:
+            pressure_rows = pressure_scan.fresh_rows([c["code"] for c in filtered_candidates],
+                                                      window=PRESSURE_WINDOW)
+
         # 阶段 2：检查行情，若处于 running 状态且有未拉取行情的标的则快速补充
         with SERVER_STATE_LOCK:
             current_state = SERVER_STATE
@@ -385,15 +499,30 @@ class StockDataManager:
 
         # 阶段 3：多维数值严格联合判定 (AND)
         matched = []
+        pressure_hits = 0
         for s in filtered_candidates:
+            # 需求REQ-102/103: 压力线连续天数（只读缓存；未测算/无法测算一律不命中，绝不凑数）
+            if pressure_enabled:
+                prow = pressure_rows.get(s["code"])
+                if not prow or prow.get("status") != "available":
+                    continue
+                if breakdown_days is not None and (prow.get("below_days") or 0) < breakdown_days:
+                    continue
+                if breakout_days is not None and (prow.get("above_days") or 0) < breakout_days:
+                    continue
+                pressure_hits += 1
             from scripts.shareholder_engine import Top10ShareholdersEngine
             Top10ShareholdersEngine.enrich_stock_holder_metrics(s)
             bounds = [('price',f_min_price,f_max_price),('market_cap',f_min_cap,f_max_cap),
                       ('circulating_cap',f_min_circ_cap,f_max_circ_cap),('pe',f_min_pe,f_max_pe),
                       ('top10_circ_hold_pct',f_min_top10_circ,f_max_top10_circ),('top10_hold_pct',f_min_top10,f_max_top10),
+                      ('top3_hold_pct',f_min_top3,f_max_top3),
                       ('turnover_yi',f_min_daily_amount,f_max_daily_amount),('avg_daily_amount',f_min_avg_daily_amount,f_max_avg_daily_amount),
                       ('listing_years',f_min_listing_years,f_max_listing_years),('holder_individual_pct',f_min_individual,f_max_individual),
-                      ('holder_institution_pct',f_min_institution,f_max_institution)]
+                      ('holder_institution_pct',f_min_institution,f_max_institution),
+                      # 需求REQ-117: 补登记两个「已声明未生效」的分红维度（未核验= None → 有界时不命中）
+                      ('dividend_count',f_min_dividend_count,f_max_dividend_count),
+                      ('dividend_total_amount',f_min_dividend_total,f_max_dividend_total)]
             if any((lo is not None or hi is not None) and (s.get(key) is None or
                    (lo is not None and s[key]<lo) or (hi is not None and s[key]>hi)) for key,lo,hi in bounds):
                 continue
@@ -414,8 +543,19 @@ class StockDataManager:
                 row["direction"] == shareholder_action
                 for row in action_snapshot["records"].get(s["code"], []))]
 
-        # 默认按总市值降序
-        matched.sort(key=lambda x: x.get("market_cap") or -1, reverse=True)
+        # 需求REQ-120: 把「原先只对当前页注入」的两处指标**上移到全量命中集**——
+        # 旧实现只对 `paged_data` 注入 `增持/减持股东`（`enrich_actions`）与 `股东人数` 四列
+        # （`attach_holder_counts`），于是这些列在服务端**只有当前页有值**，跨页排序必然错。
+        # 两处都只是一次快照读 + 内存查表，**零新增触网**。
+        for s in matched:
+            enrich_actions(s, action_snapshot)
+        holder_num_stats = self.attach_holder_counts(matched)
+
+        # 需求REQ-120: 全量排序（缺失值恒末位 + code 升序 tie-break）；不传参时保持旧行为（市值降序）
+        if sort_by:
+            matched = sort_matched_rows(matched, sort_by, sort_dir)
+        else:
+            matched.sort(key=lambda x: x.get("market_cap") or -1, reverse=True)
 
         total_matched = len(matched)
         def aggregate(field, average=False):
@@ -453,18 +593,214 @@ class StockDataManager:
         stats['quote_dates']=sorted({str(s.get('timestamp') or '')[:8] for s in matched if s.get('timestamp')})
         stats['snapshot_note']='行情为当前已获取快照；日期口径以数据中心「数据库基准」批次为准，未提供历史全市场行情截面'
 
+        # 需求REQ-111: 行业筛选口径与显式提示（未知/未采集行业 → 结果为空，绝不静默回退全市场）
+        if industry_filter != "all":
+            industry_universe = sum(1 for c in candidates if (c.get("industry") or "未采集") == industry_filter)
+            stats["industry"] = {
+                "industry": industry_filter,
+                "universe_matched_stocks": industry_universe,
+                "total_stocks": len(candidates),
+                "note": None if industry_universe else f"行业「{industry_filter}」未采集或不存在，结果为空（不回退全市场）",
+            }
+        else:
+            stats["industry"] = {"industry": "all", "universe_matched_stocks": len(candidates),
+                                 "total_stocks": len(candidates), "note": None}
+
+        # 需求REQ-112: 行业 PE 分值覆盖面（未采集必须显式对外，绝不填 0 冒充）
+        stats["industry_pe"] = {
+            "scored_count": sum(1 for c in candidates if c.get("industry_pe_score") is not None),
+            "uncollected_count": sum(1 for c in candidates if c.get("industry_pe_score") is None),
+            "total_stocks": len(candidates),
+            "caliber": "同行业内 pe>0 样本的百分位：score = round(严格更低 PE 只数/(n-1)*99)+1；1=行业最低 PE（并列恒为 1），100=行业最高 PE（无并列时）；pe<=0/缺失=未采集",
+        }
+
+        # 需求REQ-113: 前3大股东覆盖面（口径：最新一期十大股东披露 rank1~3 合计；缺任一名=未采集）
+        stats["top3_holders"] = {
+            "available_count": sum(1 for s in matched if s.get("top3_hold_pct") is not None),
+            "uncollected_count": sum(1 for s in matched if s.get("top3_hold_pct") is None),
+            "matched_count": len(matched),
+            "caliber": "最新一期十大股东披露 rank1~3 持股比例之和（%）；1~3 名不齐=未采集，不参与筛选",
+        }
+
         stats["shareholder_actions"] = {k: v for k, v in action_snapshot.items() if k != "records"}
+
+        # 需求REQ-102/103: 压力线筛选覆盖面与扫描状态（未测算/无法测算必须显式对外，禁止当「未命中」）
+        if pressure_enabled:
+            candidate_codes = [c["code"] for c in filtered_candidates]
+            measured_codes, unmeasurable = [], 0
+            base_dates = []
+            for code in candidate_codes:
+                row = pressure_rows.get(code)
+                if not row:
+                    continue
+                if row.get("status") == "available":
+                    measured_codes.append(code)
+                    if row.get("base_date"):
+                        base_dates.append(str(row["base_date"]))
+                else:
+                    unmeasurable += 1
+            measured = len(measured_codes)
+            # 需求REQ-104: 两个计数必须互斥 ——
+            #   unmeasured  = 当天**没有任何行**（还没轮到它测算）
+            #   unmeasurable = 当天**有行但不可用**（no_amount / insufficient_history / fetch_failed）
+            # 旧实现用「候选 − measured」统计 unmeasured，导致有失败行的标的被双计（verifier D5）。
+            unmeasured_codes = [c for c in candidate_codes if c not in pressure_rows]
+            failed_codes = [c for c in candidate_codes
+                            if (pressure_rows.get(c) or {}).get("status") not in (None, "available")]
+            retry_codes = unmeasured_codes + failed_codes
+            candidate_count = len(candidate_codes)
+            scan = (pressure_scan.start_scan(retry_codes, window=PRESSURE_WINDOW)
+                    if retry_codes else pressure_scan.scan_status())
+            conflict = breakdown_days is not None and breakout_days is not None
+            note = ("压力线＝图表「自动线 1 根」（日线 60 根 · 不复权 · 成交额缺来源时按均价×成交量估算）"
+                    "· 比较价＝收盘价 · 连续天数取「≥ x 天」")
+            if retry_codes:
+                note += f" · 未测算/无法测算 {len(retry_codes)} 只未参与命中判定，扫描完成后自动刷新"
+            if conflict:
+                note = ("⚠️ 连续跌破与连续冲高互斥（同一天收盘不可能同时低于且高于同一根线），结果必然为空 · " + note)
+            stats["pressure"] = {
+                "window": PRESSURE_WINDOW,
+                "breakdown_days": breakdown_days,
+                "breakout_days": breakout_days,
+                "candidate_count": candidate_count,
+                "measured_count": measured,
+                "unmeasured_count": len(unmeasured_codes),
+                "unmeasurable_count": unmeasurable,
+                "hit_count": pressure_hits,
+                "coverage": round(measured / candidate_count, 6) if candidate_count else 0.0,
+                "base_date_min": min(base_dates) if base_dates else None,
+                "base_date_max": max(base_dates) if base_dates else None,
+                "conflict": conflict,
+                "note": note,
+                "scan": scan,
+            }
+        else:
+            stats["pressure"] = None
+
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         paged_data = matched[start_idx:end_idx]
 
-        # 需求2与需求3: 批量注入分红/总市值(%)及股东异动三兄弟指标
-        from scripts.shareholder_engine import Top10ShareholdersEngine
-        for s in paged_data:
-            Top10ShareholdersEngine.enrich_stock_holder_metrics(s)
-            enrich_actions(s, action_snapshot)
-
+        # 需求REQ-120: 当前页**不再重复注入**——`enrich_stock_holder_metrics`（筛选阶段已对
+        # 全部候选执行）、`enrich_actions`、`attach_holder_counts` 都已上移到排序前的全量命中集，
+        # 否则会出现「服务端只有当前页有值」的双口径（也正是跨页排序失效的根因）。
+        # 需求REQ-119: 列表四列「股东人数(最近一次)/(上一次)/日期(最近一次)/变化」
+        # 需求REQ-120: 该统计口径由「当前页」改为**全量命中集**（覆盖率对外数字更大也更诚实）
+        stats["holder_num"] = holder_num_stats
+        # 需求REQ-120: 排序口径下发（前端据此显示指示器，便于核验「排的是全量还是当页」）
+        stats["sort"] = {
+            "sort_by": sort_by or "market_cap",
+            "sort_dir": sort_dir if sort_by else "desc",
+            "default": not bool(sort_by),
+            "missing_last": True,
+            "tie_break": "code ASC",
+            "scope": "全量命中集（分页切片之前）",
+            "allowed_fields": list(LIST_SORT_FIELDS),
+        }
+        # 需求REQ-117: 底册基本面放行覆盖度（如实对外，便于核验「不是没修、是真没采到」）
+        stats["fundamentals"] = {
+            "listing_verified": sum(1 for s in matched if s.get("ipo_date")),
+            "dividend_count_verified": sum(1 for s in matched if s.get("dividend_count") is not None),
+            "dividend_total_verified": sum(1 for s in matched if s.get("dividend_total_amount") is not None),
+            "goodwill_verified": sum(1 for s in matched if s.get("goodwill") is not None),
+            "matched_count": total_matched,
+            "sources": list(VERIFIED_FUNDAMENTAL_SOURCES),
+            "caliber": "仅放行带核验标记（*_verified_at 非空且来源白名单）的底册值；历史生成值（legacy_generated）不放行，显示「未获取」",
+        }
+        # 需求REQ-121~124: 应收/存货四列覆盖度与**未获取原因分类**（如实对外，不美化）
+        ar_status = {}
+        inventory_status = {}
+        for s in matched:
+            ar_status[s.get("ar_status") or "not_collected"] = ar_status.get(s.get("ar_status") or "not_collected", 0) + 1
+            inventory_status[s.get("inventory_status") or "not_collected"] = \
+                inventory_status.get(s.get("inventory_status") or "not_collected", 0) + 1
+        stats["balance"] = {
+            "ar_verified": sum(1 for s in matched if s.get("ar_current") is not None),
+            "ar_prev_verified": sum(1 for s in matched if s.get("ar_prev") is not None),
+            "inventory_verified": sum(1 for s in matched if s.get("inventory_current") is not None),
+            "inventory_prev_verified": sum(1 for s in matched if s.get("inventory_prev") is not None),
+            "ar_reasons": ar_status,
+            "inventory_reasons": inventory_status,
+            "matched_count": total_matched,
+            "unit": "亿元",
+            "caliber": "同花顺 F10 资产负债表「应收账款」「存货」（精确行名优先，退化为含票据的合并行时标注）；"
+                       "当期＝该股最新报告期，上年＝上年同期（缺则回退上一年年报 12-31）；取不到给原因码，不补 0",
+        }
+        # 需求REQ-125: 三列（新进/变动/退出）口径、覆盖度与原因分类。
+        # 刻意**只从 `matched` 行自身聚合**（不走缓存读取）：
+        #   ① 统计口径与列表展示严格同源（同一批 `holder_*_status`）；
+        #   ② 单测/离线夹具无需触碰产品库缓存即可判定（R19 夹具铁律「不读产品库」）。
+        from scripts import shareholder_changes as change_mod
+        exit_reasons = {}
+        for s in matched:
+            reason = s.get("holder_exit_status") or "pending"
+            exit_reasons[reason] = exit_reasons.get(reason, 0) + 1
+        stats["holder_changes"] = {
+            "source": change_mod.CHANGE_SOURCE,
+            "exit_source": change_mod.EXIT_SOURCE,
+            "caliber": change_mod.CALIBER,
+            "status_text": dict(change_mod.STATUS_TEXT),
+            "matched_new_available": sum(1 for s in matched if s.get("holder_new_status") == "ok"),
+            "matched_change_available": sum(1 for s in matched if s.get("holder_change_status") == "ok"),
+            "matched_exit_available": sum(1 for s in matched if s.get("holder_exit_status") == "ok"),
+            "exit_reasons": exit_reasons,
+            "matched_count": total_matched,
+        }
         return paged_data, stats
+
+    @staticmethod
+    def attach_holder_counts(rows):
+        """需求REQ-119：为列表行注入股东人数四列（**一次**读全市场快照，绝不逐股请求）。
+
+        口径与既有「股东人数」面板同源（`RPT_HOLDERNUMLATEST`）：
+          · `holder_num_latest` = 快照 `HOLDER_NUM`（该标的**最新一期**，各标的期次不同）
+          · `holder_num_prev`   = 快照 `PRE_HOLDER_NUM`（来源自带上一期）
+          · `holder_num_date`   = 快照 `END_DATE`（最近一次的报告期，逐列给出，不做统一对齐）
+          · `holder_num_change` = 最新 − 上一次；无上期（缺失或 ≤0）→ **None（前端渲染空单元格）**
+        冷缓存（快照未采集）时四列一律 None，并如实下发 `status=unavailable`；**不触网**。
+        """
+        from scripts.data_sources.holdernum_market import get_market_holder_num
+        try:
+            market = get_market_holder_num(allow_fetch=False)
+        except Exception as exc:
+            market = {"status": "unavailable", "rows": [], "as_of": None, "error": str(exc)}
+
+        index = {}
+        for item in market.get("rows") or []:
+            code = item.get("code")
+            if code and code not in index:
+                index[code] = item
+
+        available = comparable = mismatch = 0
+        for stock in rows:
+            snapshot = index.get(stock.get("code")) or {}
+            latest = snapshot.get("holder_num")
+            prev = snapshot.get("prev_holder_num")
+            change = None
+            if latest is not None and prev is not None and prev > 0:
+                change = latest - prev
+                comparable += 1
+                source_change = snapshot.get("change_num")
+                if source_change is not None and abs(source_change - change) > 0.5:
+                    mismatch += 1
+            stock["holder_num_latest"] = latest
+            stock["holder_num_prev"] = prev
+            stock["holder_num_date"] = snapshot.get("end_date")
+            stock["holder_num_change"] = change
+            if latest is not None:
+                available += 1
+
+        return {
+            "status": market.get("status"),
+            "as_of": market.get("as_of"),
+            "source": "东方财富股东户数数据中心 (RPT_HOLDERNUMLATEST)",
+            "available_count": available,
+            "missing_count": len(rows) - available,
+            "comparable_count": comparable,
+            "change_mismatch_count": mismatch,
+            "snapshot_rows": len(index),
+            "caliber": "快照最新一期（各标的期次不同，日期列给出各自期末日）；变化 = 最新 − 上一次；无上期或缺失 = 空（不补 0）",
+        }
 
 
 # 单例初始化
@@ -474,7 +810,7 @@ SERVER_INSTANCE = None
 SHUTDOWN_REQUESTED = False
 
 
-def build_intraday_chanlun(code: str) -> Dict[str, Any]:
+def build_intraday_chanlun(code: str, timeline_fetcher=None) -> Dict[str, Any]:
     """需求REQ-024: 分时级别缠论分析（唯一计算入口，端点与测试共用）。
 
     口径铁律:
@@ -482,9 +818,18 @@ def build_intraday_chanlun(code: str) -> Dict[str, Any]:
     2. 复用 scripts.chanlun_analysis.analyze_bars 同一套形态学/动力学算法，不另起一套；
     3. 来源未提供分时明细或缺少有效成交价时，返回 status=unavailable 并附原因，
        绝不以日线或任何推测数据冒充分时结构。
+
+    需求REQ-107: 分时改走 `stock_timeline` 缓存（命中零外网），与详情页同源同缓存。
+    `timeline_fetcher` 为**显式来源注入点**：一旦注入，则**绕过缓存**、直接采用该来源，
+    以保证「分时口径」类用例可在不触网、不依赖产品库的状态下确定性复跑（R04 用例明文要求）。
     """
     from scripts.chanlun_analysis import analyze_bars
-    timeline = fetch_real_timeline(code)
+    from scripts.detail_fastpath import cached_timeline
+    if timeline_fetcher is not None:
+        timeline = cached_timeline(code, fetcher=timeline_fetcher, use_cache=False)
+    else:
+        # 生产路径：默认来源仍取模块级 `fetch_real_timeline`，保留既有 monkeypatch 接缝
+        timeline = cached_timeline(code, fetcher=fetch_real_timeline)
     items = timeline.get("items") or []
     trade_date = str(timeline.get("date") or "").replace("-", "")
     if not items or not trade_date:
@@ -920,6 +1265,51 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(200, CRAWLER_JOB.get_snapshot())
             return
 
+        # 3.0.1 需求REQ-102/103: 压力线扫描状态（前端轮询用；只读，无副作用）
+        if url_path == "/api/pressure/scan-status":
+            status = pressure_scan.scan_status()
+            status["cached_count"] = pressure_scan.cached_count(window=PRESSURE_WINDOW)
+            self._send_json(200, {
+                "code": 200,
+                "version": current_version(),
+                "data": status,
+            })
+            return
+
+        # 3.0.2 需求REQ-102/103: 单只标的压力线实时测算（不读缓存，供前端/真机同源比对）
+        if url_path == "/api/pressure/measure":
+            query = parse_qs(urlsplit(self.path).query)
+            symbol = (query.get("code") or [""])[0].strip()
+            raw_window = (query.get("window") or [str(PRESSURE_WINDOW)])[0].strip()
+            if not symbol:
+                self._send_json(400, {"code": 400, "message": "缺少 code 参数"})
+                return
+            try:
+                window = int(raw_window)
+            except (TypeError, ValueError):
+                self._send_json(400, {"code": 400, "message": f"window 仅支持 {PRESSURE_MIN_WINDOW}~{PRESSURE_MAX_WINDOW} 的整数"})
+                return
+            if window < PRESSURE_MIN_WINDOW or window > PRESSURE_MAX_WINDOW:
+                self._send_json(400, {"code": 400, "message": f"window 仅支持 {PRESSURE_MIN_WINDOW}~{PRESSURE_MAX_WINDOW} 的整数"})
+                return
+            try:
+                from scripts.market_history import canonical_code
+                symbol = canonical_code(symbol)
+            except ValueError as exc:
+                self._send_json(400, {"code": 400, "message": str(exc)})
+                return
+            try:
+                result = pressure_scan.measure_code(symbol, window=window)
+            except ValueError as exc:
+                self._send_json(400, {"code": 400, "message": str(exc)})
+                return
+            self._send_json(200, {
+                "code": 200,
+                "version": current_version(),
+                "data": result,
+            })
+            return
+
         # 3.1.0 需求1: 数据中心抓取审计列表端点 /api/crawler/audit-list (ID、抓取日期、抓取状态、抓取指纹)
         if url_path == "/api/crawler/audit-list":
             from scripts.stock_db import (
@@ -980,6 +1370,16 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             sort_by = query_params.get("sort_by", "total_holding_amount") # total_holding_amount | company_count
             sort_dir = query_params.get("sort_dir", "desc")
 
+            # 需求REQ-108: 显式限次增量采集（?refresh=1&max_pages=6）。
+            # 默认不触网；只在用户点击「采集新披露」时从 next_page 续采有限页，失败显式报错、不落 0。
+            refresh_note = None
+            if str(query_params.get("refresh", "")).strip().lower() in ("1", "true", "yes"):
+                from scripts.shareholder_engine import refresh_holder_snapshot
+                try:
+                    refresh_note = refresh_holder_snapshot(max_pages=int(query_params.get("max_pages") or 6))
+                except (ValueError, TypeError):
+                    refresh_note = {"status": "error", "error": "max_pages 必须为整数", "new_records": 0}
+
             all_stocks = list(DATA_MANAGER.stocks_dict.values())
             # 聚合股东数据 (缓存或实时聚合)
             shareholders_raw = Top10ShareholdersEngine.aggregate_market_shareholders(all_stocks)
@@ -1013,6 +1413,7 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "page":page,"page_size":page_size,
                 "total": len(shareholders),
                 "overview": overview_stats,
+                "refresh": refresh_note,
                 "metadata": {k:v for k,v in __import__("scripts.shareholder_engine",fromlist=["get_holder_snapshot"]).get_holder_snapshot(allow_fetch=False).items() if k!="rows"},
                 "data": shareholders[(page-1)*page_size:page*page_size]
             })
@@ -1126,13 +1527,48 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
 
             s_date = query_params.get("start_date")
             e_date = query_params.get("end_date")
+            # 需求REQ-110: 行业筛选（默认 all）。过滤在**服务端同一入口**完成，
+            # 仪表盘整页指标（5档阶梯/晴雨表/维度矩阵/Top10流通/分布图）随之天然联动。
+            industry = urllib.parse.unquote(query_params.get("industry", "all")).strip() or "all"
 
             all_stocks = list(DATA_MANAGER.stocks_dict.values())
+            industry_note = None
+            if industry != "all":
+                matched = [s for s in all_stocks if (s.get("industry") or "未采集") == industry]
+                if not matched:
+                    # 行业名不存在 / 尚未采集：显式如实返回，绝不静默回退成全市场。
+                    self._send_json(200, {
+                        "code": 200,
+                        "version": current_version(),
+                        "data": {"status": "unavailable", "source": "行业筛选",
+                                 "error": f"行业「{industry}」未采集或不存在，无法统计（不回退全市场）",
+                                 "industry": industry, "dimensions": {}, "summary": {}, "charts": {}}
+                    })
+                    return
+                industry_note = {"industry": industry, "matched_stocks": len(matched), "total_stocks": len(all_stocks)}
+                all_stocks = matched
+
             dashboard_data = compute_market_overview(all_stocks, start_date=s_date, end_date=e_date)
+            if industry_note:
+                dashboard_data = dict(dashboard_data, industry=industry, industry_filter=industry_note)
             self._send_json(200, {
                 "code": 200,
                 "version": current_version(),
                 "data": dashboard_data
+            })
+            return
+
+        # 3.2.1 需求REQ-110: 已采集行业清单（供仪表盘行业 Tab 与筛选复用）
+        if url_path == "/api/industries":
+            summary = load_industry_summary()
+            self._send_json(200, {
+                "code": 200,
+                "version": current_version(),
+                "source": "东方财富数据中心：证券基本信息 RPT_F10_BASIC_ORGINFO",
+                "total_stocks": summary["total_stocks"],
+                "collected_stocks": summary["collected_stocks"],
+                "uncollected_stocks": summary["uncollected_stocks"],
+                "items": summary["items"],
             })
             return
 
@@ -1292,7 +1728,10 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             try:
                 from scripts.chanlun_analysis import analyze_bars
                 code=url_path.rsplit('/',1)[-1]
-                h=get_daily_history(code)
+                # 需求REQ-107: 改走关系库快路径（读优先 + 单页有界首屏 + 增量），
+                # 替代 get_daily_history 在缓存过期时的 13 页全量回溯（实测 ≈2.0s）
+                from scripts.kline_store import get_chart_history
+                h=get_chart_history(code)
                 q=parse_qs(urlsplit(self.path).query)
                 result=analyze_bars(h['bars'],code=h['code'],periods=tuple(int(x) for x in q.get('ma_periods',['5,10,20'])[0].split(',')),threshold_pct=float(q.get('threshold',['1'])[0]),min_bars=int(q.get('min_bars',['3'])[0]))
                 result['history_meta']={k:v for k,v in h.items() if k!='bars'}
@@ -1381,6 +1820,52 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        # 3.9 需求REQ-114: 个股股东明细端点 /api/stock/<code>/holder-detail
+        # 十大流通股东 + 十大股东，各自多期披露（默认 6 期）+ 累计口径 + 较上期增减 + 退出分组。
+        # 来源：东方财富 F10 股东中心 RPT_F10_EH_FREEHOLDERS / RPT_F10_EH_HOLDERS（24h 缓存，非每次触网）。
+        if url_path.startswith("/api/stock/") and url_path.endswith("/holder-detail"):
+            parts = url_path.split("/")
+            symbol = parts[3] if len(parts) >= 4 else ""
+            q = parse_qs(urlsplit(self.path).query)
+            refresh = str(q.get("refresh", ["0"])[0]).lower() in ("1", "true", "yes")
+            from scripts.shareholder_engine import Top10ShareholdersEngine
+            try:
+                detail = Top10ShareholdersEngine.get_stock_holder_detail(symbol, refresh=refresh)
+            except ValueError as exc:
+                self._send_json(400, {"code": 400, "error": str(exc)})
+                return
+            self._send_json(200, {"code": 200, "symbol": symbol, "data": detail})
+            return
+
+        # 3.10 需求REQ-116: 个股股东人数端点 /api/stock/<code>/holder-count
+        # 户数/股价双轴走势 + 6 期指标（户数/较上期/人均流通股/人均流通变化/人均持股金额）+ 行业平均（工程口径，附样本数）。
+        if url_path.startswith("/api/stock/") and url_path.endswith("/holder-count"):
+            parts = url_path.split("/")
+            symbol = parts[3] if len(parts) >= 4 else ""
+            q = parse_qs(urlsplit(self.path).query)
+            refresh = str(q.get("refresh", ["0"])[0]).lower() in ("1", "true", "yes")
+            try:
+                count = max(1, min(int(q.get("count", ["6"])[0] or 6), 12))
+            except (TypeError, ValueError):
+                count = 6
+            stock_info = DATA_MANAGER.stocks_dict.get(symbol, {})
+            from scripts.shareholder_engine import HolderCountEngine
+            data = HolderCountEngine.get_holder_count(symbol, name=str(stock_info.get("name") or ""), count=count, refresh=refresh)
+            self._send_json(200, {"code": 200, "symbol": symbol, "data": data})
+            return
+
+        # 3.11 需求REQ-116: 全市场股东户数增减量排名端点 /api/holder-count/rank
+        # 口径：来源 RPT_HOLDERNUMLATEST 最新一期户数较上期变化率；样本=已采集且存在于本地行业表的标的。
+        if url_path == "/api/holder-count/rank":
+            q = parse_qs(urlsplit(self.path).query)
+            try:
+                limit = max(1, min(int(q.get("limit", ["20"])[0] or 20), 100))
+            except (TypeError, ValueError):
+                limit = 20
+            from scripts.shareholder_engine import HolderCountEngine
+            self._send_json(200, {"code": 200, "data": HolderCountEngine.get_holder_count_rank(limit=limit)})
+            return
+
         # 4. 服务端状态端点 (常显心跳检查)
         if url_path == "/api/status":
             with SERVER_STATE_LOCK:
@@ -1419,6 +1904,8 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                     {"id": "shareholder_action", "name": "股东行为", "type": "select", "options": [{"value": "all", "label": "全部"}, {"value": "increase", "label": "增持"}, {"value": "decrease", "label": "减持"}, {"value": "both", "label": "同时增减持"}]},
                     {"id": "market", "name": "股市分类", "type": "select", "options": [{"value": "all", "label": "全部 A 股"}, {"value": "sh", "label": "上证"}, {"value": "sz", "label": "深圳"}]},
                     {"id": "board", "name": "板块分类", "type": "select", "options": [{"value": "all", "label": "全部板块"}, {"value": "main", "label": "主板"}, {"value": "chinext", "label": "创业板"}]},
+                    # 需求REQ-111: 行业筛选（选项不在 schema 内硬编码，统一取 /api/industries，避免两套口径）
+                    {"id": "industry", "name": "所属行业", "type": "select", "options_url": "/api/industries", "hint": "与仪表盘「行业」Tab 同源同序；默认「全部」；未采集行业不回退全市场"},
                     {"id": "constituent", "name": "成分股", "type": "select", "options": [{"value": "all", "label": "全部(不限)"}, {"value": "csi50", "label": "中证A50"}, {"value": "csi100", "label": "中证A100"}]},
                     {"id": "price", "name": "股价区间", "type": "range", "unit": "元"},
                     {"id": "market_cap", "name": "总市值区间", "type": "range", "unit": "亿元"},
@@ -1429,10 +1916,34 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                     {"id": "listing_years", "name": "上市时长", "type": "range", "unit": "年"},
                     {"id": "top10_circ", "name": "十大流通股东持股", "type": "range", "unit": "%"},
                     {"id": "top10_hold", "name": "十大股东持股", "type": "range", "unit": "%"},
+                    # 需求REQ-113: 前3大股东合计持股区间（默认不限制）
+                    {"id": "top3", "name": "前3大股东合计持股", "type": "range", "unit": "%", "hint": "留空=不限制；口径=最新一期十大股东披露 rank1~3 持股比例之和；1~3 名不齐=未采集，不参与筛选"},
+                    {"id": "breakdown_days", "name": "连续跌破压力线天数", "type": "number", "unit": "天", "range": [1, 60]},
+                    {"id": "breakout_days", "name": "连续冲高压力线天数", "type": "number", "unit": "天", "range": [1, 60]},
                     {"id": "filter_date", "name": "筛选基准日期", "type": "date"}
                 ]
             }
             self._send_json(200, schema)
+            return
+
+        # 3.9.1 需求REQ-126: 分时端点 /api/stock/<code>/timeline?date=YYYYMMDD
+        # 口径：`date` 省略 ⇒ 最近交易日（旧行为不变）；给日期 ⇒ 该交易日 1 分钟分时
+        #       （来源 `appstock/app/day/query`，一次请求覆盖最近 5 个交易日，命中本地
+        #       `stock_timeline` 即零外网）；窗口外 / 停牌 / 来源失败一律 `unavailable` + 原因，
+        #       **绝不返回空数组冒充成功，也绝不用 5分K或日K近似顶替**。
+        if url_path.startswith("/api/stock/") and url_path.endswith("/timeline"):
+            parts = url_path.split("/")
+            symbol = parts[3] if len(parts) >= 4 else ""
+            q = parse_qs(urlsplit(self.path).query)
+            want_date = (q.get("date") or [""])[0].strip()
+            try:
+                from scripts.detail_fastpath import cached_timeline
+                data = cached_timeline(symbol, fetcher=fetch_real_timeline,
+                                       date=want_date or None,
+                                       history_fetcher=fetch_real_timeline_history)
+                self._send_json(200, {"code": 200, "symbol": symbol, "data": data})
+            except (ValueError, TypeError) as exc:
+                self._send_json(400, {"code": 400, "message": str(exc)})
             return
 
         # 6. 单只股票详情
@@ -1508,6 +2019,11 @@ class StockRequestHandler(SimpleHTTPRequestHandler):
                 "filter_params": params,
                 "data": filtered_stocks
             })
+            return
+
+        # 需求REQ-102/103: 请求停止压力线后台扫描（当前标的走完即停，已测算结果保留）
+        if url_path == "/api/pressure/scan-cancel":
+            self._send_json(200, {"code": 200, "data": pressure_scan.cancel_scan()})
             return
 
         # 2. 前端暂停/关闭服务端 API (/api/server/shutdown)
@@ -1703,11 +2219,25 @@ def write_pid_file():
 
 
 def cleanup_pid_file():
-    if os.path.exists(PID_FILE):
-        try:
+    """
+    只在 PID 文件**仍然属于自己**时才删除。
+
+    为什么必须校验归属（REQ-128 实测缺陷，2026-10-08）：
+        旧实现无条件 os.remove(PID_FILE)。当端口已被占用（重复实例抢 8888 失败）时，
+        失败实例走 `except OSError → cleanup_pid_file()`，把**健康实例**的 PID 文件删掉，
+        留痕实证：server.log 里 `🟢 进程 PID: 13464 (已写入 .server.pid)` 之后紧跟
+        `❌ 启动失败: 端口 8888 可能已被占用 ([Errno 48])`，随后 .server.pid 消失，
+        而监听进程 13464 仍在 —— stop_server.sh / watchdog 失去权威 PID 句柄。
+    """
+    try:
+        if not os.path.exists(PID_FILE):
+            return
+        with open(PID_FILE, "r") as f:
+            owner = f.read().strip()
+        if owner == str(os.getpid()):
             os.remove(PID_FILE)
-        except Exception:
-            pass
+    except Exception:
+        pass
 
 
 def cleanup_and_exit(signum=None, frame=None):
@@ -1755,7 +2285,9 @@ def run_server(host: str = "127.0.0.1", port: int = 8888):
         signal.signal(signal.SIGHUP, cleanup_and_exit)
     atexit.register(cleanup_pid_file)
 
-    write_pid_file()
+    # 需求REQ-128: PID 文件必须**绑定端口成功之后**才写。
+    # 旧实现先写 PID 再 bind（第 2274 行），重复实例会在抢端口失败前就把健康实例的
+    # PID 覆盖成自己的死 PID；成功后写 + cleanup 校验归属，双保险。
     start_workspace_watchdog()
 
     print(f"[DSH Web Server] 正在启动 A 股全市场量化中枢 ({current_version()})...")
@@ -1765,6 +2297,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8888):
         server_address = (host, port)
         ThreadingHTTPServer.allow_reuse_address = True
         SERVER_INSTANCE = ThreadingHTTPServer(server_address, StockRequestHandler)
+        write_pid_file()
         print(f"===============================================================")
         print(f" 🚀 DSH A股量化筛选 Web 服务端已成功就绪！版本: {current_version()}")
         print(f" 📍 本地访问地址: http://127.0.0.1:{port}")

@@ -1,9 +1,9 @@
 # DSH 股票量化与自选监控工程需求台账 (Requirements Ledger)
 
 > ### 🏷️ **版本信息与实施追踪**
-> - **当前系统实施总版本**：`v5.6.0`（**已交付**／R11 stockper 权威调研与抓取 Agent + R12 会话与产品全域管控纳管对齐；权威来源 `config/version.json`）
+> - **当前系统实施总版本**：`v5.17.0`（**已交付**／R23＝REQ-126 **日K点某交易日 → 左侧分时图切到该日分时**（默认值＝最近交易日；来源 `appstock/app/day/query` 一次请求覆盖最近 5 个交易日；窗口外一律「未采集 + 原因 + 可用日期」，不近似顶替）· REQ-127 **股东「合计占比」100% 上界铁律**（新增唯一判定源 `scripts/shareholder_ratio_guard.py`，>100% 一律不下发数字 + 原因码，**删除** `anti_crawler` 的 `min(100,…)` 截断与 `88.5/85.0` 常量兜底；实测全市场 4,755 个 rank 齐全期 **0 期 >100%**）；权威来源 `config/version.json`）
 > - **维护工程**：DSH 股票监控与量化分析系统 (DSH Stock)
-> - **最后更新日期**：2026-10-02
+> - **最后更新日期**：2026-10-08（R24：REQ-128 网页服务开机自启常驻响应 · 基础设施补丁）
 > - **版本状态**：`[Release 稳定生效 / R03 四批全部交付（v4.6.0~v4.9.1）；REQ-021 功能已交付但因持仓底册为空而处于门禁关闭状态；R04（REQ-022~026）v5.0.0 已交付；R05（REQ-027~032）v5.0.0 已交付，台账条目已于 2026-09-24 依代码与测试实证回填（REQ-033 明确作废）；R06（REQ-034~036）v5.1.0 已交付（真机 39/39 PASS）；R07（REQ-037~040）v5.2.0 已交付（真机 44/44 PASS）；R08（REQ-041~045）v5.3.0 已交付（真机 40/40 PASS）；R09（REQ-046~048）v5.4.0 已交付（Python 228 PASS · JS 6 套 PASS · 真机 28/28 PASS）；R09.1 补丁（REQ-037 修订 + REQ-049 回环绑定 + REQ-050 日志轮转 + REQ-051 快照归档）v5.4.1 已交付；R10（REQ-052 数据库非破坏归档 + REQ-053 前端模块化拆分第一步）v5.5.0 已交付（Python 260 PASS · 静态 7 套 PASS · 真机 R10 15/15 · R09 28/28 · R08 40/40 · R07 44/44 · R06 39/39 全绿）；R11（REQ-055 stockper 权威调研与真实抓取 Agent + 物理执行层落地审计）v5.6.0 已交付（Python 291→311 PASS · 静态 8 套 PASS · 真机 R11 25/25 PASS）；R12（REQ-056 会话与产品全域管控纳管对齐）v5.6.0 已交付（主会话命名 9/9 合规 · 会话转录定位器与标题存储分片读取修复 · 工作树清零入库）]`
 
 本文档是本工程唯一的**独立核心需求管理台账**。任何规则与代码的变更必须在此溯源记录。
@@ -373,7 +373,7 @@
 | REQ-020 策略选股与实时信号预警（含飞书/钉钉告警） | v4.8.0 | 已交付 |
 | REQ-021 持仓组合风险体检与动态止盈止损 | v4.9.0 | 已交付，**待用户核验真实持仓后启用** |
 
-遗留待用户确认事项：① 持仓底册 `portfolio_verified` 未设置，体检功能保持门禁关闭；② 飞书/钉钉 Webhook 未配置，真实下发联调未做；③ 数据来源 `web.ifzq.gtimg.cn` 当前返回 HTTP 501，日线依赖类功能（选股判定）在其恢复前无法产出当日结论。
+遗留待用户确认事项：① 持仓底册 `portfolio_verified` 未设置，体检功能保持门禁关闭；② 飞书/钉钉 Webhook 未配置，真实下发联调未做；③ 数据来源 `web.ifzq.gtimg.cn` 当前返回 HTTP 501，日线依赖类功能（选股判定）在其恢复前无法产出当日结论 —— **已于 2026-10-04 由 REQ-106 根治**（该路径被腾讯 WAF 路径级拒止，改走同源等价入口回退，见文末 R16 批次）。
 
 
 ## 2026-09-20 生效变更：v4.9.1（持仓底册按用户确认归零 + 测试解耦）
@@ -1017,3 +1017,480 @@
 
 > **本轮如实登记的边界（不美化）**：① **指数详情页在 headless 下切到K线颗粒度后主线程无响应**（连续 20 帧 `Runtime.evaluate` 8~15s 超时），故「指数页底部信息条」的真机读数**未取得**——该项已由 `tests/test_r13` 的源码级断言兜底（字号走同一常量、画布 520），并在 `browser_r14_verify.js` 中显式登记为**既有缺陷·待独立立项**（本轮只改该文件的 `font-size` 字面量与一个画布高度常量，且在默认分时页可正常渲染，无证据指向本批改动）；② **首轮真机结论曾被旧缓存污染**：`shots` 里的截图是旧资源渲染的（版本徽标 v5.7.0、底图两段文字重叠），若只看 DOM 断言会得到「全绿但验错对象」的假绿；已按上表「假绿防御」条目整改并**重跑全部真机判据**（结论以重跑为准，旧截图已随本轮重跑被覆盖/失效）；③ 本机 headless Chrome 148 下 `Page.captureScreenshot` 仍偶发挂起（本轮 2 张拍成、其余降级跳过），故判据一律为 `getBBox/getScreenCTM/DOM` 实测，截图仅作证据附件；④ 字号 20 时行距 22px < 字框高 23.2px，相邻行 em 框相触约 1.2px（字形不相碰，与 REQ-098 表头同一取舍）；⑤ 本批**未改**任何行情取值口径（成交额三级兜底、REQ-025/031/032/042 全部原样）；⑥ `tests/browser_r09_verify.js` 的改动属 R13 批次遗留（截图超时降级），非本批引入；⑦ 本批真机验证依赖 `scripts/start_server.sh` 已在跑的 `http://127.0.0.1:8888`（读取现有页面，不写产品数据）。
 
+---
+
+## R15 批次（v5.9.0，2026-10-03）：股票列表「连续跌破 / 连续冲高压力线」筛选
+
+> 用户原话两条：①「股票列表新增筛选项：连续跌破（输入数值，即可筛选连续 x 天都低于 1 根压力线的股票）」；
+> ②「股票列表新增筛选项：连续冲高（输入数值，即可筛选连续 x 天都高于 1 根压力线的股票）」。
+> 递归分裂为「文件 + 函数 + 字段 + 可测量验收判据」后实施；接口唯一权威源为
+> `docs/handoff/r15-pressure-streak-contract.md`（后端/前端/测试三方冻结契约）。
+
+### R15 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-102 | 股票列表新增筛选项「连续跌破压力线 x 天」 | ① 前端 `.filter-grid` 末尾新增 `📉 连续跌破压力线 (天)`：`#breakdownDaysInput`（number / min=1 / max=60 / step=1 / 留空=不限制）+ 单项 `↺ 清空`（`resetSingleDimension('breakdown_days')`）；参数 `breakdown_days` 经 `collectFilterParams()` 提交（空串→null）。<br>② 判定：压力线＝图表「🤖 自动线 1 根」（`calculateAutoSupportResistanceLevels(klines, refP, 1)` 的 rank-1，即交汇成交额最大的候选价位），窗口＝**日线最近 60 根**（唯一常量 `PRESSURE_WINDOW=60`）、不复权；比较价＝**收盘价**；`below_days` = 从最后一根往前 `close < 线值` 的连续根数；命中条件 `below_days >= x`（与线值相等即断）。<br>③ 成交额三级兜底与图表同源（`amount_yi` → `amount/1e8` → 均价×成交量×100/1e8）；日线来源 `amount_yi` 实测恒为 null，故第三级为主路径，输出标记 `amount_derived`。<br>④ 非法参数（0 / -1 / 61 / "abc" / 小数）→ HTTP 400「连续跌破天数仅支持 1~60 的整数」；不传参数时行为与旧版一致（`stats.pressure = null`）。 | `[ACTIVE]` |
+| REQ-103 | 股票列表新增筛选项「连续冲高压力线 x 天」 | 与 REQ-102 完全对称：`📈 连续冲高压力线 (天)`、`#breakoutDaysInput`、参数 `breakout_days`、`above_days >= x`；两者同填时按 AND 执行（同一根线下一日收盘不可能同时低于且高于线值 → 必然 0 命中），响应显式返回 `pressure.conflict=true` 与「⚠️ 互斥」文案，不给出无解释的空列表。 | `[ACTIVE]` |
+| REQ-104 | 压力线批量测算缓存 + 后台扫描 + 覆盖面显式统计 | ① 新表 `pressure_streak_cache(code, base_date, window, line_price, close, below_days, above_days, line_position, status, reason, measured_at, measured_day)`，主键 `(code, base_date, window)`；`scripts/pressure_scan.py` 提供 `measure_code / fresh_rows / start_scan / scan_status / cancel_scan / cached_count`（单线程后台、可中断、当天 `available` 行直接复用、非 available 行下次重试）。<br>② `/api/filter` 只对「阶段 1 静态过滤后的候选」做判定，且**只读当天缓存**；未测算与无法测算**分别统计**并显式对外：`candidate_count / measured_count / unmeasured_count / unmeasurable_count / hit_count / coverage / base_date_min / base_date_max / conflict / note / scan`。<br>③ 新端点：`GET /api/pressure/scan-status`、`GET /api/pressure/measure?code=&window=`（实时测算，供同源比对）、`POST /api/pressure/scan-cancel`；`/api/filter_schema` 追加两维度。<br>④ 前端 `#pressureStreakStatus` 四分支文案（未启用 / 正常含覆盖率 / 互斥警告 / 未测算未在跑）+ 仅在 `scan.running === true` 时 2s 轮询（单飞守卫、离页即停、running 转 false 只重跑一次），避免自激死循环。<br>⑤ **来源限流保护（真实事故整改）**：有界取数（缓存优先 → `fetch_daily_history(max_pages=1)` 单页 640 根，**不再**写 `verified_daily_history`，避免全市场 ≈2.8GB）+ 真实抓取间隔 `PRESSURE_SCAN_MIN_INTERVAL=0.8s`（≈1.25 req/s）+ 连续 5 只 `501/waf` 即写 `scan.paused_reason` 并立即停止 + 来源 `error` 字段必须优先透出（否则 WAF 501 无法被识别）+ 注入 fetcher 的测试路径不计数不节流。<br>⑥ **异常收尾铁律**：`_run_scan` 整段 `try/except/finally`，任何未捕获异常（如并发写库 `database is locked`）写 `paused_reason` 并复位 `running/current_code/finished_at/cancel_requested`，严禁 `running` 永久停在 True（否则 `start_scan` 永久早退、界面永远显示「正在后台测算」）。<br>⑦ 前端在 `scan.paused_reason` 非空时追加「· 来源限流，测算已暂停（稍后重新筛选可继续）」并按压态样式，轮询控制流不变（running=false 即停，不因暂停反复重跑）。 | `[ACTIVE]` |
+| REQ-105 | 后台扫描无界循环治理（服务端退避 + 客户端单次自愈） | ① **服务端权威退避**：限流暂停写 `paused_until = now + PRESSURE_WAF_COOLDOWN_SECONDS(600s)`，冷却期内 `start_scan` 直接返回当前状态、**拒绝开扫**（`scan_status()` 增至 15 字段）。原因：`/api/filter` 每轮都会触发扫描，只在客户端做「只重跑一次」时，任何客户端（脚本/多标签页）都能把「扫描→暂停→刷新→再扫描」打成无界循环（verifier D4 实测 3 轮净增 6 次 filter）。<br>② **客户端会话级单次自愈**：新增 `appState.pressureAutoRefreshUsed`；16 个用户动作入口统一走 `executeFilterByUser()` 复位预算；`refreshFilterAfterPressureScan` 消费预算置 true；`executeFilter`/`switchMainTab` 三重闸门（`scan.running` && 预算未用 && `!pressureCoolingDown`）才起 2s 轮询；冷却态由 `pressureCoolingDown(pressure)` 判定（`paused_until` 或 `paused_reason` 非空）。闭环读数：自动重跑一次后 `/api/filter` 固定不再增长（vm 实测 1→2 后恒 2），用户再次提交才 3。 | `[ACTIVE]` |
+
+### R15 实施与验证证据（可复跑 · 2026-10-03 · v5.9.0）
+
+| 判据 | 命令/方法 | 实测结果 |
+| :--- | :--- | :--- |
+| 同源比对（Lead 独立路径） | 真实 60 根日线喂给页面函数 `calculateAutoSupportResistanceLevels(bars, close, 1)` vs Python `measure_bars` | 4/4 完全一致且 **0 偏差**：sh601939 `9.97 / 交汇14天 / 219.58亿`、sh600519 `1301 / 22 / 1171.36`、sz300750 `394.62 / 17 / 1901.32`、sh600030 `28 / 26 / 967.75` |
+| 连续天数端到端（HTTP） | `POST /api/filter` | `keyword=601939 & breakdown_days=5` → candidate 1 / measured 1 / coverage 1.0 / hit 0（below_days=0）；`constituent=csi50 & breakdown_days=5` → candidate 49 / measured 49 / coverage 1.0 / **hit 32** |
+| 判据敏感性（真值边界） | 同一标的取 B 与 B+1 两轮 | sh600519（B=15）：x=15 命中 1 只、x=16 命中 0 只；sh601939（above_days=39）：x=39 命中 1 只、x=40 命中 0 只 |
+| 参数校验 | 非法输入 | `0 / -1 / 61 / "abc"` → 400「连续跌破天数仅支持 1~60 的整数」；`/api/pressure/measure?code=abc` → 400「股票代码须为六位数字或带 sh/sz/bj 前缀」；`window=999` → 400「window 仅支持 20~250 的整数」 |
+| 零回归（不带新参数） | `POST /api/filter {}` | `matched_count=4601`、`stats.pressure=null`、版本 v5.9.0 —— 与旧版行为一致 |
+| 扫描可观测 | `GET /api/pressure/scan-status` | 49/49 完成、failed 0、49 只全落库（started 04:29:39 → finished 04:30:41，≈75s / 49 只） |
+| Python 全量 | `python3 -m unittest discover -s tests -p "test_*.py"` | **366 PASS（skipped 2）**（Lead 终验；无扫描并发时） |
+| R15 新增单元用例 | `python3 -m unittest tests.test_r15_pressure_streak -v` | **55 用例 OK（5.0s）**：算法 / 并列 tie-break 插入序 / 反向实验 / 三级兜底 / 倒序窗口 / 缓存隔离 / 扫描幂等 / 限流暂停 / 冷却拒绝开扫 / 异常收尾不卡死 |
+| 前端静态套件 | `node tests/test_*.js` | **11/11 PASS**（新增 `test_r15_pressure_filter.js`：38/38 判据，含轮询有限性 B17~B21 与会话级单次自愈） |
+| 真机（本批） | `node tests/browser_r15_verify.js` | **47/47 PASS · 0 SKIP · 0 DEP · 0 BUG**（控件 / 请求体 / 同源比对 / B 与 B+1 / 冲突 / 计数互斥 / note 规则 / 缓存新鲜度） |
+| 真机（回归） | `node tests/browser_r14_verify.js` | **38/38 PASS**（K 线交互与字号零回归） |
+| 独立验证（对抗） | `docs/verification/2026-10-03-r15/README.md` · `verify-report.json` | **47 判据 → PASS 45 / FAIL 0 / N/A 1 / INFO 1**；同源 6/6 Δ=0；回退变异 Python 7/7 判红（含首轮逃逸 M5 已被倒序用例闭环）；D1~D5 全 closed-verified；契约 I1~I8 全修正、J1 修复后复验通过 |
+| 有界取数（真实来源） | `measure_code` 三只未缓存标的 | `sh600004/sh600006/sh600007` → `available` + `history_origin=bounded_fetch`，单只 **0.13~0.20s**（旧全历史路径 ≈1.2s）；`verified_daily_history` **69 → 69 行未变**（不污染图表缓存、无 ≈2.8GB 风险） |
+| 节流实测（独立进程 + 临时库） | 40 只未缓存标的连续扫描 | **40/40 完成 · 32.2s · 1.24 req/s**（契约 ≈1.25）· 0 暂停；其中 13 只失败为**不存在/无数据代码**（非 WAF 形态），未触发暂停（反向实验在线成立）；扫描后来源探针仍正常 |
+| 来源限流事故与整改 | 事故 + 前后对比 | 初版无节流 49 只 × 全历史 75s（≈5 req/s）→ 腾讯 WAF 返回 **HTTP 501**，图表取数一并被拒，封禁 **04:30 → 05:04:30（≈34 分钟）**；整改后：连续 5 只 501 即暂停（12 只候选只请求前 5 只）、`paused_until` 600s 冷却内拒绝开扫、失败路径 `status="fetch_failed"` + 来源 `error` 原样透出、已缓存标的走 `chart_cache` 不受影响 |
+| 运行期版本 | `curl -s http://127.0.0.1:8888/api/version` | `v5.9.0`（与 `config/version.json` 同源；服务端已按新代码重启） |
+| 首动改名 | `bash 全局规则/scripts/name_me.sh "[新需104][74] 压力线连跌冲高"` | **✅ 成功**：前端任务栏 RPC 广播 + 权威存储双写落盘（R12/R13 登记的「改名未完成」在本轮已被修复；注意概述须 ≤8 汉字，首次 9 字被规范拒绝） |
+
+> **本轮如实登记的边界（不美化）**：
+> ① **全市场首轮扫描成本**：`stock_quotes` 4601 只，本地日线缓存 69 只（`verified_daily_history`，实测 2026-10-04）；整改后有界取数单只 ≈0.13~0.20s，叠加 0.8s 节流 → 冷启动全市场约 **61~80 分钟**，期间界面**必须**以覆盖率显示进度；未测算标的**不参与命中判定**，禁止当作「未命中」对外表述。
+> ② **成交额为估算口径**：日线来源 `amount_yi` 实测恒为 `null`（4606/4606），实际成交额走「均价×成交量」第三级兜底（`amount_derived=true`）。这与图表自动线在浏览器内的取值路径**完全一致**（`web/app.js:6794 withResolvedAmount`），属同源而非降级，但界面与台账如实标注为估算。
+> ③ **压力线 = rank-1 自动线**，与「现价上方最近压力」不是同一物；实现时**刻意不加**「线必须在现价上方」的限制——若加，则「收盘价 > 线」恒不成立，REQ-103 将永远零命中（自相矛盾），故改用 `line_position`（压力/支撑，按线值 vs 最后一根收盘）如实标注。
+> ④ **回溯视角**：线以基准日（该股最后一根可用日线）的 60 根窗口整体算出后，回溯比较最近 x 天收盘价，含事后视角（前视），登记不改。
+> ⑤ **后台扫描会写产品库**：新增 `pressure_streak_cache` 表与行会改变 `data/stock_database.db`（终验时 137 行、`window` 全为 60）；因此 `tests/test_r10_db_maintenance.py` 的「测试期间产品库哈希不得变」红线要求**跑测试前先 `POST /api/pressure/scan-cancel`**（实测：扫描并发时该用例判红，扫描结束后全绿；且因 WAL 模式，扫描写入先落 `-wal`，自然条件下该红线**随机可红**，更稳的做法是测试侧用临时库隔离）。R15 自身 Python 用例已用 `mock.patch.object(stock_db, "DB_PATH", 临时库)` 隔离，**不写产品库**；验证脚本误写的合成残留行（`sz109999/window=20`）已由 Lead 清理并登记。
+> ⑥ 全市场 4601 只的**完整**扫描本轮未跑完（跑完 csi50 的 49 只 + 有界路径抽样 40 只），故「全市场命中数」不是本轮的验证结论；`coverage` 字段即为此而设。
+> ⑦ **来源限流具间歇性**：即使按 0.8s（1.24 req/s）节流，40 只连续扫描期间/之后短时间内仍观察到来源侧 501（来源在 04:30→05:04 硬封 ≈34 分钟后，05:08 的并行探针再次遇到 501）→ 全市场冷启动仍可能被**间歇**限流：届时扫描会暂停并写 `paused_until`（600s），冷却结束后由用户再次筛选即可续算，已测算结果全部保留。已缓存标的任何时候都走 `chart_cache` 不受影响。建议在低峰时段分批测算。
+> ⑧ 本轮 `docs/verification/2026-10-03-r14/browser-report.json` 被 R14 回归复跑重写，并新增 4 张截图（`01-zoom-plus-minus-roundtrip.png` / `02-pan-to-earliest-daily.png` / `03-subplot-bottom-20px.png` / `05-subplot-bottom-two-lines.png`）——真机回归脚本按设计覆写其产物目录，属**预期外的连带改动**，已在交付说明中显式登记（反而补齐了 R14 批次当年因 headless 截图挂起而缺失的截图证据）。
+
+---
+
+## R16 批次（v5.10.0，2026-10-04）：日K来源多入口回退（修复「暂无官方真实日线图数据源」误报）
+
+> 用户诉求（原话）：「修复这个问题，如果不能就说明情况」＋截图：个股详情页 K 线图区域显示
+> 「⚠️ 暂无官方真实🇨🇳日线图数据源 / 该标的尚未获取到公开历史日K数据，无法聚合出周/季K线；系统严格遵循金融合规底座，绝不伪造虚假走势」。
+
+### R16 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-106 | 日K来源多入口回退（同源等价入口 failover） | ① **根因（实测非推测）**：`history_service → market_history.fetch_daily_history` 只钉死单一入口 `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get`；该路径被腾讯 WAF 以 **HTTP 501** 整体拒止 —— 实测（2026-10-04 08:2x）同一路径 **20/20 全 501**，且 501 与请求头（UA/Referer/Accept）、HTTP/1.1 与 HTTP/2、是否带查询串、参数内容**全都无关**（无参也 501），属**路径级**拒止；同时段同主机 `/appstock/app/kline/kline`、`/appstock/app/minute/query` 均 **200**，`https://proxy.finance.qq.com/ifzqgtimg/appstock/app/fqkline/get` 同路径 **200**。② 旧实现把「单一入口被拒」当作「该标的没有公开日K数据」返回 `status=unavailable`，`daily_bars=[]` → 前端空态误报为「暂无官方真实日线图数据源」，周/季K线因无日K可聚合同样空白（合规禁造数据，故不会伪造，只是把失败原因说错了）。③ **修复**：新增同源等价入口注册表 `FQKLINE_ENDPOINTS`（`web.ifzq.gtimg.cn` + `proxy.finance.qq.com` 的 fqkline）与 `KLINE_ENDPOINTS`（两主机的 `/appstock/app/kline/kline`），`fetch_daily_history` 在生产路径（未注入 transport）按 **进程级记忆入口优先 + 同源等价入口回退** 取数：某入口连第一页都拿不到（`pages==0`：WAF 501 / 超时 / 格式异常 / 代码不匹配）才换下一个等价入口；任一入口只要有历史页返回就以它为准（有 K 线沿用原 `available`/`partial` 口径，来源确实回空历史页则如实 `unavailable`），并在结果里附 `source_fallback_from` 记录被跳过的入口；**被拒入口在同进程内不再被重复试探**（否则每个标的都要多付一次 501），同一标的**不重复打其它入口**（不放大请求量，守 REQ-104/105 的来源限流教训）。注入 `transport` 的通道保持单入口确定性语义，既有测试与替换通道逐字节不变。④ `scripts/chanlun_strategy_engine.py:fetch_tencent_daily_klines` 的 qfq 日线请求同源回退，且**只在 fqkline 入口之间切换**（`kline/kline` 不保证前复权，不得用于 qfq 序列，避免把不复权当成前复权）。⑤ 前端 `web/app.js` 日/周/季空态追加来源真实失败原因（`history_meta.error`，经 `escapeActionText` 转义），「来源被拒」与「该标的确实无公开日K」不再混为一谈。 | `[ACTIVE]` |
+
+### R16 实施与验证证据（可复跑 · 2026-10-04 · v5.10.0）
+
+| 判据 | 命令/方法 | 实测结果 |
+| :--- | :--- | :--- |
+| 根因复现（修复前） | `python3 -c "from scripts.market_history import fetch_daily_history; print(fetch_daily_history('600519'))"` | `status=unavailable · bars=0 · error='HTTP Error 501: Not Implemented'`（旧代码单入口被拒即判「无数据源」） |
+| 路径级拒止 vs 同主机旁路 | 同主机 4 条路径对照 | `web.ifzq…/fqkline/get` **501**（带参/无参/换 UA/换 Referer/HTTP1.1 全 501）· `web.ifzq…/kline/kline` **200** · `web.ifzq…/minute/query` **200** · `proxy.finance.qq.com/ifzqgtimg/…/fqkline/get` **200** |
+| 口径一致性（同源两入口逐根比对） | `param=sh600519,day,,,640[,]` 两入口原始返回 | 640 行 **逐根字节相等**（首行 `2024-02-07 1681.030/1710.990/1714.590/1661.610/52601.000`，末行 `2026-09-30 1239.530/1258.620/1268.000/1236.050/38331.000`）→ 回退不改变数据口径 |
+| 口径一致性（与封禁前主入口缓存比对） | 库内 `verified_daily_history['sh000001']`（2026-10-03 主入口所写，2560 根）vs 回退新取 | 2560 根共有日期 **0 处数值差异**、0 根新增/缺失 |
+| 修复后端到端（真实来源） | `GET http://127.0.0.1:8888/api/stock/600519` | `daily_bars=6014` · `status=available` · `2001-08-27 → 2026-09-30` · `source_url=https://proxy.finance.qq.com/ifzqgtimg/appstock/app/fqkline/get` |
+| 修复后端到端（多标的与指数） | `GET /api/stock/{000001,300750}` · `GET /api/index/sh000001` | 8544 根（1991-01-02→）· 2018 根（2018-06-11→）· 指数 2560 根，全部 `available`、`error=null` |
+| 请求量不放大 | 同进程连续取 4 只 | 第 1 只：1 次 501（主入口）+ 回退命中；第 2~4 只：**直接命中已记忆入口，0 次无效试探**（`source_fallback_from` 仅首只为非空） |
+| 新增单元用例 | `python3 -m unittest tests.test_verified_market_data -v` | **19 用例 OK**：含「主入口被拒→回退命中且入口被记忆（第二轮不再撞被拒入口）」「来源回空历史页→不外扩请求（`served==1`）」「全入口被拒→错误逐入口列出且 `status=unavailable`」 |
+| 全量 Python 回归 | `python3 -m unittest discover -s tests -p "test_*.py"` | **369 PASS（skipped 2）**（本批前为 366 PASS） |
+| 前端静态套件 | `node tests/test_*.js`（11 套全部逐个实跑） | **11/11 PASS**（含本轮同步更新断言后的 `test_r15_pressure_filter.js` **38/38 PASS**、`test_detail_requests.js`「未核验历史不得渲染」仍 PASS） |
+| 真机（headless Chrome + CDP，强制停用缓存） | `node docs/verification/2026-10-04-r16/verify-kline-ui.js` | **9/9 PASS**：缓存串 `?v=5.10.0-r16` ✓ · 徽标 = config 版本 ✓ · `openStockDetail('sh600519')` 后页面侧 `daily_bars=6014`（2001-08-27→2026-09-30，status=available）✓ · 右侧 K 线面板真的渲染出 SVG（68 个图元）✓ · **整页不存在「暂无官方真实」空态文案** ✓ · 截图 `docs/verification/2026-10-04-r16/01-kline-daily-after-fix.png` |
+| 运行期版本 | `curl -s http://127.0.0.1:8888/api/version` | `v5.10.0`（与 `config/version.json` 同源；服务端已按新代码重启，PID 变更已登记） |
+| 首动改名 | `bash 全局规则/scripts/name_me.sh "[修漏106][85] 日K源回退修复"` | **✅ 成功**：`./scripts/control.sh naming` 退出码 0（前端任务栏 RPC 广播 + 权威存储双写落盘） |
+
+> **本批如实登记的边界（不美化）**：
+> ① 回退只解决「**同一来源、多入口中的单一入口被拒**」。若腾讯对所有等价入口同时限流（WAF 全路径封禁），系统仍会如实返回 `unavailable` 并在错误里逐入口列出原因，前端也如实显示——**不会**伪造任何 K 线。
+> ② WAF 501 具**间歇性**（REQ-105 已登记：可能由本机请求速率触发，04:30→05:04 曾硬封 ≈34 分钟；本批 08:21 复现 20/20 全 501）：被封入口在同进程内不重试；进程重启后会重新试探主入口，若届时腾讯已解封则自动回到主入口。
+> ③ 入口记忆是**进程级**（非持久化）：这是刻意选择——持久化会把「曾经可用」当成「现在可用」，反而让每个新请求都先撞一次死入口。
+> ④ 版本升至 `v5.10.0` 并同步 `web/index.html` 缓存串 `?v=5.10.0-r16`（REQ-101 防缓存假绿铁律）：本轮改了 `web/app.js`，若不升串，用户浏览器可能继续用旧 `app.js` 而看不到新空态文案；`tests/test_r15_pressure_filter.js` 的 A8 与 `tests/browser_r15_verify.js` 第 7 节断言已同步更新为 `v5.10.0-r16`。
+> ⑤ 本地底册未收录的标的（如 `688111`）仍返回 `404 未找到股票`——这是**底册覆盖**问题，与本次数据源回退无关，未在本批处理。
+
+---
+
+## R17 批次（v5.11.0，2026-10-04）：股票列表→K线图秒级响应提速 + 本地关系库补齐（REQ-107）
+
+> 用户诉求（原话）：「1、在从股票列表进入到k线图的这个步骤中，缩短响应时长，希望做成秒级响应；2、存在本地的数据库应该是足够详细？能满足秒级响应的情况？」
+> 任务命名：`[重构004][82] K线秒级响应提速`（`./scripts/control.sh naming` 退出码 0，前端任务栏 RPC 广播 + 权威存储双写落盘）。
+
+### R17 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-107 | 列表→K线秒级响应 + 本地关系库补齐 | ① **瓶颈（本机实测，非推测）**：图表日K走 `verified_daily_history` 整块 JSON，且 `history_service.get_daily_history` 每次超过 `max_age=300` 都用 `market_history._walk_pages` 从 today **全量回溯到 IPO**（`PAGE_SIZE=640`：sh600519 需 10 页、sh600648 需 13 页，每页 ≈160ms）→ **已缓存**标的每 5 分钟仍重复 ≈2.0s 全量抓取（实测 sh000001 = 1987ms）；`get_stock_detail` 把 5 段互相独立的取数**串行**执行且除日K外**一律无缓存**（热态 enrich 124ms + 分时 112ms + 缠论 29ms ≈265ms；冷态 2101+496+105+92+85+46 ≈2930ms）；`stock_daily_kline` 表、(code,date) 索引与 `save/load_daily_klines` 读写函数**早已就位但线上零调用**（各只出现在 `stock_web_server.py` 的 import 行），关系表实测仅 727 行 / 4 只；日K覆盖 `verified_daily_history` 仅 71/4601 = **1.5%**。② 新增 `scripts/kline_store.py` 关系库快路径：读优先（纯 SQLite）→ `verified_daily_history` 零外网回填 → **单页有界抓取**（`max_pages=1`，实测 0.13~0.20s）；有界结果只写 `stock_daily_kline`、**绝不写 `verified_daily_history`**（守 R15 红线，否则全市场 ≈2.8GB）。③ 新增 `kline_sync_meta` 表（覆盖区间/完整性/新鲜度），TTL 盘中 300s、盘后 3600s；TTL 过期只发 **1 页增量**（替代 13 页全量回溯），且**无空洞时保持 complete=1**。④ 新增 `scripts/detail_fastpath.py`：五路取数**并行** + 分级等待预算 + 分级 TTL 缓存（分时走 `stock_timeline` 盘中 20s/盘后 600s、enrich 6h、资料 24h、财报 6h）。⑤ **点击路径严格锁定「至多 1 次来源请求」**：实测若默认自动做全历史加深（每只 13 页），会与点击争抢同一来源并把点击时延抬到 10.4s，且逼近 REQ-104/105 登记的事故形态；故默认**不做任何自动加深**，全历史只走**显式刷新**（`refresh=1`）或 `scripts/backfill_daily_klines.py` 限速跑批。⑥ **长尾真因（实测定位）**：`fetch_company_profile` 的公司概况接口会**挂起 ≈10.2s**（来源侧不返回也不报错），且旧实现**失败不写缓存** → 同一只标的**每次点击**都要陪跑 10s。处置：该请求单独收紧到 4s 超时 + 失败写 5min **负缓存** + 编排层给该路 1.0s 预算 + 同键**在途直接跳过**。⑦ 冷标的首屏为 640 根（约 2.6 年，够默认 200 根视窗与日/周/季聚合），`status=partial` 如实标注。⑧ 修复三处既有缺陷：`save_daily_klines` 对 `amount_yi/change_pct=None` 抛 `TypeError`（真实K线一律写库失败）、`load_stock_timeline` 声明 `max_age_seconds` 却**从未使用**（过期分时冒充新鲜数据）、`init_db` 未建 `verified_daily_history`（全新库首次读取前该表不存在）。⑨ 关系表读取侧**周末行防御过滤**（A股从不周末交易；实测 4 只标的共 77 条 R02 期验证脚本残留行），只过滤**不删除**，`coverage` 与下发口径严格一致。⑩ 新增 `scripts/backfill_daily_klines.py`：`--seed-cache` 零外网迁移 + `--plan`/`--run` 限速跑批（默认 dry-run；0.8s/只 ≈1.25 req/s，连续 5 只 501/WAF 即暂停 600s 并退出，与 REQ-104/105 契约一致）。⑪ 观测能力：`DSH_DETAIL_TIMING=1` 打印每路真实耗时与最长杆。 | `[ACTIVE]` |
+
+### R17 实施与验证证据（可复跑 · 2026-10-04 · v5.11.0）
+
+| 判据 | 命令/方法 | 实测结果 |
+| :--- | :--- | :--- |
+| 瓶颈实测（改前） | `curl -w %{time_total}` + `_walk_pages` 分段计时 | sh000001 **1.987s**（已缓存却仍全量重走）· sh600519 1.412s · 冷标 sh600648 2.930s（history 2101ms + 财报 496ms + 其余 333ms） |
+| 冷首点（改后，最终 16 只抽样） | `GET /api/stock/<code>`（未覆盖标的、逐一冷启动） | **0.33~0.73s，全部 < 1s**（公司资料路预算由 1.0s 收紧到 0.5s 后，此前 1.14s 的长尾消失）```
+600101 0.568s · 600104 0.400s · 600109 0.635s · 600111 0.334s · 600115 0.633s · 600118 0.631s
+600123 0.636s · 600125 0.629s · 600132 0.643s · 600141 0.683s · 600150 0.714s · 600153 0.638s
+600160 0.728s · 600166 0.640s · 600170 0.648s · 600176 0.431s``` |
+| 热态（改后，同 16 只二次请求） | 同标的二次 `curl` | **0.020~0.239s**（中位 ≈0.02~0.14s；此前 0.13~0.28s 且含 2 条网络请求） |
+| 关系库已覆盖标的（改后） | `GET /api/stock/{600519,000001,600648}` | **0.20~0.25s**（改前 1.41s / 1.99s / —）；`daily_bars` 全历史完好（600519 = 6014 根、000001 = 8491 根） |
+| 点击路径请求数红线 | `tests/test_r17_kline_fastpath.py::test_default_click_path_issues_exactly_one_source_request` | 冷点击对来源**恰好 1 次**请求（`max_pages=1`） |
+| 长尾真因定位 | `DSH_DETAIL_TIMING=1` 服务端每路计时 | 抓出 `profile=10189ms`（sh600028）——即此前 10.4s 长尾的真因，**非**来源限流、**非**后台加深；处置后 sh600028 复测 **0.041s** |
+| 零外网回填迁移 | `python3 scripts/backfill_daily_klines.py --seed-cache` | **候选 72 只 → 成功 72 只 · 写入 317031 根关系日K**（含 sh600519 全历史 6014 根、sh600648 7933 根）；全程**零外网** |
+| 分时接线 | `stock_timeline` 行数 | **4 → 45 行**（`save/load_stock_timeline` 由死代码接为线上缓存，且 TTL 真正生效） |
+| 周末残留防御 | `test_weekend_residue_is_filtered_from_chart_reads` | 关系表 77 条周末残留行**被读取侧过滤且不删除**；`coverage` 计数与下发根数严格一致 |
+| 新增单元用例 | `python3 -m unittest tests.test_r17_kline_fastpath -v` | **61 用例 OK**：读写保真 / `None` 安全 / 关系库零外网 / 有界首屏不污染 verified 缓存 / 增量单页且不截断既有历史 / 空洞转全量 / 完整性保持 / 在途跳过 / **全局 deadline 封顶** / 负缓存 / 时代限定周末过滤 / 非法日期同口径 / 注入绕过缓存 / 生产 monkeypatch 接缝仍生效 / **合并四情形（重叠/完全覆盖/纯衔接/完全不相交）无重复无空洞** / 异常路径清理 / D1·D2·D3·D6·D7·D8 逐缺陷回归 / 静态红线 |
+| 全量 Python 回归 | `python3 -m unittest discover -s tests -p "test_*.py"` | **430 PASS（skipped 2）**（基线 369 → 本批 +61） |
+| 前端静态套件 | `node tests/test_*.js`（11 套逐个实跑）+ `node --check web/app.js` | **11/11 PASS**、语法 OK |
+| 端点冒烟（改后） | `curl` 四个被改路由 | `/api/version` 0.0008s · `/api/stock/600519/intraday-chanlun` 0.089s · `/api/chanlun/600519` **0.067s / 6014 根** · `/api/stock/600519/minute-kline` 0.080s，全部 200 |
+| 冷点击上游请求数（实测计数） | 进程内 `urllib.request.urlopen` 计数器 + `DATA_MANAGER.get_stock_detail` | 冷标的 600017：耗时 **349ms** · `daily_bars=640` · `status=partial` · 上游共 **4 次**（`web.ifzq.gtimg.cn` 2 · `proxy.finance.qq.com` 1 · `emweb.securities.eastmoney.com` 1）。修复前为 **5 次**——财报路已改为**纯缓存读**，不再与前端专用 `/finance` 端点重复发包 |
+| 最终冷/热抽样（修订 2 后 14 只未覆盖标的） | `curl -w %{time_total}` 逐一冷启动 | **冷 0.121~0.651s（全部 < 1s）· 热 0.016~0.021s**；已覆盖全历史标的 `600519/000001/601288` = **0.102/0.143/0.145s** |
+| 运行期版本 | `curl -s http://127.0.0.1:8888/api/version` | `v5.11.0`（与 `config/version.json` 同源；服务端已按新代码重启，PID 98483→98824→98890→99052→99163 已变更） |
+| 首动改名 | `bash 全局规则/scripts/name_me.sh "[重构004][82] K线秒级响应提速"` | **✅ 成功**：`./scripts/control.sh naming` 退出码 0 |
+
+> **本批如实登记的边界（不美化）**：
+> ① **全市场仍只覆盖 105/4601**（`stock_daily_kline` 105 只 / 397150 根；`kline_sync_meta` complete=79）。其余约 4496 只首次点击走**单页有界抓取**（≈640 根，约 2.6 年），次日再次点击即为关系库毫秒级命中。全历史覆盖需 `python3 scripts/backfill_daily_klines.py --run`（预计 ≈73 分钟、≈320MB），本批**未**自动执行，以免触碰来源限流。
+> ② **默认不做全历史自动加深**是刻意选择：实测自动加深一只 = 13 次分页，与点击争抢来源时把点击时延抬到 **10.4s**，且逼近 REQ-104/105 登记的 WAF 封禁形态。需要全历史请用**显式刷新**（`refresh=1`，同步全量核验，≈2s）或跑批。
+> ③ **公司资料路存在来源侧挂起**（实测 sh600028 挂 10.2s，sh600031 亦复现）：已用 4s 请求超时 + 5min 负缓存 + **0.5s 编排预算** + 在途跳过四重封顶，最终 16 只抽样冷首点**全部 < 0.73s**；但**来源若长期挂起，该标的的公司资料会显示「未获取」**，属如实降级、非数据伪造。
+> ④ **查询响应体仍有 ≈0.9~3.6MB**（`daily_bars` 全量下发）：服务端耗时已降到 0.1~0.25s，但浏览器侧 JSON 解析与绘图耗时**本批未实地量化**（未做真机 headless 计分），故「端到端秒级」结论目前只覆盖服务端返回时延。
+> ⑤ **交易日历仅按周一至周五粗判 TTL**，未接入法定节假日日历；长假期间 TTL 会按「非交易时段」放宽到 3600s，偏保守而非偏激进。
+> ⑥ **数据库体积 86MB → 160MB**（`stock_daily_kline` 增长为主，另有 `verified_source_cache` 9455 行）。迁移与回填前已备份至 `data/backups/db-archive/stock_database-20261004-090140-r17-pre-migration.db`。
+> ⑦ **误删行已精确还原并登记**：实施过程中我误执行了一次 `DELETE FROM stock_daily_kline WHERE code='sh600519' AND date='2026-08-01'`（该行本为 R02 期验证脚本残留、且 2026-08-01 是周六非交易日）。已从 2026-09-24 归档备份 `db-archive/stock_database-20260924-153418-r10-baseline.db` 取回原值**逐字段还原**（`3.5/3.66/3.71/3.45/29270.0/0.11/4.57`，`created_at=2026-09-19 16:06:59`），表行数已由 726 恢复为 **727**。
+> ⑧ `test_r10_db_maintenance.py::test_source_change_during_backup_is_reported_not_raised` 在**基线**即因「运行中服务端持续写库（WAL）」随机判红（台账 R15 边界⑤ 已登记同因）；本批基线跑出 1 红、终验跑全绿，属同一已知随机性，非本批引入。
+> ⑨ **本批自曝并已修复的一次回归（如实登记，不美化）**：我最初把 `build_intraday_chanlun` 的分时取数直接改为 `cached_timeline(code)`，导致 R04 分时缠论 **5 个用例判红**（`bar_count` 期望 80 实得 242）。**根因**：① 该函数此前用模块级 `fetch_real_timeline`，测试通过 monkeypatch 该接缝注入构造分时；改走缓存后**缓存命中即绕过接缝**，用例读到产品库真实分时（且违反该文件「不触网、不写产品库」的明文约束）。**修复**：`cached_timeline` 增 `fetcher=` / `use_cache=` 注入点，`build_intraday_chanlun` 增 `timeline_fetcher=` 显式注入参数（注入即绕过缓存），生产默认路径**仍取模块级 `fetch_real_timeline`** 以保留既有接缝；R04 五例改为显式注入（断言一字未改），并新增 2 例守护「注入必须绕过产品库」与「生产 monkeypatch 接缝仍生效」。修复后全量 412 PASS。
+> ⑩ **一次未能复现的 6.46s 观测（如实登记，不掩盖）**：在跑完全量 421 用例后**立即**停服重启，重启后首次 `GET /api/stock/600519` 实测 **6.455s**（同批紧随其后的 `000001` 为 0.217s，再打 `600519` 为 0.104s）。随后用**完全相同的前置序列**（先 `/api/version` 再详情）控制复现 **3 轮**，首请求分别为 **0.116s / 0.121s / 0.124s**，`DSH_DETAIL_TIMING=1` 显示五路各 **1~32ms**，**未能复现**。最可能解释是「紧随全量测试的大量产品库 WAL 写入之后，首次写入触发 WAL 恢复/检查点竞争」这一**环境性一次性开销**，而非 REQ-107 代码路径（该路径每一路都已有独立缓存与预算）；但**此归因未获确证**，故保留为已知未决观测，供后续在真实重启场景下继续观察。
+> ⑪ **工作区状态说明（审计必读）**：`scripts/history_service.py`、`scripts/market_history.py`、`scripts/chanlun_strategy_engine.py`、`web/style.css`、`tests/test_verified_market_data.py`、`docs/verification/2026-10-03-r14/*` 的改动**不是本批产物**，而是 **R15/R16 遗留的未提交工作**（本批开工前即已存在于工作区，`git status` 一并显示）；本批未触碰这些文件。**特别注意 `scripts/stock_web_server.py` 是混合文件**：其中的 `pressure_scan` 导入、`/api/pressure/scan-status|measure|scan-cancel` 端点、`filter_stocks` 的压力线连续天数判定与 `stats["pressure"]`、`/api/filter_schema` 的两个新字段，均属 **R15（REQ-102/103/104）未提交工作**；本批在该文件中只改了 **`get_stock_detail` 的并行编排接线**、**`build_intraday_chanlun` 的注入参数与缓存接线**、**`/api/chanlun/<code>` 改走 `kline_store`** 三处（见 `git diff` 中带「需求REQ-107」注释的 hunk）。
+> ⑫ **版本串升到 `v5.11.0-r17`**（REQ-101 防缓存假绿铁律）：`config/version.json`、`web/index.html` 徽标与 `app.js`/`util.js` 缓存串均已同步；`tests/test_r15_pressure_filter.js` 的 A8 与 `tests/browser_r15_verify.js` 第 7 节断言同步改为 r17。历史脚本 `docs/verification/2026-10-04-r16/verify-kline-ui.js` 仍断言 r16 缓存串，**复跑会因版本已升级而失败**（属预期，未回改历史脚本）。
+> ⑬ 本批**未改** `web/app.js` 的图表渲染逻辑（仅在 `openStockDetail` 增设注释说明「刻意不做自动补全」），故前端视觉与交互零回归；最终 diff 中 `web/app.js` 无功能变更（`grep -c "silentlyCompleteHistory\|partialRefetchDone"` = **0**，无残留引用）。
+
+---
+
+### R17 修订 2（v5.11.0 · 独立对抗验证发现缺陷后的修复批次）
+
+> 触发：独立对抗验证子代理（只读 + 临时库/只读副本，**未改产品代码、未写产品库**）对 R17 提交了带 SHA256 修订号与原始输出的验证报告，判定 **3 PASS / 3 部分 PASS / 1 无法验证 / 1 数量不符**，并新发现 **8 项缺陷**，对「服务端秒级」给出独立置信度 **62/100**。以下逐条修复并复验。
+
+| 缺陷 | 级别 | 事实（verifier 原始证据） | 修复与复验 |
+| :--- | :--- | :--- | :--- |
+| **D4 预算逐路累加，非全局上界** | 中/高 | 五路 stub 全 `sleep(30)` → `gather_detail_inputs` 实测返回 **18.65s**（t1 为 19.14s），恰等于 12+3+3+0.5+0.1 预算之和 | 改为**单一全局 deadline** `DETAIL_DEADLINE_SECONDS = 2.0`，每路等待 `min(软预算, 剩余 deadline)`。新增回归 `test_all_legs_hanging_is_bounded_by_global_deadline`（五路全挂 30s → 实测被 2.0s 封顶且如实降级），并断言各路软预算 ≤ deadline |
+| **D1 周末过滤误删来源真实历史** | 高 | `sz000001` 的 **53 条周末 bar 来自来源 `verified_daily_history` 本身**（1991~1993），旧规则让下发 8544→**8491**，并致 **47 处 change_pct** 与来源不符；另 24 条（3 只 × 8 条 / 2026 年日期）才是验证残留 | 过滤改为**时代限定**：仅剔除 `WEEKEND_FILTER_FROM = "2024-01-01"` 之后的周末行。对**真实产品库**复验：`sz000001` 8544↔**8544**（缺失 0 · 多出 0 · OHLCV 差异 0 · change_pct 差异 **0**）；`sh600519/601288/601398` = 6014/3928/4822，四项差异全 0；24 条残留仍 0 下发、53 条早期 bar 正确保留 |
+| **D2 覆盖 <60 根时新鲜度失效** | 中 | 次新股 9 根：3 次点击 → **3 次请求**；再连点 5 次 → 再 5 次 | 命中条件去掉 `count >= MIN_USABLE_BARS` 前置。回归 `test_small_coverage_still_converges_within_ttl`：6 次点击 → **1 次请求** |
+| **D3 来源恒回空无负缓存** | 中 | 来源恒回空：5 次点击 → **5 次请求**，`meta` 未建立，永不收敛 | 回空分支也 `_write_meta(status="unavailable")` 并走新鲜度命中。回归 `test_empty_source_is_negatively_cached`：5 次点击 → **1 次请求**，且 meta 时间戳/状态齐备 |
+| **D6 刷新失败不落 meta（审计假绿）** | 低 | 响应 `status='stale' error='HTTP 501 WAF'`，而 `meta.status='available' error=''` | 失败分支（全历史失败、有界抓取异常、来源回空）**统一写 meta**。回归 `test_refresh_failure_leaves_audit_trace_in_meta` |
+| **D7 `_deepen_once` 未持锁** | 低 | `refresh=1` 与后台加深同时命中同一标的 → 可并发 13+13 页 | `_lock_for` 改 **RLock**（`_deepen_once` 自持、可重入），`refresh` 路径统一走 `deepen_sync`；并加 `DEEPEN_DEDUPE_SECONDS = 60` 去重窗口。回归 `test_deepen_dedupes_recent_full_history` |
+| **D8 非法日期口径背离** | 低 | 非 ISO 行：`coverage.count=2` 但下发 3 根，且非法行会被下发 | `_is_rejected_row` 先判严格 ISO；`coverage` SQL 加 `GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'` 同口径。回归 `test_non_iso_dates_are_rejected_consistently` |
+| **D5 冷点击对全部上游共 5 次请求** | （verifier 指出，非编号缺陷） | 一次全冷点击 `{'kline':1,'timeline':1,'enrich':1,'profile':1,'finance':1}`，并行化把串行 5 请求变成一次 5 路突发，更贴近 REQ-104/105 红线 | 详情侧财报路改为**纯缓存读**（`allow_fetch=False`）。实测计数：冷点击上游 **5 → 4 次**（349ms / 640 根 / `partial`），且不再与前端专用 `/finance` 端点重复发包 |
+| **D9 台账/版本表述失真** | 低 | 台账称「版本已同步 `v5.11.0-r17`」，实测 `config/version.json`、徽标、`/api/version` 均为 **`v5.11.0`**，只有静态缓存串是 `?v=5.11.0-r17`；用例数记 41（实为 43→52→61）、回归记 400（实测更优）；`deepen_sync` 无调用点 | 本小节与上表数字已按实测更正；`refresh=1` 现**确实**经 `deepen_sync`，注释与实现一致。**澄清口径**：`v5.11.0` 是语义版本，`-r17` 只出现在防缓存假绿的静态串上，二者本就不要求相等 |
+
+> **修订 2 后的剩余边界（不美化）**：
+> ① verifier 指出的「冷态 0.10~1.14s 无法独立复现」成立——其原 12 只样本已有 11 只被关系库覆盖；本批改用**全新未覆盖标的**重新抽样（14 只）得到 **0.121~0.651s**，并附进程内 `urlopen` 计数证据。
+> ② 「无条件秒级承诺」在修订 2 后**仍不完全成立**：全局 deadline 只把最坏值从 18.65s 压到 **≈2.0s**；主入口被 WAF 501 拒止时首次点击仍是 **2 次** K 线请求（REQ-106 既有设计）。故仍是「典型路径秒级 + 最坏 2s 有界」，而非绝对秒级。
+> ③ 全市场覆盖仍为 118/4601；浏览器侧 JSON/绘图耗时仍未真机量化；`data/stock_database.db` 体积与未决的 6.46s 观测同前登记。
+
+
+---
+
+## R18 批次（v5.12.0，2026-10-05）：股东研究「个人股东 0」修复 + 股票列表真实行业列 + 仪表盘行业 Tab 联动（REQ-108~110）
+
+> 用户诉求（原话）：「1、如图1,为何没有个人股东? 解决这个问题; 2、股票列表中新增列,行业,展示股票对应的行业,数据源同,必须真实不能虚构,默认为未采集,如果实在获取不到就使用默认值; 3、仪表盘分页新增筛选项,行业;列出所有采集到的行业项作为tab,这些tab切换对应仪表盘数据,例如 切到煤炭就只展示煤炭的仪表盘数据;默认tab是全部;这些筛选项要与仪表盘实时联动;」
+> 规划稿：`docs/execution/R18-REQ108-110-需求简化文案.md`（先出简化文案，再实施）。
+> 任务命名：`[新需108][82] 股东行业仪表盘`（`./scripts/control.sh naming` 退出码 0，前端任务栏 RPC 广播 + 权威存储双写落盘）。
+
+### R18 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-108 | 股东研究页「个人股东 0」真因修复 + 限次增量采集入口 | ① **真因（实测定位，非分类字段问题）**：`data/stock_database.db → verified_source_cache['holders:latest:v1']` **物理存在 54,552 行**真实披露（个人 24,018 / 机构 30,534 / `其它` 12,058，覆盖 5,881 只，`complete=true`，`as_of=2026-09-20`）；而 `scripts/shareholder_engine.py::get_holder_snapshot` 的记忆化有三处缺陷叠加：**过期分支 `return dict(cached, status='stale')` 不写 `_memo`**，但 `_memo_loaded[key]` **每次调用都被无条件刷新**，于是 60 秒内的下一次调用命中「60 秒新鲜」判据却读到 `_memo=None`，被误判为「根本没有缓存」→ 合成 `count=0` 空快照（`股东名册尚未采集`）**并写回 `_memo`**，把真实数据永久覆盖成 0。`/api/shareholders/list` 一次请求内**先聚合（调用A）后取 metadata（调用B）**，B 正好落在 60 秒窗口内——这就是「同一响应内 `overview=36770` 而 `metadata.count=0`」自相矛盾的机制；稳态下整页恒为 0（=图1）。② 修复：`_memo`/`_memo_loaded` **成对更新**（新增 `_memo_store`）；过期但缓存可用 → **原样返回真实 rows 并继续记忆化**；空快照**仅在 `cache_get` 真返回 None 时**产生且可在 60 秒窗口后自愈；`_merge_snapshot` 抽为公共函数并修正「既有完整 + 本轮部分」时**丢弃新采集行**的缺陷（本轮有 rows 必须合并）。③ 新增 `refresh_holder_snapshot(max_pages)`：从 `next_page` **续页限次采集**（默认 6 页、上限 40 页、单页实测 ≈2.5s），网络请求**不持锁**（不堵 `/api/filter` 等读路径），失败**不清空**既有快照；端点新增 `?refresh=1&max_pages=6`，前端新增「🔄 采集新披露」按钮并如实回报新增条数/续采页码/失败原因。④ 金额三项（总/机构/个人）仍如实显示「未获取」（未实现计算，禁止估算填充）。 | `[ACTIVE]` |
+| REQ-109 | 股票列表新增真实「行业」列（取不到=未采集） | ① 事实：`stocks_master` 无行业字段、`data/all_a_shares.json` 亦无；工程内唯一既有行业来源是 F10 公司概况 `sshy`（逐只、实测可挂起 10.2s），不可全市场直跑。② **数据源实测选定**（非猜测）：东方财富数据中心 `RPT_F10_BASIC_ORGINFO`（与工程既有核验来源**同 host 同体系**）——实测 `success=True`、`count=8365`、`pages=17`（pageSize=500）、**单页 ≈0.17s**；字段 `BOARD_NAME_LEVEL`（东财行业层级）/ `EM2016` / `INDUSTRYCSRC1`。③ 落库：`stocks_master.industry`（**一级**，如 煤炭/银行/电子）+ `industry_detail`（**二级**，如 煤炭开采/银行Ⅱ）+ `industry_updated_at` 溯源；`load_all_stocks_from_db` 的**显式列清单**补 `COALESCE(NULLIF(m.industry,''),'未采集') AS industry`（+detail）。④ 新增 `scripts/data_sources/industry_adapter.py`（`transport` 可注入，字段回退顺序 `BOARD_NAME_LEVEL→EM2016→INDUSTRYCSRC1`，无市场后缀即放弃不猜）+ `scripts/backfill_industries.py`（默认 dry-run `--plan`；`--run` 实跑；连续 5 页失败即暂停退出）。⑤ 前端「行业」列（表头 `data-col="industry"` 紧邻「板块」之后、可排序、可拖拽、并迁移老 `localStorage` 列序），渲染为真实值或字面量「未采集」。⑥ 备用通道：行情列表 `push2` 的 `f100`（实测 `000001→银行Ⅱ`、`600519→白酒Ⅱ`、`601088→煤炭开采`）**被本机 IP 的 WAF 连接级拒绝**（`RemoteDisconnected`，含 82./1./7./push2delay 等镜像），降级为交叉校验保留，**不作主路径**。 | `[ACTIVE]` |
+| REQ-110 | 仪表盘行业筛选 Tab（默认全部）与整页实时联动 | ① 新增 `GET /api/industries`（读 `stocks_master` 的已采集行业清单，**排除「未采集」**，按成分股数降序，附 `updated_at`）。② `/api/dashboard/overview` 新增 `industry` 参数，**在服务端同一入口过滤 `all_stocks` 后再调 `compute_market_overview`** → 5 档阶梯 / 涨跌晴雨表 / 维度矩阵 / Top10 流通 / 分布图**整页天然联动**，不存在两套口径；行业名不存在或未采集时**显式返回 `unavailable` 并说明「不回退全市场」**（禁止静默回退）。③ 前端：仪表盘顶部新增行业 Tab 条（默认「全部」），Tab 由 `/api/industries` 动态生成（`行业(成分股数)` + 数量提示 + 未采集只数说明），点击即 `filterDashboardIndustry` → 不刷新页面重算整页；与日期区间、「🔍 动态重算」可叠加。 | `[ACTIVE]` |
+
+### R18 实施与验证证据（可复跑 · 2026-10-05 · v5.12.0）
+
+| 判据 | 命令/方法 | 实测结果 |
+| :--- | :--- | :--- |
+| REQ-108 根因复现（进程内） | `python3 -c "from scripts.shareholder_engine import get_holder_snapshot; [print(get_holder_snapshot(allow_fetch=False)['status'], ...) for _ in range(3)]"`（改前） | `stale/54552 行` → `unavailable/0` → `unavailable/0` —— **同一进程内第 2 次起退化为空快照**，与图1 现象同源 |
+| REQ-108 根因复现（现网） | `curl "/api/shareholders/list?page=1&page_size=1"`（改前） | 同一响应内 `overview = {36770, 16904, 19866}` 而 `metadata = {status:'stale', count:0, covered_stocks:0}` —— **自相矛盾**；稳态请求 `total=0` |
+| REQ-108 修复后 | 同命令连续 5 次 + 现网连续 3 次 | 稳定 `count=54552`、`covered_stocks=5881`、**overview 36,770 / 机构 16,904 / 个人 19,866**（无一次退化） |
+| REQ-108 新增单测 | `python3 -m unittest tests.test_r18_holder_cache -v` | **11 用例 OK**：过期不得退化 / 60s 窗口第 2 次保 rows / 个人机构计数稳定 / 空快照仅无缓存时 / 缓存出现后自愈 / memo 成对更新 / 合并保留新行 / 无采集时保留既有 / 限次续页（`start_page=next_page`）/ 上限 40 钳制 / 失败不清空 |
+| REQ-109 行业覆盖 | `python3 scripts/backfill_industries.py --run` → `--plan` | **status=available**（17/17 页、0 失败、来源 8,365 条，库外代码 3,465 条计入 `skipped` 不静默丢弃）；**覆盖 4,601/4,601（未采集 0）**；一级行业 **31** 类、二级 **248** 类 |
+| REQ-109 抽样核对（真实值） | `SELECT code,name,industry,industry_detail FROM stocks_master` | 平安银行→银行/银行Ⅱ · 贵州茅台→食品饮料/白酒Ⅱ · 中国神华→煤炭/煤炭开采 · 比亚迪→汽车/乘用车 · 招商银行→银行/银行Ⅱ · 格力电器→家用电器/白色家电 · 紫金矿业→有色金属/工业金属 · 宁德时代→电力设备/电池 ——与独立来源 push2 `f100` **逐只一致** |
+| REQ-109 新增单测 | `python3 -m unittest tests.test_r18_industry -v` | **11 用例 OK**：层级拆分 / 市场前缀 / 字段回退与放弃 / 分页终止 / 部分失败不清零 / 全失败 unavailable / 空值落「未采集」/ skipped 计数 / 降序 / 底层下发含 industry(+detail) |
+| REQ-110 端点与联动 | `curl /api/industries` + `curl /api/dashboard/overview?industry=煤炭|银行` | 清单 31 项（未采集 0）；`全部=4601 / 煤炭=33 / 银行=42`，**5 档阶梯合计逐一同值**（100% 互斥闭环未破）；未知行业 → `unavailable` + 「不回退全市场」 |
+| 真机验证（headless Chrome + CDP，停用缓存防假绿） | `node tests/browser_r18_verify.js` | **22/23 PASS · 1 SKIP · 0 BUG · 0 DEP**（报告：`docs/verification/2026-10-05-r18/browser-report.json`）：行业列真机可见且**紧邻「板块」之后**（index=4/board=3）、40/40 行为真实值、DOM 文本与 `/api/filter` 同源一致（8/8 无差异）、排序降序首行=最大行业名；仪表盘 Tab 32 个（31+全部）、默认「全部」=4,601、切「煤炭」DOM=33=API=33、阶梯合计=33、切回 4,601；股东页个人 19,866 / 机构 16,904 / 合计 36,770、状态行「已采集 54552 条 / 5881 只」、个人 Tab 第 1/398 页共 19,866 个匹配姓名、控制台 0 错误 |
+| 全量 Python 回归 | `python3 -m unittest discover -s tests -p "test_*.py"` | **452 PASS（skipped 2）**（R17 基线 430 → 本批 +22，零回归） |
+| 前端静态套件 | `for f in tests/test_*.js; do node $f; done` + `node --check web/app.js` | **11/11 套 PASS**（`test_r15_pressure_filter.js` 38/38，其 A8 判据按发版口径同步升到 `v5.12.0-r18`）、语法 OK |
+| 运行期版本 | `curl -s http://127.0.0.1:8888/api/version` | `v5.12.0`（与 `config/version.json`、页面徽标三者同源；服务端已按新代码重启 PID 10906→89918） |
+| 首动改名 | `bash 全局规则/scripts/name_me.sh "[新需108][82] 股东行业仪表盘"` | **✅ 成功**：`./scripts/control.sh naming` 退出码 0 |
+
+> **本批如实登记的边界（不美化）**：
+> ① **行业来源为东方财富数据中心 `RPT_F10_BASIC_ORGINFO`，与其行情列表 `f100` 是两套口径**：本批落库的是 `BOARD_NAME_LEVEL` 拆级（一级 31 类 / 二级 248 类，二级与 `f100` 实测逐只一致）；若后续需要与行情页完全一致的口径，应改用 `f100`，但**本机 IP 当前被 push2 WAF 连接级拒绝**（`RemoteDisconnected`），需换网络/换时段再评估。
+> ② **行业采集是「快照式」跑批**，非实时：`industry_updated_at` 记录批次时间（本批 2026-10-05 06:42:12）；行业变更（IPO 新股、行业调整）需重跑 `python3 scripts/backfill_industries.py --run`，本批未接入自动定时任务。新股在下次跑批前显示「未采集」（**默认值口径，非缺陷**）。
+> ③ **股东披露缓存本身仍为 2026-09-20 期**（TTL 24h，故状态如实显示「缓存已过期」）：本批修的是**记忆化把真实数据覆盖成 0** 的缺陷，**不是**重新抓取；页面已提供「🔄 采集新披露」限次续采入口（每次 6 页，全量 1858 页需多次点击或走 CLI `--max-pages`）。真机验证**刻意未点击该按钮**（避免真实抓取与 WAF 口径），已显式登记为 SKIP，改由 11 例离线单测覆盖。
+> ④ **股东金额三项仍为「未获取」**：`total_holding_amount_yi` 等本就未实现计算，本批**未**补算（禁止估算填充）。
+> ⑤ **一键「全部」Tab 的高亮依赖 `/api/industries` 返回**：接口失败时 Tab 只剩「全部」并显示「行业清单获取失败」文案（不隐藏错误）。
+> ⑥ 真机报告 3 张截图**未取得**（`shots: []`）：本机 headless Chrome 148 的 `Page.captureScreenshot` 已知偶发挂起（R14 已登记同因），脚本按设计降级为不判红；所有判据均为 DOM/接口实测值。
+> ⑦ **产品库发生加列迁移**：`stocks_master` 新增 `industry` / `industry_detail` / `industry_updated_at` 三列（`ALTER TABLE ADD COLUMN`，非破坏），并写入 4,601 行真实行业值；迁移前已备份 `data/backups/stock_database.db.pre-r18-industry`（170,831,872 字节）。
+> ⑧ 本批**未改动**任何行情取值口径与既有压力线/缠论/日K逻辑；`tests/test_r15_pressure_filter.js` 仅同步「发版缓存串/徽标版本」两处硬编码断言（判据未放宽）。
+
+
+
+---
+
+## R19 批次（v5.13.0，2026-10-06）：股票列表行业筛选（与仪表盘同源）+ 行业PE分值列 + 前3大股东区间筛选（REQ-111~113）
+
+> 用户诉求（原话）：「1、股票列表中新增行业筛选项,这个筛选与仪表盘同; 2、股票列表中新增列行业PE分值,这个值根据行业对应的PE排位列出,1~100;1为PE最小,100为PE最大; 3、股票列表中新增筛选项前3大股东,可以输入最小值和最大值(单位%);筛选可以返回前3大股东占股比例在这最小值和最大值区间的股票;默认不限制;」
+> 规划稿：`docs/execution/R19-REQ111-113-需求简化文案.md`（先出简化文案，再实施；实施后已回填实施结果与边界）。
+> 任务命名：`[新需111][76] 列表行业股东筛选`（`name_me.sh` 退出码 0，前端任务栏 RPC 广播 + 权威存储双写落盘）。
+
+### R19 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-111 | 股票列表新增「行业」筛选（与仪表盘同源同口径） | ① 前端 `app.js::fetchIndustryIndex()` 为**唯一取数入口**（仪表盘行业 Tab 与列表筛选条共用），选项 = `GET /api/industries` 的 31 个已采集一级行业（按成分股数降序）+ 首项「全部」，默认「全部」；② 列表筛选条 `#industryFilterBar` 由该清单动态渲染（分段按钮条，与列表页既有「股市/板块」形态一致），`filterListIndustry()` 点击即重跑 `/api/filter`（不刷新页面），`resetSingleDimension('industry')` 单项重置；③ 服务端 `filter_stocks` 新增 `industry` 参数，按 `stocks_master.industry` **精确等值**过滤并与既有维度 **AND** 叠加；④ 行业名不存在/未采集 → `matched_count=0` 且 `stats.industry.note` 显式说明「不回退全市场」（禁止静默回退）；⑤ `/api/filter_schema` 增 `industry` 维度并标注 `options_url=/api/industries`（不在 schema 内硬编码选项，避免两套口径）。 | `[ACTIVE]` |
+| REQ-112 | 股票列表新增列「行业PE分值」（1~100） | ① 新增纯函数模块 `scripts/industry_pe_rank.py::compute_industry_pe_scores`（不落库、不触网）：同一**一级行业**内全部 `pe>0` 样本，`below` = PE 严格低于它的样本数（并列共享），`score = round(below/(n-1)*99)+1` → **行业最低 PE 恒为 1（并列同样为 1）**，唯一最高 PE = 100，最高并列时取不到 100（并列同分口径的必然结果，已在列头 tooltip 显式登记）；② `pe<=0`/缺失 → 分值 None（前端「未采集」），**不参与排位、不计入 n**（禁止把负 PE 当低估值）；③ **分母恒为全行业样本**，与筛选条件/分页/排序解耦（先筛后算会让同股分值漂移，属缺陷）；④ `filter_stocks` 在所有候选上富化 `industry_pe_score`/`industry_pe_rank`/`industry_pe_sample_size`/`industry_pe_peers_cheaper`/`industry_pe_industry`，并下发 `stats.industry_pe` 覆盖面；⑤ 前端新增列 `data-col="industry_pe_score"`（紧邻「市盈率 PE」之后、可排序），含老用户 `localStorage` 列序迁移。 | `[ACTIVE]` |
+| REQ-113 | 股票列表新增筛选「前3大股东合计持股(%)」区间（默认不限制） | ① `shareholder_engine.py::get_stock_top10_shareholders` 在既有十大股东披露快照（`holders:latest:v1`，54,552 行真实披露）上新增 `top3_pct` = 该股**最新一期** `rank ∈ {1,2,3}` 的 `hold_pct` 之和（2 位小数），**只要求 1~3 名齐全**（与 4~10 是否齐全无关），缺任一名/比例为空 → None（未采集；禁止用前两名冒充、禁止补 0、**不回退旧期**），并随行下发 `top3_report_date` 溯源；② `enrich_stock_holder_metrics` 富化 `top3_hold_pct`；③ `filter_stocks` 新增 `min_top3`/`max_top3`（**闭区间**；两端留空 = **不限制**，与不带该参数结果逐值相等；有界时「未采集」股一律不命中；`min>max` → HTTP 400 显式报错）；④ 前端新增区间输入（`minTop3Input`/`maxTop3Input`，hint 写明口径与「留空不限制」）与列 `data-col="top3_hold_pct"`（紧随「十大流通股东」之后、可排序）。 | `[ACTIVE]` |
+
+### R19 实施与验证证据（可复跑 · 2026-10-06 · v5.13.0）
+
+| 判据 | 命令/方法 | 实测结果 |
+| :--- | :--- | :--- |
+| REQ-111 同源同序 | 真机 `node tests/browser_r19_verify.js` | 筛选条 **32 按钮（31 行业 + 全部）**，与 `/api/industries` 逐项同名同序（DOM 前 3 = API 前 3 = 机械设备/基础化工/医药生物），默认 active = `all` |
+| REQ-111 过滤与联动 | `POST /api/filter {"industry":"煤炭"}` + `GET /api/industries` + `GET /api/dashboard/overview?industry=煤炭` | **33 = 33 = 33**（列表 DOM 行数 = filter matched_count = 仪表盘 matched_stocks）；筛选后「行业」列逐行 = 煤炭（无越界行）；切回「全部」= 4,601 / DOM 50（单页） |
+| REQ-111 未知行业 | `POST /api/filter {"industry":"不存在的行业"}` | `matched_count=0` + `stats.industry.note`「行业「不存在的行业」未采集或不存在，结果为空（不回退全市场）」 |
+| REQ-112 端点自证（含并列） | 全市场 4,601 行逐行业校验（真机脚本同源对拍 8 只） | 每个行业**最低 PE 恒为 1**（含并列：建筑装饰 2 只并列 PE=4.72 → 均 1 分）；唯一最高 PE = 100；`n` = 该行业 `pe>0` 只数（煤炭 22 ≠ 成分股 33）；PE 升序 → 分值单调非降；值域 ⊂ [1,100] |
+| REQ-112 锚点（2026-10-06 快照） | `POST /api/filter {"industry":"煤炭"}` | 中煤能源 PE 9.98 → **1**；新集能源 PE 12.02 → **6**；苏能股份 PE 155.38 → **100**；银行：华夏银行 3.98 → 1、中国银行 8.71 → 100 |
+| REQ-112 覆盖面与解耦 | `stats.industry_pe` + 同一股票跨筛选比对 | `scored_count=3,238 / uncollected_count=1,363 / total=4,601`；同一股票在「煤炭筛选」与「不筛选」下分值、样本数完全相等 |
+| REQ-113 聚合口径 | `python3 -m unittest tests.test_r19_top3_holder_filter` | 63.36 求和正确；仅 rank1~2 → None；最新一期不齐 → None（不回退旧期）；rank2 比例为空 → None；rank4~10 缺失不影响 top3（与 `total_pct` 口径独立） |
+| REQ-113 区间筛选 | `POST /api/filter {"min_top3":63.36,"max_top3":63.36}` / `{"max_top3":1000}` / `{"min_top3":0}` / `{"min_top3":80,"max_top3":20}` | 2 只（含贵州茅台 63.36%）；有界覆盖 **4,258**（= 前3大齐全只数）；「未采集」股在有界时**不命中**；`min>max` → **HTTP 400**「下限不能大于上限」；两端留空 = 与不带参数逐值相等 |
+| REQ-113 锚点 | `POST /api/filter {"max_top3":1000}` | 贵州茅台 **63.36**（2026-06-30）· 中国神华 **87.52** · 招商银行 **37.35** · 宁德时代 **50.03**（2026-08-05） |
+| 新增单测 | `python3 -m unittest tests.test_r19_industry_pe_score tests.test_r19_list_industry_filter tests.test_r19_top3_holder_filter` | **31 例 OK**（含离线夹具 `tests/r19_harness.py`：mock 掉数据基准/股东行为/富化，只判被判定逻辑本身） |
+| 全量 Python 回归 | `python3 -m unittest discover -s tests -p "test_*.py"` | **483 PASS（skipped 2）**（R18 基线 452 → 本批 +31，**零回归**） |
+| 前端静态套件 | `for f in tests/test_*.js; do node $f; done` + `node --check web/app.js` | **11/11 套 PASS**（`test_r15_pressure_filter.js` 38/38；A8 版本/缓存串判据按发版口径升到 `v5.13.0-r19`） |
+| 真机验证（headless Chrome + CDP，停用缓存防假绿） | `node tests/browser_r19_verify.js` | **19/20 PASS · 1 SKIP · 0 BUG · 0 DEP**（报告：`docs/verification/2026-10-06-r19/browser-report.json`） |
+| 运行期版本 | `curl -s http://127.0.0.1:8888/api/version` | `v5.13.0`（与 `config/version.json`、页面徽标三者同源；静态缓存串 `?v=5.13.0-r19`） |
+| 服务重启生效 | `kill $(cat .server.pid)` → watchdog 自愈 | 5s 内自愈并回报 `v5.13.0`（新 PID 写回 `.server.pid`） |
+
+> **本批如实登记的边界（不美化）**：
+> ① **「行业PE分值」随 PE 快照变化**：口径不变，但数值随每日行情快照刷新；文档锚点为 2026-10-06 快照（`stock_quotes.updated_at` 2026-09-19 批次）。
+> ② **最高 PE 并列时取不到 100**：并列同分口径的必然结果（n=22、2 只并列最高 → 95）；选择该口径的原因见规划稿 §2.2（平均位次会让**并列最低 PE 拿不到 1 分**，直接违背用户「1 为 PE 最小」硬要求）。
+> ③ **前3大股东 343 只（7.5%）为「未采集」**：来源最新一期仅披露 1~2 名（如 `sz000858` 仅 rank1~2），按口径如实标注且不参与筛选；可用既有「🔄 采集新披露」/CLI 续采补齐，不得用前两名冒充前三。
+> ④ **零数据库迁移**：本批不新增列/表、不新增采集源，全部为既有已落库数据的筛选/计算/展示；`data/stock_database.db` 未被本批写入（仅既有读写路径）。
+> ⑤ **`filter_stocks` 为共修改点**：三条需求都改该函数与 `app.js::collectFilterParams`（同一写域），实施时串行修改；已跑全量回归证明未破坏既有筛选维度。
+> ⑥ 界面形态裁定：列表行业筛选采用**分段按钮条**（与列表页既有「股市/板块」一致、与仪表盘 Tab 同源同序），未采用下拉框；如需下拉形态属纯 UI 变更，可另立微调。
+
+## R20 批次（v5.14.0，2026-10-07）：股东研究补齐十大股东/十大流通股东明细 + 财务四表全量科目 + 股东人数（REQ-114~116）
+
+> 用户诉求（原话）：「1、如图1,股东研究应该展示十大股东以及十大流通股东的列表,具体信息如果没有采集到就去东方财富或者同花顺抓取;交互参考图4; 2、如图2,财务分析的指标不够详细,参考同花顺的财务报表信息,要囊括到主要财务指标、资产负债表、利润表、现金流量表几个tab的所有信息中; 3、股东研究中,增加股东人数信息,参考图3;」
+> 规划稿：`docs/execution/R20-REQ114-116-需求简化文案.md`（先出简化文案，再实施；实施后已回填结果、裁定与边界）。
+> 任务命名：`[新需114][85] 股东财务指标补齐`（`name_me.sh` 退出码 0，前端任务栏 RPC 广播 + 权威存储双写落盘）。
+
+### R20 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-114 | 股东研究面板补齐「十大流通股东 / 十大股东」多期明细（交互对齐参考图4） | ① 新增 `scripts/data_sources/holder_detail_adapter.py::fetch_holder_detail(code, *, transport=None, max_periods=6)`：东财 F10 股东中心 `RPT_F10_EH_FREEHOLDERS`（流通）/ `RPT_F10_EH_HOLDERS`（股东），`filter=(SECURITY_CODE="<6位>")`、`sortColumns=END_DATE,HOLDER_RANK`、`sortTypes=-1,1`、`pageSize=500`，**一次调用恰好 2 个请求**；② 返回 `circ`/`total` 两视图，各含 6 期：`{period,total_pct,total_num,prev_period,delta_num,delta_pct,complete,rows[],exit_rows[]}`；**占比字段严格隔离**（流通用 `FREE_HOLDNUM_RATIO`、股东用 `HOLD_NUM_RATIO`）；`rows` 只取整数 rank1~10 升序，rank 不齐或任一占比为空 → `total_pct/total_num=None`（未采集，**禁止补行/补 0/用前几名冒充**）；`change_label` 三级优先（`HOLDER_STATE` > `HOLD_NUM_CHANGE` 中文串 > change_num 正负）；`exit_rows` = 上一期全量行中名称不在本期者，强制 `change_label='退出'`；③ `Top10ShareholdersEngine.get_stock_holder_detail(code, *, refresh=False, allow_fetch=True)` 落 `holders:stock:v1:<code>` 缓存（TTL 24h）；④ 新端点 `GET /api/stock/<code>/holder-detail`；⑤ 前端 `#paneShareholders` 新增两张卡（披露期 Tab 条 + 累计 banner「累计持有 X 股 · 累计占比 Y% · 较上期增减 Z」+ 6 列表体 + 「较上个报告期退出前十大…有」分组），`loadHolderPanels` 与股东人数**并发一次拉取**；⑥ **同期修复既有缺陷**：`detail_fastpath.ENRICH_KEYS` 补 `top10_circ_hold_pct` 且 `enrich_stock_holder_metrics` 回填（读 `stock_shareholders.top10_circ_hold_pct`，>0 才写、读不到保留原值），修掉图1「十大流通股东合计持股比例：未获取」。 | `[ACTIVE]` |
+| REQ-115 | 财务分析四 Tab 改「同花顺 F10 全量科目」口径 | ① 新增 `scripts/data_sources/finance_adapter.py::FinanceAdapter.get_financial_tabs(code, *, transport=None)`：`https://basic.10jqka.com.cn/api/stock/finance/{6位码}_{main\|debt\|benefit\|cash}.json`（实测**无需任何动态 token**），4 tab 各 1 请求（`max_retries=1`，无重试风暴），单 tab 失败只降级该 tab；② 解析 `flashData.{title,report,year,simple}`：`columns=rows[0]`（year 转字符串），`group = title[k][3] and not title[k][4]`（**实测修正**：`[3]=T&[4]=F` 才是纯分组标题行值全空占位，而 `[3]=T&[4]=T` 的「资产合计」等**带真实数值**，按裸 `[3]` 判定会丢 28 行真数据）；③ 值逐字保留（`"--"` 与 `"445.17亿"` 原样），`null/false/""` → `None`，科目名去前导 `*`；④ `company_finance_engine._attach_ths_tabs` 仅**追加** `tabs/period_key/ths_meta/tab_status` 与 `finance:v2:<code>:<period_type>` 缓存（available/partial 86400s、四 tab 全败按 REQ-107 惯例负缓存 300s），既有 15 个返回键与 `finance:v1:` 载荷**语义全不变**（东财 13 行口径保留为回退，`tabs` 缺失时前端自动回退）；⑤ 前端 `renderFinancialTabs` 优先渲染全量四表（分组行→`fin-category-header`、单位随行、缺失期「未提供」、来源徽标给出视图与各表科目数），`renderFinancialTables` 保留旧分支（零回归）；⑥ 财报请求改为**不阻塞主图渲染**（先发后落表）。 | `[ACTIVE]` |
+| REQ-116 | 股东研究新增「股东人数」（户数/股价走势 + 6 期指标 + 全市场增减量排名） | ① `ShareholderAdapter.get_holder_count_history(code, count=6, *, transport=None, use_cache=True)` **只增不改**：保留既有 5 键，新增 `change_num/avg_free_ratio/avg_hold_amount/price/notice_date`，落 `holdernum:v1:<code>`（TTL 24h），新增 `_OFFLINE` 哨兵（`allow_fetch=False` 只读缓存、**绝不触网**）；② 新增 `scripts/data_sources/holdernum_market.py`：`RPT_HOLDERNUMLATEST` 全市场最新户数快照（pageSize=500、≤15 页，实测 5,568 条/12 页）落 `holdernum:market:v1`（TTL 24h）；③ `HolderCountEngine.get_holder_count` 返回 `periods/series{holder_num,price}/metrics[9 字段]/industry_avg{sample_size,caliber}`，`series` 与 `periods` 严格同序等长、缺失保留 `None`（**绝不插值**）；行业平均为**本工程口径**（同一级行业 `stocks_master.industry` ∩ 市场快照 ∩ 排除自身与行业「未采集」的算术平均，`'未采集'` 不得当真实行业凑样本）；④ `HolderCountEngine.get_holder_count_rank(limit=20)` 与 `GET /api/holder-count/rank`：**排名键 = 户数变化量 `change_num`**（与 Tab 名「增减量」逐字对齐；实测按变化率排名会出现百万级伪极值，把真实增减量挤出榜单），`up` 降序 / `down` 升序、并列按代码稳定排序，剔除 `prev_holder_num` 为空或 ≤0 的无上期可比样本并下发 `excluded_no_prev`；⑤ 前端新增「股东人数」卡：双视图按钮（股东人数与股价比较 / 股东人数增减量排名）、柱=股东总户数 + 线=对应期股价的双轴 SVG（缺失即断点）、6 期指标表（股东总户数/较上期变化/行业平均(户,仅最新期)/人均流通股/人均流通变化/人均持股金额/股价）、排名两榜（股票/股东户数/较上期变化(户)/变化率）与口径标注；结论句为**纯描述**（禁止涨跌预测）。 | `[ACTIVE]` |
+
+### R20 实施与验证证据（可复跑 · 2026-10-07 · v5.14.0）
+
+| 判据 | 命令/方法 | 实测结果 |
+| :--- | :--- | :--- |
+| REQ-114 明细口径 | 真机 `Top10ShareholdersEngine.get_stock_holder_detail('sh600519', refresh=True)` | circ 6 期 / total 6 期，各 10 行；最新期累计 **67.62% / 67.63%**，与库内 `stock_shareholders`（`sh600519` = 67.62 / 67.63）**逐值一致**；退出分组 4 行 |
+| REQ-114 缺陷修复 | `curl /api/stock/sh600519` → `top10_circ_hold_pct` | **67.62**（修复前为 `null` → 前端「未获取」）；真机面板显示 `67.62%` |
+| REQ-115 全量科目 | `python3 -c "import scripts.data_sources.finance_adapter as m; d=m.FinanceAdapter.get_financial_tabs('sh600519'); print(d['status'], {k: len(v['views']['report']['rows']) for k,v in d['tabs'].items()})"` | `available`；**main 24 / balance 75 / income 46 / cash 71**（旧版合计 13 行、主要指标 2 行）；真机 DOM 逐表行数 24/75/46/71 与来源**逐表相等** |
+| REQ-115 分组与空值 | 真机 DOM | 分组头 balance **7** / income **3** / cash **9**（main 来源无分组行）；缺失期「未提供」25 处，**0 处补 0** |
+| REQ-116 户数/图表 | 真机 DOM vs 端点 | 6 期指标表 7 行 × 7 列；柱=股东总户数（296,404 起）、线=股价（6 点），`series.price` 缺失期不插值 |
+| REQ-116 行业平均 | `curl /api/stock/sh600519/holder-count` | `{'value': 50265, 'sample_size': 122, 'industry': '食品饮料', 'caliber': '同一级行业（stocks_master.industry）最新一期户数算术平均 · 样本=市场户数快照∩本地行业表'}`；**仅最新期列给值**，历史期显式「未采集」 |
+| REQ-116 排名 | `curl /api/holder-count/rank?limit=3` | `up`（按 change_num 降序）京东方A **+925,630** / 中天科技 +591,885 / 长电科技 +527,141；`down` 中国电信 **−761,418** / 惠科股份 −293,761 / 利欧股份 −255,175；`excluded_no_prev` 如实下发 |
+| 新增单测（Python） | `python3 -m unittest tests.test_r20_holder_detail tests.test_r20_holder_count tests.test_r20_finance_full` | **34 例 OK**（13 + 9 + 12），全部 `transport` 注入离线夹具、零触网 |
+| 全量 Python 回归 | `python3 -m unittest discover -s tests -p "test_*.py"` | **517 PASS（skipped 2）**（R19 基线 483 → +34，**零回归**） |
+| 前端静态套件 | `for f in tests/test_*.js; do node $f; done` + `node --check web/app.js` | **12/12 套 PASS**（新增 `test_r20_holder_panels.js` **44/44**） |
+| 真机验证（headless Chrome + CDP，停用缓存防假绿） | `node tests/browser_r20_verify.js` | **33/34 PASS · 1 SKIP · 0 BUG · 0 DEP**（报告 + 6 张面板截图：`docs/verification/2026-10-07-r20/`） |
+| 运行期版本 | `curl -s http://127.0.0.1:8888/api/version` | **v5.14.0**（与 `config/version.json`、页面徽标三者同源；静态缓存串 `?v=5.14.0-r20`） |
+| 服务重启生效 | `kill $(cat .server.pid)` → watchdog 自愈 | 8s 内自愈并回报 `v5.14.0`（新 PID 写回 `.server.pid`） |
+
+> **本批如实登记的边界（不美化）**：
+> ① **同花顺 F10 为新增来源**：工程 `docs/stockper_data_sources_survey.md` 的财报首选为东财三张表；本批依用户明确要求改以同花顺 F10 为主源（实测无 token 依赖），东财既有 13 行口径**保留为回退**，两源相互独立。
+> ② **首访未命中缓存时财报多花 4~8s**（4 tab 串行 + `safe_session` 防风控抖动；命中 5ms）；未改并发抓取以免触发风控，已在前端让财报请求不阻塞主图。
+> ③ **股东明细每表只取第 1 页（pageSize=500）**：`sh600519` 流通股东历史上共 940 行（2 页），故取到的是**最新 6 期**；更早历史期未采集。
+> ④ **两表报告期不一一对齐**（实测 total 多出 `2025-12-26`）：环比与退出差集按**各表自身**期序取相邻更早一期，未跨表对齐。
+> ⑤ **行业平均只有最新一期**（口径见 REQ-116）：历史期的行业均值需全市场逐期采集（`RPT_F10_EH_HOLDERNUM` 约 76.7 万行 / 1500+ 页），本批未做，历史期显式「未采集」；未做市值加权 / 中位数 / 剔除 ST 次新。
+> ⑥ **历史期「变动比例」多为「未采集」**：来源 `CHANGE_RATIO` 在「不变/新进」时为空，按红线不补 0。
+> ⑦ **`get_holder_count_rank` 的 `allow_fetch` 形参未生效**：恒只读缓存（避免新增批量触网路径）。
+> ⑧ **零数据库迁移**：不新增表/列，新采集全部走既有 `verified_source_cache`（`holders:stock:v1:` / `holdernum:v1:` / `holdernum:market:v1` / `finance:v2:`，24h TTL）。
+> ⑨ **界面形态**：股东明细沿用工程既有表格 + 分段期 Tab 形态（与图4 一致）；股东人数双轴图为**工程内手工 SVG**（不引第三方图表库）。
+
+## R21 批次（v5.15.0，2026-10-07）：列表「未获取」根因修复 + 真实来源补采 + 每页 15 条 + 股东人数四列（REQ-117~119）
+
+> 用户诉求（原话）：「1、如图,股票列表中很多未获取信息的项,解决这些问题,并告诉我为什么会出现未获取,如果没有对应信息的话,要怎么获取,帮我去获取; 2、股票列表中的股票,一页就最多显示15条记录,多的就翻页; 3、股票列表新增一列,股东人数(最近一次); 4、…(上一次); 5、…日期(最近一次); 6、…变化 = 最近 − 上一次，可正可负，没有就为空，默认空」
+> 规划稿：`docs/execution/R21-REQ117-119-需求简化文案.md`（先出简化文案，再实施；实施后已回填结果、裁定与边界）。
+> 任务命名：`[新需117][80] 列表补全股东户数`（`name_me.sh` 退出码 0，`./scripts/control.sh naming` ✅）。
+
+### R21 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-117 | 列表「未获取」分类处置 + 真实来源补采（含根因说明） | ① **根因定位（实测）**：(a) `scripts/verified_quotes.py::clean_legacy_stock` 对**整行 master** 无条件置空 9 个字段（REQ-012 防冒充的清理范围过宽），由 `stock_db.load_all_stocks_from_db` 调用 → 内存中真实值被清空，随后仅 `top10_hold_pct/top10_circ_hold_pct/report_date` 被 enrich 回填，故图1「只有十大流通股东/前3大股东有数、其余未获取」；(b) 库内 `ipo_date/listing_years/dividend_count/dividend_total_amount` 历史值来自**已停用的生成脚本**（`populate_dividend_total.py`＝「旧生成数据任务已停用」；旧版 `populate_db.get_fallback_ipo_and_dividend` 按代码段公式造数），实测反例 `sz002703` 库值 2018-09-12/7.3/6 ←→ 新浪真实 **2012-11-02/13.9/16**、`sh601390` 库值 2009-08-20/17.0/15 ←→ 真实 **2007-12-03/18.8/23**；(c) 商誉**无任何来源**（全仓仅两处置 None），且 `enrich_stock_holder_metrics` 无条件把 `goodwill/div_freq/div_to_cap_pct` 写 None。② **修复**：`clean_legacy_stock(row, keep_constituent=False, keep_master=False)` 新增 `keep_master`（只清行情类、保留底册基本面；默认行为逐字不变，`tests/test_r02_integrity.py` 原断言不动）；`stocks_master` 幂等增列 `dividend_source/dividend_verified_at/dividend_total_source/dividend_total_verified_at/goodwill/goodwill_source/goodwill_verified_at`，loader **只放行「来源∈白名单 且 核验时间非空」**的值（`VERIFIED_FUNDAMENTAL_SOURCES`），历史值标注 `legacy_generated` 后**不放行**（显示「未获取」）；`enrich_stock_holder_metrics` 不再覆盖真实值；`detail_fastpath.ENRICH_KEYS` 移出四键，消除「列表有值/详情未获取」双口径；前端 `goodwill_to_cap_pct` 渲染器在字段缺失且「商誉+总市值」齐备时就地算、否则显式「未获取」（不再 `Number(null\|\|0)`）。③ **真实来源补采**：新增 `scripts/backfill_master_fundamentals.py`——新浪 `vCI_CorpInfo`+`vISSUE_ShareBonus`（上市日期/时长/分红次数）、东财 `RPT_SHAREBONUS_DET`（累计分红总额＝Σ(每10股税前派现 × 总股本/10)，**仅计 `实施分配`**，防预案虚增）、同花顺 F10 单表 `get_balance_tab`（商誉，**1 请求/股**，不连带取四表）；逐股结果落 `verified_source_cache['master:fundamentals:v1:<code>']`（30 天，**续采零重取**）；`--limit/--offset/--only/--resume/--dry-run/--workers/--sleep` 分批与限流；明细落 `data/backfill_master_fundamentals.jsonl`。④ 同期修掉**连带死筛选**：`avg_daily_amount` / `profit_years` 由同一函数置空导致的两个前端筛选维度恒空（本批未接真实来源，如实登记为遗留项，见边界）。 | `[ACTIVE]` |
+| REQ-118 | 股票列表每页 15 条，超出翻页 | ① 服务端 `LIST_PAGE_SIZE = 15` 为 `/api/filter` 默认页大小（**显式传参仍生效**，保留 CLI/导出能力，不硬钳制）；`page_size<=0` / `page<=0` 显式报错（不静默当 0 页）。② 前端 `appState.pageSize: 50 → 15`；`web/index.html` 分页初始文案「1 - 50」→「1 - 15」。③ 分页控件与总页数计算复用既有实现（无第二套口径）。 | `[ACTIVE]` |
+| REQ-119 | 列表新增「股东人数(最近一次)/(上一次)/日期(最近一次)/变化」四列 | ① **口径**：来源＝东财 `RPT_HOLDERNUMLATEST` 全市场快照（与既有「股东人数」面板**同源**）——`holder_num_latest = HOLDER_NUM`（该标的**最新一期**，各标的期次不同）、`holder_num_prev = PRE_HOLDER_NUM`（来源自带上一期，非本工程回溯）、`holder_num_date = END_DATE`、`holder_num_change = 最新 − 上一次`（**可正可负**；无上期可比样本＝`None` → 前端渲染**空单元格**，不补 0、不写「未获取」）。② 服务端 `StockDataManager.attach_holder_counts(rows)`：**一次**读快照（`allow_fetch=False`，列表零触网）建 `code → row` 索引注入四键，并下发 `stats.holder_num`（`available/missing/comparable/change_mismatch_count/as_of/source/caliber`）；来源 `HOLDER_NUM_CHANGE` 与「相减」不一致时以相减为准并如实计数（`change_mismatch_count`）。③ 前端：`web/index.html` 新增 4 个可排序/可拖拽表头（置于「操作」之前）；`web/app.js` 新增 4 个渲染器（千分位、变化列 `+/-` 与红绿、空值留空）+ 默认 `columnOrder` 含四列 + **老用户 `localStorage` 列顺序自动补齐四列（绝不丢列）**；通用「null → 未获取」规则对 `holder_num_change` 豁免（否则空值会被误写成「未获取」）。④ 与既有面板一致性：同来源、同「相减」口径；列表＝最新期快照视图，详情＝6 期历史视图，页面各自标注口径。 | `[ACTIVE]` |
+
+### R21 实施与验证证据（可复跑 · 2026-10-07 · v5.15.0）
+
+| 判据 | 命令/方法 | 实测结果 |
+| :--- | :--- | :--- |
+| 真机·分页（REQ-118） | `node tests/browser_r21_verify.js` | 首屏 **15 行** · 分页「1 - 15」· 匹配 **4,601** 只 → **307 页**；`changePage(1)` 后第 2 页「16 - 30」仍 15 行，首行 `601398 → 601899`（真翻页） |
+| 真机·四列（REQ-119） | 同上（DOM ↔ `/api/filter` 逐值对读） | 4 个表头中文名逐字一致；**DOM 与 API 一致 15/15**（变化列自洽：有值/空值分类正确）；样本 `601398: 709,043 / +20,331`、`601939: 257,897 / −3,112`、`601288: 639,311 / −8,678` |
+| 真机·底册放行（REQ-117） | 同上 | `601398`：上市日期 **2006年10月27日**、**19.9 年**、**25 次**、累计分红 **¥16,358.80 亿**（真实来源口径）；同页未核验行仍显示「未获取」（采集中，不造 0.00） |
+| 真机·资源新鲜度 | 同上 | 脚本缓存串 `?v=5.15.0-r21` · 页面徽标 = `config/version.json` = `/api/version` = **v5.15.0**；**0 console error** |
+| 真机汇总 | `node tests/browser_r21_verify.js` | **18 PASS · 0 FAIL · 0 SKIP**（报告 + 3 张截图：`docs/verification/2026-10-07-r21/`） |
+| 锚点值（端点） | `curl -X POST /api/filter -d '{"keyword":"601390"}'` | `ipo_date=2007-12-03`（原库值 2009-08-20 为生成值）· `listing_years=18.8` · `dividend_count=23` · `dividend_total_amount=508.65` · `goodwill=13.46`；`sz002703 → 2012-11-02/13.9/16`（原库值 2018-09-12/7.3/6） |
+| 反例（生成值不得放行） | `SELECT ipo_date…` vs 端点 | 未打核验标记的行（`dividend_source='legacy_generated'`）在端点与页面上**一律「未获取」**，库内原值保留仅供审计 |
+| 新增单测（Python） | `python3 -m unittest tests.test_r21_list_fundamentals` | **17 例 OK**（默认置空不变 · keep_master 只保留底册 · 白名单放行/未知来源不放行 · 派生列 · legacy 标注幂等 · 四列口径与覆盖度 · 冷缓存不补 0 · 页大小默认/显式/非法 · 分红两维 bounds 生效且未核验不命中 · 补采解析/落库/缓存续采/dry-run/来源失败不写） |
+| 复活筛选维度（连带修复） | `POST /api/filter {"min_listing_years":20,"page":1,"page_size":3}` | `matched=660`（与「上市时长已核验只数 660」逐值相等，原为恒 0）；`min_dividend_count` / `min_dividend_total_amount` 由「静默忽略」改为真实生效 |
+| 新增前端套件 | `node tests/test_r21_list_holder_columns.js` | **23/23 PASS**（表头/文案/渲染器/豁免规则/迁移/服务端/沙箱取值/版本贯通） |
+| 全量 Python 回归 | `python3 -m unittest discover -s tests -p "test_*.py"` | **532 PASS（skipped 2）**（R20 基线 517 → 本批 +15，**零回归**） |
+| 前端静态套件 | `for f in tests/test_*.js; do node $f; done` + `node --check web/app.js` | **13/13 套 PASS**（`test_r15_pressure_filter.js` 38/38；A8 版本/缓存串判据按发版口径升到 `v5.15.0-r21`） |
+| 运行期版本 | `curl -s http://127.0.0.1:8888/api/version` | **v5.15.0**（与 `config/version.json`、页面徽标三者同源） |
+| 服务重启生效 | `kill $(cat .server.pid)` → watchdog 自愈 | 12s 内自愈并回报 `v5.15.0`（新 PID 写回 `.server.pid`） |
+| 补采执行（真实来源） | `python3 scripts/backfill_master_fundamentals.py --with-goodwill --workers 24 --sleep 0.02` | **全市场 4,601 只补采完成（483s）**：`written=11500` · 上市/分红核验 **4601/4601（100%）** · 累计分红核验 **4554/4601（99.0%）** · 商誉核验 **2345/4601（51.0%）** · 来源失败 27 只；逐股明细见 `data/backfill_master_fundamentals.jsonl`（可 `--resume` 续采，30 天缓存命中零重取） |
+| 未覆盖原因的实测归因 | `SELECT … WHERE dividend_total_verified_at=''` + 明细对读 | 累计分红缺口 **47 只**：来源**有**分红记录行但缺 `PRETAX_BONUS_RMB`/`TOTAL_SHARES`（如 `sz000526` 学大教育 2 行均 `rows_used=0`）或来源返回空（如 `sz301655` 2026-08-20 新上市）→ 按红线**不推算**，如实「未获取」；商誉缺口 2,256 只：资产负债表**无商誉科目行或值为 `--`** → 不写 0 |
+
+> **本批如实登记的边界（不美化）**：
+> ① **补采已完成但覆盖率不是 100%**：全市场 4,601 只 × 3 来源 ≈ 1.4 万请求，实测 **483s** 跑完（同花顺 `safe_session` 0.3~1.0s 全局节流是时长下限）；上市/分红 **100%**、累计分红 **99.0%**（缺口 47 只＝来源逐期缺派现/总股本字段或新上市无实施记录）、商誉 **51.0%**（缺口 2,256 只＝资产负债表无商誉科目或值 `--`）。**缺口一律显示「未获取」**，不推算、不补 0。
+> ② **严格只放行已核验值**：`stocks_master` 历史生成值不物理删除（保留审计），仅标注 `legacy_generated` 并由 SQL 层拦截；因此「库里有值 ≠ 页面有值」是本批的**设计行为**。
+> ③ **累计分红为工程自算口径**：Σ(每 10 股税前派现 × 总股本 ÷ 10)，仅计 `ASSIGN_PROGRESS='实施分配'`；可能少于公司公告口径（含特别分红/送转口径不同）。锚点：`sh601398` = **16,358.80 亿**（22 期实施 + 1 期未实施被剔除）。
+> ④ **商誉取最新期**：同花顺资产负债表首列（如 `2026-06-30`）；`--` 一律 None（不写 0）。
+> ⑤ **43 只标的不在全市场户数快照内**（名单见规划稿 §3.5）：四列如实「未采集」，属来源覆盖问题；可用既有单只接口按需续采，不承诺全市场历史补齐。
+> ⑥ **`avg_daily_amount`（日均交易额）/ `profit_years`（盈利时长）两个筛选维度仍恒空**：其值同样被 `clean_legacy_stock` 置空且无真实来源接入，本批**未做**（规划稿列为 P2）；前端控件未置灰，属**已知遗留**，后续单独接源。**另**：`分红次数` / `累计分红总额` 两个维度原先「已在 `/api/filter_schema` 声明、但 `bounds` 未登记」→ 传参被静默忽略；本批已随真实值放行**一并补登记**（未核验=None 在有界时不命中，末页文案口径不变）。
+> ⑦ **股东人数「上一次」＝来源自带 `PRE_HOLDER_NUM`**，不是本工程按季回溯；来源期为「该标的最新一期」，故同一页不同标的的日期可不同（页面逐列给出日期，不做统一对齐）。
+> ⑧ **列表四列零新增触网**：只读 24h 快照缓存（`holdernum:market:v1`），冷缓存时如实 `unavailable`，绝不为列表触发抓取。
+> ⑨ **新增采集均落既有 `verified_source_cache`**：`master:fundamentals:v1:<code>`（30 天）；不新增表、不改既有 TTL 口径。
+
+| REQ-126 | 日K点某交易日 → 左侧分时图切到该日分时（默认＝最近交易日） | ① **根因（实测）**：分时链路只有「当日」——`real_chart_engine.fetch_real_timeline` 固定打腾讯 `appstock/app/minute/query`，**实测 `&date=20260625` 被忽略**（仍回当日 `20260930`）；`detail_fastpath.cached_timeline` + `stock_timeline` 缓存与前端 `stock.timeline_data` 都只有单份「当日」。② **来源换轨**：新增 `fetch_real_timeline_history(code, max_days=5)` 走 `appstock/app/day/query` —— **恰好 1 次请求返回最近 5 个交易日**，每日自带 `date` 与 `prec`（昨收＝分时基准），字段与当日来源同构 ⇒ 抽公共 `_timeline_items()` 统一换算（区间量/额＝相邻累计差，`None` 不补 0）。③ **按日缓存**：`save_stock_timeline` 的 `trade_date` 改为**跟随来源日期**（旧实现写死 `now()`，会把历史分时错记成今天）；`load_stock_timeline` 支持 `trade_date=` 精确查询（历史日不做时效拦截）＋「最近一条」兜底（`updated_at` 的 TTL 仍是唯一新鲜度判据）；新增 `list_stock_timeline_dates()`。④ **新端点**：`GET /api/stock/<code>/timeline?date=YYYYMMDD`（省略 ⇒ 最近交易日，**默认语义与旧实现逐位一致**）；返回统一形状（`status/date/items/pre_close/cache/source_kind/available_dates/error`），默认分支也把日期归一为 `YYYY-MM-DD`。⑤ **前端**：在 K 线面板**既有** click 监听上叠加「按 `mouseX` 反算 bar → 取该根 `date`」（与十字光标同一公式 `floor((mouseX-left)/stepX)`；画线模式、拖拽结束、分时/分钟周期一律不触发）；分时图头新增**日期徽标**＋「↩ 最近交易日」还原；同名次重复点选走内存缓存（**零新增触网**）。⑥ **红线**：窗口外 / 停牌 / 未来 / 非法日期一律 `unavailable` + 中文原因 + 可用日期清单，**绝不以最近一日或 5 分K近似顶替**。 | `[ACTIVE]` |
+| REQ-127 | 股东「合计占比」不可能超过 100%：统一上界铁律 | ① **唯一判定源** 新增 `scripts/shareholder_ratio_guard.py`：单行 >100 / 负数 / **同名次取值冲突** / 合计越界四类，返回原因码 + `ratio_sum`（保留原始和供上游核查），**只拦截不修正**。② **接入双出口**：`holder_detail_adapter._build_period`（多期明细）与 `shareholder_engine`（全市场快照）非法 ⇒ `total_pct=None` + `total_pct_status/total_pct_detail`；`detail_fastpath.ENRICH_KEYS` 登记原因码键并**把 enrich 缓存键升 v3**（防旧坏值回放，REQ-114/117/125 同款「缓存假绿」防御）。③ **删除数据红线写法**：`anti_crawler.parse_shareholder_data` 的 `min(100.0, …)` 截断、`88.5 / 85.0` **常量兜底**，以及「十大股东↔十大流通股东互相顶替」的平滑补齐 —— 全部改为上界校验 + 按未采集处理。④ **前端**：`web/modules/util.js::assertPctDisplay` 统一渲染（合法 `xx.xx%`／非法 `数据异常` + 原因 tooltip／缺失 `未采集`），接入列表列、股东研究双格、多期累计 banner；**页面上不再出现非法数字**。⑤ **实测标定**：全市场快照 54,552 行、4,755 个 rank 齐全期中 **0 期 >100%**，最大 100.01%（`sz301716` 2026-09-08，来源逐行 2 位小数累计舍入）按口径异常拦截；另实测 549 个期含重复名次，其中 **548 个为合规并列**（同名次同行值）⇒ 据此把「并列」与「异常冲突」区分开，**避免把合法披露误标成未采集的自伤式回归**（本批自测抓出的口径修正）。 | `[ACTIVE]` |
+
+## R22 批次（v5.16.0，2026-10-07）：列表全量排序 + 应收账款/存货四列 + 股东三兄弟真值（REQ-120~125）
+
+> 用户诉求（原话）：「1、如图1,股票列表这里应该是所有列表进行的排序(当前问题是只有当前页面的排序)；2、股票列表新增列:应收账款(年),展示当年应收帐款；3、股票列表新增列:应收账款(上年)；4、存货(年)；5、存货(上年)；6、如图2,把未获取的数据获取并展示,如果无法获取说明原因」
+> 规划稿：`docs/execution/R22-REQ120-125-需求简化文案.md`（先出简化文案，再实施；实施后已回填结果、裁定与边界）
+> 任务命名：`[新需120][82] 全量排序应收存货`（`name_me.sh` 退出码 0，`./scripts/control.sh naming` ✅）
+
+### R22 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-120 | 列表排序＝**全量排序**（修复「只排当前页」） | ① **根因（实测）**：`web/app.js::sortTable` 只对 `appState.filteredStocks`（＝服务端已切片的 15 条）本地 `sort`；而服务端 `/api/filter` **全链路无排序参数**（`filter_stocks` 固定 `matched.sort(key=market_cap desc)` 后 `matched[start:end]` 切片，`stock_web_server.py:490/682`）→ 翻页即丢。② **修复**：`/api/filter` 新增 `sort_by`（白名单 `LIST_SORT_FIELDS`＝33 个字段，与 `web/index.html` 带 `handleHeaderSort` 的 `data-col` **逐字同名**，`tests/test_r22_list_sort_balance.py` 双向断言）与 `sort_dir`（`asc`/`desc`）；**非法字段/方向 → HTTP 400 显式报错**（不静默忽略，REQ-117 教训）；`sort_matched_rows()` 在**分页切片之前**对全量命中集排序，**缺失值（未获取）恒末位**、同值以 `code` 升序 tie-break（跨页不重不漏），不传参时**逐字保持旧行为**（市值降序，CLI/导出兼容）。③ **连带修复同一根因的另一面**：`enrich_actions`（增持/减持股东）与 `attach_holder_counts`（股东人数四列）原先**只对 `paged_data` 注入**，现上移到全量命中集（皆为一次快照读 + 内存查表，**零新增触网**），`stats.holder_num` 口径同步由「当前页」改为「全量命中集」。④ 前端 `sortTable` 改为：乐观当页重排（1 帧过渡）→ `appState.page=1` → `executeFilterByUser()` 走服务端全量排序；新增 `updateSortIndicators()` 同步 `⇅/↑/↓` 与 `aria-sort`；`collectFilterParams()` 下发 `sort_by/sort_dir`。⑤ 下发 `stats.sort`（口径、缺失末位、tie-break、白名单）供核验「排的是全量还是当页」。 | `[ACTIVE]` |
+| REQ-121 | 列表新增列「应收账款(年)」 | ① **来源**＝同花顺 F10 资产负债表（既有 `FinanceAdapter.get_balance_tab`，**1 请求/股**，与 REQ-117 商誉同表同请求）；行名**精确等值优先**（`应收账款`），仅当精确行缺失才退化为「应收票据及应收账款」合并行并 `merged=True` 标注。② 单位**亿元**、保留 2 位小数；复用 `_parse_amount_yi`（支持 `万亿/亿/万/元`，`--`→None）。③ 「当期」＝该股**最新报告期**（`views.report.columns[0]`，各股不同，逐格 tooltip 给出实际期次）。④ 取不到一律「未获取」+ **具体原因**（`no_such_item` 无该科目 / `no_value` 该期值为空 / `no_prev_period` 无上年同期 / `not_collected` 尚未采集 / `source_failed` 请求失败），**绝不补 0**。 | `[ACTIVE]` |
+| REQ-122 | 列表新增列「应收账款(上年)」 | 口径＝**上年同期**（`YYYY-1` + 同 `MM-DD`）；该列缺失时回退**上一年年报**（`YYYY-1-12-31`）；再缺 → `None` + `no_prev_period`。实测 `sh600519`：当期 `2026-06-30` → 上年取 `2025-06-30`。 | `[ACTIVE]` |
+| REQ-123 | 列表新增列「存货(年)」 | 同行「存货」（精确行名，排除 `跌价/减值/坏账` 类行）；其余口径同 REQ-121。 | `[ACTIVE]` |
+| REQ-124 | 列表新增列「存货(上年)」 | 同上「上年同期」回退规则。 | `[ACTIVE]` |
+| REQ-125 | 图2「新进/变动/退出股东」由恒「未获取」→ 真值 + 原因 | ① **根因（实测，三处硬编码 `None`）**：`shareholder_engine.get_stock_top10_shareholders()` 返回 `changes_summary={'new_count':None,...}`、`exit_holders=[]`；`enrich_stock_holder_metrics()` 又**无条件**把 `holder_new_count/holder_change_count/holder_exit_count` 写 None，而 `/api/filter` 对**每个候选**都调用它（`stock_web_server.py:458`）→ 全市场恒「未获取」。**反证**：同函数算出的「机构占比」有真值（图2 中国石油 96.48%）⇒ **不是没采，是没算**。② **新进/变动（零新增触网）**：既有全市场快照 `holders:latest:v1`（东财 `RPT_DMSK_HOLDERS`）实测 **54,552 行 / 5,881 只 / `complete=True`**，每行自带 `change_label`（新进 11,318 · 增加 9,029 · 减少 7,899 · 不变 26,306）→ 新进＝`新进` 计数、变动＝`增加+减少` 计数（**不含**新进/退出，与详情弹窗 `change` tab 同口径）。③ **退出（新通道）**：按定义不在最新期名单内，改由新增 `scripts/backfill_holder_changes.py` 走东财 F10 十大股东多期（`RPT_F10_EH_HOLDERS`）**复用 `holder_detail_adapter._build_period` 的差集实现**（唯一口径，不另写比较逻辑），逐股 1 请求、30 天缓存 `holders:exit:v1:<code>`、`--resume/--rebuild-from-cache/--limit/--offset/--dry-run`。④ **统一口径模块** `scripts/shareholder_changes.py`：合并落 `holders:changes:v1`，逐列下发**原因码** `ok/no_disclosure/pending/no_prev_period/unavailable/source_failed/partial`（**刻意把「尚未离线补采 pending」与「确实无上一期」分开**），列表接口只读缓存（`allow_fetch=False`，**零新增触网**）；`attach_changes()` 取代旧的无条件 None。⑤ `detail_fastpath.ENRICH_KEYS` 增加原因码/期次键并把缓存键升 `detail_enrich:v2`（防旧 `None` 回放覆盖真值，REQ-117 同款「缓存假绿」防御）。⑥ 前端三列渲染器：真值显示数字（0 ＝ 来源已披露的**真实 0**，与新进/变动「未获取」严格区分），缺值显示「未获取」+ 原因 tooltip（含报告期与上一期）。 | `[ACTIVE]` |
+
+### R22 实施与验证证据（可复跑 · 2026-10-07 · v5.16.0）
+
+| 判据 | 命令/方法 | 实测结果 |
+| :--- | :--- | :--- |
+| 真机·全量排序（REQ-120） | `node tests/browser_r22_verify.js` | 六列（`change_pct` 升 / `market_cap` / `holder_num_latest` / `holder_new_count` / `ar_current` / `inventory_current` 降）**真机点表头后 DOM 前 15 行与「全量排序 API」逐行一致**；「第 1 页首行 = **全市场**第 1 名」（`601398` / 29,510.44 亿，旧实现只排当页 15 行必失败）；全量 4,601 行单调降序；`sort_by=evil_field` → **HTTP 400** |
+| 真机·缺失末位（REQ-120） | 同上 | `sort_by=ar_current&desc` 全量展开：**有值 4,129 行全部在前、未获取 472 行全部在后**（末位恒成立） |
+| 真机·四列（REQ-121~124） | 同上（DOM ↔ `/api/filter` 逐值对读） | 4 个表头中文名逐字一致；**DOM 与 API 一致 60/60**；本页 32 格「未获取」**全部带原因 tooltip**（示例：`来源资产负债表无该科目（如金融业报表口径）`） |
+| 真机·三列（REQ-125） | 同上（DOM ↔ API 逐值对读，带重试） | 3 个表头中文名逐字一致；**一致 45/45**；本页 **15/15 行有真实数值**（图2 红框不再「全部未获取」）；`stats.holder_changes.exit_reasons={'ok':4601}`；页面 **0 console error** |
+| 真机汇总 | `node tests/browser_r22_verify.js` | **22 PASS · 0 FAIL · 0 SKIP**（报告：`docs/verification/2026-10-07-r22/browser-report.json`；**截图 4 张全为 `null`**——`Page.captureScreenshot` 在本机 headless 下挂起（R21 批次已登记的同一环境缺陷），故本批**不提供截图**、不以不存在的图片充当证据） |
+| 端点锚点·排序 | `POST /api/filter {"sort_by":"ar_current","sort_dir":"desc","page_size":5}` | 首行 `601668` = **4,596.01 亿**（全市场最大应收，非当页最大）；`stats.sort.scope=全量命中集（分页切片之前）` |
+| 端点锚点·四列 | `POST /api/filter {"keyword":"600519"}` | 茅台：应收 `0.0057` / `0.3796`（期次 `2026-06-30` → 上年 `2025-06-30`）、存货 `613.17` / `549.72`；`{"keyword":"601288"}` 农行：四列 `None` + 原因 **`no_such_item`**（金融业报表无该科目，不补 0） |
+| 端点锚点·三列 | `POST /api/filter {"keyword":"601288"}` | 农行：新进 **0** / 变动 **3** / 退出 **0**，状态 `ok`（0 是**来源已披露的真实 0**，与「未获取」严格区分）——图2 原样三格「未获取」已消失 |
+| 全市场补采·资产负债表（REQ-121~124） | `python3 scripts/backfill_master_fundamentals.py --with-balance --balance-only --workers 16` | **4,601 只全部落库**（`master:balance:v1:*` 4,601 条，主进程 **423s**；另两分片并行）：**应收当期有值 4,487（97.5%）· 应收上年 4,481 · 存货当期 4,441 · 存货上年 4,448 · 四值齐备 4,419（96.0%）**；原因如实分类：`no_such_item` 100/109（金融业无科目）· `no_value` 4/41（来源 `--`）· `no_prev_period` 7/11 · 未采到 10（来源失败）；同表顺带商誉核验 2,347 只（与 R21 的 2,345 同量级） |
+| 全市场补采·退出列（REQ-125） | `python3 scripts/backfill_holder_changes.py`（3 个不相交区间并行，8 并发/个）+ `--rebuild-from-cache` | 逐股缓存 `holders:exit:v1:*` **4,601/4,601**（100% 覆盖）；`holders:changes:v1` 退出列 **4,601 只全部有结论**；其中**退出 >0 的 3,532 只**、退出 = 0 的 1,069 只；新进 >0 的 3,672 只、变动 >0 的 4,265 只 |
+| 退出差集正确性（抽样交叉校验） | `collect_exit` vs F10 多期明细 | 锚点：`sh600519` 退出 **4** 家（中央汇金资管、华泰柏瑞沪深300ETF、上证50ETF…）；`sz000488` 退出 **7** 家（含金幸、陈洪国）；`sh601857`/`sh601288` 退出 **0** 家且 `prev_period` 非空（＝两期名单无差集，非「未获取」） |
+| 新增单测（Python） | `python3 -m unittest tests.test_r22_list_sort_balance tests.test_r22_shareholder_changes` | **53 例 OK**（排序白名单双向一致 / 非法字段与方向报错 / 全量 vs 当页 3 页拼接不重不漏 / 缺失末位双向 / code tie-break / 注入范围＝全量命中集 / 解析器精确行优先与合并行标注 / 万·亿单位 / 期次回退 / 无科目与 `--` 原因码 / 放行与拦截（未核验→NULL+原因）/ `no_such_item` 带原因下发 / dry-run 与来源失败不落库 / 老缓存无 balance 段必须重取 / 三列计数口径 / pending 与 no_prev_period 语义分离 / 前端文案与后端逐字同源 / 退出差集三例） |
+| 新增前端套件 | `node tests/test_r22_list_columns.js` | **30/30 PASS**（表头/DOM 渲染器/豁免表/列顺序与迁移/排序改服务端/指示器/原因文案同源/服务端白名单与切片顺序/stats 三块/vm 沙箱真实取值与渲染） |
+| 全量 Python 回归 | `python3 -m unittest discover -s tests -p "test_*.py"` | **587 PASS（skipped 2）**（R21 基线 534 → 本批 +53，**零回归**；首轮曾出现 1 例 `test_r10` 产品库哈希失败，经复核为**补采进程并发写库**所致，补采结束后复跑全绿） |
+| 前端静态套件 | `for f in tests/test_*.js; do node "$f"; done` + `node --check web/app.js` | **14/14 套 PASS**（`test_r21_list_holder_columns.js` 23/23 与 `test_r15_pressure_filter.js` 38/38 已按新版口径同步：注入范围改全量命中集、豁免表收敛为 `RENDERER_OWNED_COLUMNS`、版本串升 `v5.16.0-r22`） |
+| 运行期版本 | `curl -s http://127.0.0.1:8888/api/version` | **v5.16.0**（与 `config/version.json`、页面徽标、静态缓存串 `?v=5.16.0-r22` 四者同源） |
+| 服务重启生效 | `kill $(cat .server.pid)` → watchdog 自愈 | 14s 内自愈并回报 `v5.16.0`（新 PID 写回 `.server.pid`） |
+| 管控门禁 | `./scripts/control.sh naming` / `check` | 命名合规 `[新需120][82] 全量排序应收存货`；门禁 **G1~G7 全绿** |
+
+> **本批如实登记的边界（不美化）**：
+> ① **四列覆盖率不是 100%**：应收当期 97.5% / 上年 97.4% / 存货当期 96.5% / 上年 96.7% / 四值齐备 96.0%。缺口三类且**全部带原因码**：金融业报表**无该科目**（应收 100 只、存货 109 只，如 `sh601288` 农业银行 56 行无「应收账款/存货」）→ `no_such_item`；来源该期为 `--` → `no_value`；次新/某期未披露 → `no_prev_period`；来源请求失败 → `not_collected`（**不重试成 0**）。**红线：一律不补 0、不推算**。
+> ② **「(年)/(上年)」口径为本工程默认裁定**（规划稿 P0-1 备选未采纳）：`年`＝该股**最新报告期**（可为中报/季报，各股不同，逐格 tooltip 给出实际期次）、`上年`＝**上年同期**（缺则回退上一年年报 12-31）。若用户本意是「最新年报 vs 上一年年报」，只需替换 `_pick_prev_period` 的目标期次选择（口径集中在 `scripts/backfill_master_fundamentals.py` 一处）。
+> ③ **单位裁定**为亿元（与既有「商誉(亿)/总市值(亿)」同口径）；页面未提供元/万元切换。
+> ④ **三列的「期次」不同源**：新进/变动取东财 `RPT_DMSK_HOLDERS` **最新期**（来源自带变动标签），退出取东财 F10 `RPT_F10_EH_HOLDERS` **相邻两期差集**；两源都是「十大股东」口径，但个别标的的最新年报期不同（如 `sh601857` F10 最新期为 `2026-04-07`）。页面逐格给出 `holder_changes_period` 与 `prev_period`，**不做跨源强行对齐**（避免造出「看似同期」的假一致）。
+> ⑤ **退出名单随缓存下发但截断保留前 50 个**（`EXIT_NAMES_LIMIT`）：列表只展示**家数**，详情弹窗「退出股东」Tab 展示姓名（持股数/比例在该通道未取，显示为空而非 0）。
+> ⑥ **`pending` ≠ 「无上一期」**：载荷把「尚未离线补采」单列一个原因码；这是本批自测抓出的缺陷修复（首版把未补采直接写成 `no_prev_period`，导致页面说假话 + `--resume` 把「没跑过」当「跑过」永久跳过）。
+> ⑦ **分批并发覆盖缺陷已修**：首版 `--limit/--offset` 多进程并行时，最后收尾的进程用**自己的内存视图**重写整份 payload，把其它分片结果覆盖（实测三个分片 1600+1500+1500 全 ok，payload 只剩 1500）→ 现落盘前一律以**逐股缓存**合并（`load_cached_exits()`），并新增零触网 `--rebuild-from-cache` 修复命令（本次已用它把 4,601 只全量重建）。
+> ⑧ **四列暂不参与筛选维度**（`/api/filter_schema` 未新增 range bounds）：本批只做「展示 + 全量排序」，规划稿已声明；如需筛选须另立需求（含未核验=None 在有界时不命中的口径）。
+> ⑨ **本批未做（如实登记）**：`avg_daily_amount`（日均交易额）/ `profit_years`（盈利时长）两个 R21 遗留恒空维度仍恒空；退出列未做「历史多期退出趋势」（只给最近一期差集）。
+
+---
+
+## R23 批次（v5.17.0，2026-10-07）：日K点某交易日联动分时 + 股东占比 100% 上界铁律（REQ-126~127）
+
+> 用户诉求（原话）：「1、如图1,当从日k线图点击某天,例如 2026年6月25日,则左边的当日分时图展示对应当天的分时图;默认值是展示最近一天的；2、如图2,十大股东持股比例不可能超过100%的情况,解决这个问题」
+> 规划稿：`docs/execution/R23-REQ126-127-需求简化文案.md`（先出简化文案 + 取证；实施后已回填结果、裁定与边界）
+> 任务命名：`[新需126][88] 日K联动分时校验`（`name_me.sh` 全链路闭环；`./scripts/control.sh naming` ✅；门禁 **G1~G7 全绿**）
+
+### R23 需求条目
+
+见文末「结构化需求明细表」的 `REQ-126` / `REQ-127` 两行（本批共 2 条，接续 REQ-125）。
+
+### R23 实施与验证证据（可复跑 · 2026-10-07 · v5.17.0）
+
+| 项 | 命令 | 实测结果 |
+| :--- | :--- | :--- |
+| 历史分时来源（新） | `python3 -c "from scripts.real_chart_engine import fetch_real_timeline_history as f; print(f('sh601857')['available_dates'])"` | `['2026-09-30','2026-09-29','2026-09-28','2026-09-24','2026-09-23']`；最新日 242 点、`pre_close=11.12`（＝`app/day/query` 的 `prec`），首点 09:30 / 末点 15:00 |
+| 当日来源 `date` 参数无效（根因反证） | `curl '…/appstock/app/minute/query?code=sh600028&date=20260625'` | 仍回 `date=20260930` ⇒ 必须换 `app/day/query`，不能靠当日接口取历史 |
+| 按日缓存落库（5 行 trade_date 各不相同） | `python3 -m unittest tests.test_r23_timeline_trade_date` | **11 例 OK**（默认日语义不变 / 点选历史日 1 请求覆盖 5 日 / 5 行落库 / 二次点选零触网 / 窗口外带原因+可用清单 / 来源失败不冒充成功 / 未来与非法日期不触网） |
+| 占比上界判定（唯一源） | `python3 -m unittest tests.test_r23_ratio_guard` | **16 例 OK**（合法 92.26/96.48 / 恰好 100 合法 / 182.72 拦截且保留原始和 / 单行越界 / 负数 / 并列合法 / 冲突重复名次非法 / 判定器不改数） |
+| 前端静态（含 vm 沙箱真行为） | `node tests/test_r23_timeline_ratio_ui.js` | **21/21 PASS**（`assertPctDisplay` 六种输入真行为 + 接线/红线 + 点选接线与默认语义 + 后端形状同源） |
+| 真机接口回读 | `curl 'http://127.0.0.1:8888/api/stock/sh601857/timeline?date=20260928'` | `status=available · date=2026-09-28 · items=242 · cache=hit（第二次 1ms，首次 188ms）`；`date=20260101` ⇒ `unavailable` + 原因 + `available_dates`（6 项） |
+| 真机浏览器（headless CDP） | `node tests/browser_r23_verify.js` | **35/35 PASS · 0 FAIL · 0 SKIP**（报告与 4 张截图：`docs/verification/2026-10-07-r23/`）。含：默认＝最近交易日 2026-09-30（无还原按钮）↔ 点选 2026-09-29 后左图/徽标/点数/昨收全部一致，**独立交叉验证** pre_close 11.19 ＝ 2026-09-28 日K收盘；窗口外 2026-01-05 显示「未采集 + 原因 + 来源可用交易日」；注入 182.72 后**双格显示「数据异常」且页面 0 处出现该数字** |
+| 全市场占比扫描（真实快照） | 复算 `holders:latest:v1` 全部 rank 齐全期 | **4,755 期 · 非法 1 · >100% 1**（`sz301716` 2026-09-08 合计 100.01%，来源逐行 2 位小数累计舍入）· 其余最大值 **100.00%** |
+| 全量 Python 回归 | `python3 -m unittest discover -s tests -p "test_*.py"` | **614 PASS（skipped 2）**（R22 基线 612 → 本批 +27 例，**零回归**） |
+| 前端静态套件 | `for f in tests/test_*.js; do node $f; done` | **15/15 套 PASS**（`test_r15_pressure_filter.js` 38/38；A8 版本/缓存串判据按发版口径升到 `v5.17.0-r23`） |
+| 运行期版本 | `curl -s http://127.0.0.1:8888/api/version` | **v5.17.0**（与 `config/version.json`、页面徽标、静态缓存串 `?v=5.17.0-r23` 四者同源） |
+| 管控门禁 | `./scripts/control.sh naming` / `check` | 命名合规 `[新需126][88] 日K联动分时校验`；**G1~G7 全绿** |
+
+> **本批如实登记的边界（不美化）**：
+> ① **历史分时只有最近 5 个交易日**：来源 `appstock/app/day/query` 的能力边界，**不是实现取舍**。用户举例的「2026年6月25日」若已滑出窗口，页面只能如实给「未采集 + 原因 + 来源可用交易日清单」；要覆盖更早日期需另接来源（本批未做）。
+> ② **窗口外不做任何近似**：明确**不**用最近一日分时、也**不**用 5 分K拼接近似分时（页面文案已写明），符合工程「不伪造」底座。
+> ③ **点选交互只在日/周/季K生效**：分时维度与 5/15/30 分K没有"某一天"的语义；画线模式（点击＝放辅助线）与拖拽结束（`dragMoved`）刻意不触发选日，避免抢语义。
+> ④ **缓存形状统一**：`source_kind` 在缓存命中路径退化为 `intraday`（`stock_timeline` 未单独存来源标记，不新增列/迁移）；这不影响日期与取值正确性，仅来源标签在命中时不够精确，**如实登记**。
+> ⑤ **182.72% 的原始产出路径仍未复现**：本机四处出口（`stock_shareholders` 最大 84.8、快照复算最大 100.01、生产口 `sh601857` 96.48、东财 F10 多期 5 只全 ≤96.48）**都取不到 182.72** ⇒ 本批按「防御性止血 + 口径统一」交付（任何路径的 >100% 都走同一判定源），**不声称已修复某个具体上游根因**；待复现后再定点修复。
+> ⑥ **并列名次口径是实测标定**：`duplicate_rank` 只在「同名次多行取值不一致」时判非法（实测 1/549），避免把 548 个合法并列期误判成未采集（本批自测抓到的自伤式回归，已修）。
+> ⑦ **容差 0.005 为实测裁定**：只吸收浮点噪声（100.0000001 级）；`100.01%` 这类会显示成 >100% 的值按口径异常拦截（代价：1/4755 极小样本）。
+> ⑧ **本批未做（如实登记）**：历史分时更早窗口的来源、`top10` 占比的**上游口径**定点修复（未复现）、K线点选的高亮边框（规划稿 §3.2 第 5 项；现以日期徽标 + 数据联动表达选中，未画框）。
+
+---
+
+## R24 批次（v5.17.0 基础设施补丁，2026-10-08）：网页服务开机自启常驻响应（REQ-128）
+
+> 用户诉求（原话）：「1、如图1,重启电脑后,打开网页提示这个,修复这个问题,需要在每次打开网页都有响应;如果不行的话,就做一个单独启动的本地页面;」（图＝浏览器 `ERR_CONNECTION_REFUSED`）
+> 需求文案与实施记录：`docs/execution/R24-REQ128-需求简化文案.md`（先冻结简化文案与验收标准，再实施；已回填证据与边界）
+> 任务命名：`[新需128][85] 网页开机自启修复`（`name_me.sh` 全链路闭环 · `./scripts/control.sh naming` ✅）
+
+### R24 需求条目
+
+| 编号 | 需求名称 | 实现口径 | 状态 |
+| :--- | :--- | :--- | :--- |
+| REQ-128 | 重启电脑后打开网页必定有响应（开机自启）+ 双重兜底 | ① **根因（实测三条）**：(a) 缺的是「出生」不是「保活」——原 `scripts/ensure_server.sh` 与 `scripts/watchdog.py` 只覆盖进程被 kill，`~/Library/LaunchAgents` 无任何本项目条目，重启后两者一起消失（`watchdog.log` 末行「收到停止信号」＝关机被一起收走）；(b) **macOS TCC 保护 `~/Documents`**：launchd 直跑 `/bin/bash` 读工程脚本实测 `Operation not permitted` · `last exit code = 126`，脚本挪到 `~/Library` 亦同样被拒 ⇒ 拦截点是「读文稿目录」本身，纯 launchd 路线无 FDA 授权不可能成功；(c) **`.server.pid` 竞态**：旧实现「先写 PID 再 bind」＋失败路径无条件 `os.remove(PID_FILE)`，抢端口失败的重复实例会删掉**健康实例**的 PID 文件（`server.log` 实证：`已写入 .server.pid` 紧接 `[Errno 48]`，随后文件消失而 13464 仍在监听）。② **方案A（主选）**：新增 `scripts/install_autostart.sh`（`install/uninstall/status/print` 四入口，`print` 为零副作用打印入口，供测试与审计）注册**用户级** LaunchAgent `com.dsh.stock.web`（非默认端口自动加端口后缀 Label）；`RunAtLoad=true` 登录即拉起，`StartInterval=300` 兜底复查（秒级自愈仍由 watchdog 负责，`launchd` 只管出生与兜底）；**唯一启动口径**仍是 `ensure_server.sh`（幂等），绝不另起第二套 PID/端口语义。③ **绕开 TCC 的关键一环**：新增 `scripts/launchd_bootstrap.js`，plist 以 `ELECTRON_RUN_AS_NODE=1` 运行 DSH 应用本体（签名身份 `com.deepseek.dsh`，已有文稿授权，实测 `READ_DOCUMENTS=ok`）作家长进程，spawn `ensure_server.sh` 并**透传退出码**；另保留 `--legacy-bash` 纯 bash 模式（需一次性授予 `/bin/bash` 完全磁盘访问权限，`status` 对 126 显式告警）。④ `ensure_server.sh` 三处加固（只做加法）：解释器**绝对化** `PYTHON_BIN`（launchd 极简 PATH 下裸 `python3` 解析不到，本机解释器在 `~/miniconda3/bin`）、健康分支**同时校验看门狗**（缺席仅补位、不重启在途服务端）、`launchd.log` 纳入轮转。⑤ **连带修复 PID 竞态**：`cleanup_pid_file()` 增加**归属校验**（只删属于自己的 PID 文件）、`write_pid_file()` 移到**端口绑定成功之后**。⑥ **方案B（兜底，独立于自启）**：新增 `启动DSH股票网页.command`，访达双击即幂等拉起并打开浏览器，失败时当面给出中文原因 + `server.log` 尾部，**绝不留下 ERR_CONNECTION_REFUSED 白屏**。⑦ 红线：不改 8888 语义与 `/api/*` 契约，`start_server.sh` / `stop_server.sh` 口径零改动，仅绑 `127.0.0.1`（沿用 REQ-049）。 | `[ACTIVE]` |
+
+### R24 实施与验证证据（可复跑 · 2026-10-08 · v5.17.0 补丁）
+
+| 项 | 命令 | 实测结果 |
+| :--- | :--- | :--- |
+| **重启演练（决定性）** | 全停（`stop_server.sh` + 杀 watchdog，模拟关机）→ `launchctl bootout/bootstrap gui/$UID com.dsh.stock.web` | 停止后 `lsof -iTCP:8888` **监听数 0**（＝用户截图故障态，`curl /api/status` 无响应）；装载后 **6 秒自动就绪**，全程零手工启动 |
+| launchd 装载回读 | `launchctl print gui/$UID/com.dsh.stock.web` | `state = running` · `runs = 1` · `path` 指向 `~/Library/LaunchAgents/com.dsh.stock.web.plist` |
+| TCC 根因留痕（反面） | 纯 bash 模式 plist 实跑 | `launchd.log`：`getcwd: ... Operation not permitted` + `ensure_server.sh: Operation not permitted` · `last exit code = 126` |
+| TCC 反证探针 | launchd 内以 `ELECTRON_RUN_AS_NODE=1` 跑 DSH 应用本体读 `~/Documents` | `READ_DOCUMENTS=ok`（对照：脚本放 `~/Library`、工作目录 `/tmp` 时为 `fail`） |
+| 幂等 + 单实例 | 连续 3 次 `bash scripts/ensure_server.sh` | `lsof -nP -iTCP:8888 -sTCP:LISTEN` **恒 1 个**，PID 不变 |
+| 宕机自愈 | `kill -9 $(cat .server.pid)` | **约 6 秒**自动复活（新 PID；`watchdog.log` 累计 19 条自愈记录） |
+| 半死态补位（本批新增能力） | `kill -9 $(cat .watchdog.pid)` → `bash scripts/ensure_server.sh` | 打印「服务端健康但看门狗缺席，仅补位看门狗」→ 看门狗新 PID 存活，**服务端 PID 未被重启**（修复前此态永远无人复活） |
+| PID 竞态修复（连带） | 对已在监听的 8888 再起一个实例 | 重复实例 bind 失败退出，`.server.pid` **仍存在且值未变**（修复前被删除） |
+| 离线回归套件 | `python3 -m unittest tests.test_r24_autostart` | **24 OK / 2 skipped**（真机用例默认跳过；含 plist 真解析双模式、端口作用域 Label、零副作用、PID 归属行为真跑） |
+| 真机回归套件 | `DSH_STOCK_LIVE_TEST=1 python3 -m unittest tests.test_r24_autostart` | **26/26 OK**（8899 隔离端口，不碰 8888） |
+| 全量 Python 回归 | `python3 -m unittest discover -s tests -p "test_*.py"` | **Ran 640 tests · OK（skipped=4）**（R23 基线 614 → 本批 +26 例；新增 2 例真机用例默认跳过，零回归） |
+| 前端静态套件 | `for f in tests/test_*.js; do node $f; done` | **15/15 套 PASS**（版本贯通四项仍同源于 `v5.17.0`，本批未动前端载体） |
+| 方案B 入口 | `bash 启动DSH股票网页.command` | 幂等复用已运行服务端并打开 `http://127.0.0.1:8888`；失败路径输出中文原因 + 日志尾部 |
+| 运行期健康 | `curl -s http://127.0.0.1:8888/api/status` | `"status": "running"` · `version v5.17.0` · `pid` 与 `lsof` 监听 PID 一致 |
+| 管控门禁 | `./scripts/control.sh naming` / `check` | 命名合规 `[新需128][85] 网页开机自启修复`；**G1~G7 全绿** |
+
+> **本批如实登记的边界（不美化）**：
+> ① **electron 模式依赖 DSH 应用存在**（家长进程 `/Applications/DeepSeek Harness.app/...`）：该应用被删除/改名后 LaunchAgent 会启动失败，需改用 `install_autostart.sh install --legacy-bash` 并**一次性**授予 `/bin/bash` 完全磁盘访问权限，否则 TCC 必然 126（`status` 显式告警，不静默）。
+> ② **本批刻意不升产品版本号**：改动全在运维脚本层，前端徽标与静态缓存串仍为 `v5.17.0-r23`，与 `config/version.json` 严格同源 —— 不为一个后端补丁去改前端载体而制造「缓存假绿」；如需正式发版可另行升 `v5.18.0`。
+> ③ **`StartInterval=300` 是刻意的**：秒级自愈由 watchdog（2 秒探针）负责，launchd 只负责登录出生与两道防线全死时的兜底，避免每分钟拉起一次 Electron 进程的无谓开销。
+> ④ **方案B 首次双击可能弹一次系统授权**（「终端 想要访问"文稿"文件夹」→ 允许），属 macOS TCC 行为而非实现取舍；授权后长期有效。
+> ⑤ **未做（如实登记）**：把工程迁出 `~/Documents`（连带影响爬虫、数据库与既有运维口径，收益不抵风险）；`stop_server.sh` 在 PID 文件缺失时的显式提示（当前靠 `lsof` 兜底仍可正常停服）。

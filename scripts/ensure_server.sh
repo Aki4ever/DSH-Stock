@@ -34,6 +34,36 @@ WATCHDOG_LOG="${BASE_DIR}/watchdog.log"
 BIND_HOST="${DSH_STOCK_HOST:-127.0.0.1}"
 # 需求REQ-050: 日志按大小轮转（保留最近 3 份），避免单文件无限增长
 LOG_MAX_KB="${DSH_STOCK_LOG_MAX_KB:-5120}"
+LAUNCHD_LOG="${BASE_DIR}/launchd.log"
+
+# 需求REQ-128: 解释器必须绝对化。launchd 的 PATH 极简（/usr/bin:/bin:/usr/sbin:/sbin），
+# 而本机 python3 实际在 ~/miniconda3/bin —— 裸 `python3` 在 launchd 环境下解析不到，
+# 结果是"自启装上了但服务永远起不来"这种最隐蔽的失败。此处解析出绝对路径，
+# 后续所有 python3 调用（daemon_launch.py 与服务端/看门狗本体）一律走它。
+resolve_python() {
+  if [ -n "${DSH_STOCK_PYTHON:-}" ] && [ -x "${DSH_STOCK_PYTHON}" ]; then
+    printf '%s' "${DSH_STOCK_PYTHON}"
+    return 0
+  fi
+  local cand
+  for cand in "$(command -v python3 2>/dev/null || true)" \
+              "${HOME}/miniconda3/bin/python3" \
+              "${HOME}/anaconda3/bin/python3" \
+              /opt/homebrew/bin/python3 \
+              /usr/local/bin/python3 \
+              /usr/bin/python3; do
+    if [ -n "${cand}" ] && [ -x "${cand}" ]; then
+      printf '%s' "${cand}"
+      return 0
+    fi
+  done
+  return 1
+}
+PYTHON_BIN="$(resolve_python || true)"
+if [ -z "${PYTHON_BIN}" ]; then
+  echo "❌ 未找到可用的 python3（可用 DSH_STOCK_PYTHON=<绝对路径> 显式指定）"
+  exit 1
+fi
 
 rotate_log() {
   local file="$1"
@@ -55,9 +85,46 @@ probe_healthy() {
   curl -s --max-time 3 "${STATUS_URL}" | grep -q '"status": "running"'
 }
 
+# 看门狗存活判定（需求REQ-128：健康分支也必须校验它，否则"服务端在跑、看门狗死了"无人复活）
+watchdog_alive() {
+  local pid
+  pid="$(cat "${WATCHDOG_PID_FILE}" 2>/dev/null || true)"
+  if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+# 拉起看门狗（独立会话，脱离调用方进程组）
+start_watchdog() {
+  if watchdog_alive; then
+    echo "   已存在存活看门狗 (PID: $(cat "${WATCHDOG_PID_FILE}" 2>/dev/null))，跳过重复启动"
+    return 0
+  fi
+  rotate_log "${WATCHDOG_LOG}"
+  DSH_STOCK_PORT="${PORT}" DSH_PID_FILE="${PID_FILE}" DSH_WATCHDOG_PID_FILE="${WATCHDOG_PID_FILE}" \
+    "${PYTHON_BIN}" "${SCRIPT_DIR}/daemon_launch.py" "${WATCHDOG_LOG}" \
+    "${PYTHON_BIN}" -u "${SCRIPT_DIR}/watchdog.py" > /dev/null 2>&1 || true
+  sleep 2
+  if watchdog_alive; then
+    echo "🛡️ 看门狗已激活 (PID: $(cat "${WATCHDOG_PID_FILE}" 2>/dev/null))，进程掉线将自动自愈"
+    return 0
+  fi
+  echo "⚠️ 看门狗未确认存活，日志：${WATCHDOG_LOG}"
+  return 1
+}
+
 # 1. 已在健康运行：幂等返回
+#    需求REQ-128：launchd 每 60 秒调用本脚本一次，若只探服务端就 return，
+#    "服务端活着、看门狗死了"这种半死状态永远补不回来 —— 故健康分支必须连看门狗一起校验。
 if probe_healthy; then
-  echo "✅ 服务端已在健康运行，无需处理：${STATUS_URL}"
+  if watchdog_alive; then
+    echo "✅ 服务端已在健康运行，无需处理：${STATUS_URL}"
+    exit 0
+  fi
+  echo "⚠️  服务端健康但看门狗缺席，仅补位看门狗（不重启服务端，避免打断在途请求）..."
+  rotate_log "${LAUNCHD_LOG}"
+  start_watchdog || exit 1
   exit 0
 fi
 
@@ -87,9 +154,10 @@ fi
 # 3. 以独立会话拉起服务端（真实 PID 由服务端自己写入 .server.pid）
 rotate_log "${SERVER_LOG}"
 rotate_log "${WATCHDOG_LOG}"
+rotate_log "${LAUNCHD_LOG}"
 
-python3 "${SCRIPT_DIR}/daemon_launch.py" "${SERVER_LOG}" \
-  python3 -u "${SCRIPT_DIR}/stock_web_server.py" --port "${PORT}" --host "${BIND_HOST}" > /tmp/dsh_stock_launch.pid 2>&1 || true
+"${PYTHON_BIN}" "${SCRIPT_DIR}/daemon_launch.py" "${SERVER_LOG}" \
+  "${PYTHON_BIN}" -u "${SCRIPT_DIR}/stock_web_server.py" --port "${PORT}" --host "${BIND_HOST}" > /tmp/dsh_stock_launch.pid 2>&1 || true
 
 READY=0
 for _ in $(seq 1 24); do
@@ -105,22 +173,5 @@ fi
 echo "✅ 服务端已就绪 (PID: $(cat "${PID_FILE}" 2>/dev/null || echo 未知))，地址：http://127.0.0.1:${PORT}"
 
 # 4. 拉起看门狗（同样独立会话），负责后续 7x24 自愈
-if [ -f "${WATCHDOG_PID_FILE}" ]; then
-  OLD_WD="$(cat "${WATCHDOG_PID_FILE}" 2>/dev/null || true)"
-  if [ -n "${OLD_WD}" ] && kill -0 "${OLD_WD}" 2>/dev/null; then
-    echo "   已存在存活看门狗 (PID: ${OLD_WD})，跳过重复启动"
-    exit 0
-  fi
-fi
-
-DSH_STOCK_PORT="${PORT}" DSH_PID_FILE="${PID_FILE}" DSH_WATCHDOG_PID_FILE="${WATCHDOG_PID_FILE}" \
-  python3 "${SCRIPT_DIR}/daemon_launch.py" "${WATCHDOG_LOG}" \
-  python3 -u "${SCRIPT_DIR}/watchdog.py" > /dev/null 2>&1 || true
-sleep 2
-WD_PID="$(cat "${WATCHDOG_PID_FILE}" 2>/dev/null || true)"
-if [ -n "${WD_PID}" ] && kill -0 "${WD_PID}" 2>/dev/null; then
-  echo "🛡️ 看门狗已激活 (PID: ${WD_PID})，进程掉线将自动自愈"
-else
-  echo "⚠️ 看门狗未确认存活，日志：${WATCHDOG_LOG}"
-fi
+start_watchdog
 exit 0
