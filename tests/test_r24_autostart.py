@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -186,6 +187,41 @@ class TestPidFileOwnershipRace(unittest.TestCase):
         self.assertLess(i_bind, i_write, "write_pid_file() 必须晚于 ThreadingHTTPServer 构造")
 
 
+class TestWatchdogColdStartGrace(unittest.TestCase):
+    """
+    REQ-128 连带修复：看门狗冷启动宽限期。
+    终局验收实测到的抖动死循环：旧实现拉起服务端后只 sleep(1.5) 就交回主循环，
+    而主循环 2 秒一探、连续失败 2 次即重启 —— 本机冷启动需 5~10 秒（全量加载 4,601 只底册），
+    于是它**反复 SIGKILL 自己刚拉起的实例**（watchdog.log 实证 19450 → 19473，每个活不到 7 秒）。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.src = WATCHDOG.read_text(encoding="utf-8")
+
+    def test_grace_mechanism_present(self):
+        self.assertIn("SPAWN_GRACE_SECONDS", self.src)
+        self.assertIn("def child_starting()", self.src)
+        self.assertIn("def wait_ready(", self.src)
+        self.assertIn("elif child_starting():", self.src, "主循环必须在宽限期内跳过失败判定")
+
+    def test_old_fixed_sleep_removed(self):
+        self.assertNotIn("time.sleep(1.5)", self.src,
+                         "固定 1.5 秒就交回主循环＝抖动死循环的根因，必须移除")
+
+    def test_restart_waits_for_readiness(self):
+        i = self.src.index("def restart_server()")
+        self.assertIn("wait_ready(SPAWN_GRACE_SECONDS)", self.src[i:])
+
+    def test_grace_window_longer_than_probe_window(self):
+        import re
+        m = re.search(r"SPAWN_GRACE_SECONDS\s*=\s*([0-9.]+)", self.src)
+        self.assertIsNotNone(m, "必须能读到宽限期常量")
+        grace = float(m.group(1))
+        self.assertGreaterEqual(grace, 20.0,
+                                f"宽限期 {grace}s 必须显著长于「2s×2 次探测」窗口，否则仍会抖动")
+
+
 class TestPlistGeneration(unittest.TestCase):
     """plist 生成：真解析 + 关键键 + 端口作用域 + 零副作用（两种模式都验）。"""
 
@@ -315,6 +351,32 @@ class TestLiveAutostartOnIsolatedPort(unittest.TestCase):
                 os.kill(int(wd.read_text().strip()), 0)
             except (OSError, ValueError) as exc:
                 self.fail(f"看门狗进程不存在或 PID 非法：{exc}")
+        finally:
+            subprocess.run(["bash", str(STOP)], env=self.env, cwd=str(ROOT),
+                           capture_output=True, text=True, timeout=120)
+
+    def test_self_heal_without_thrash(self):
+        """kill -9 服务端后必须自愈，且恢复过程中出现过的服务端 PID 数 ≤ 2（防抖动死循环）。"""
+        try:
+            subprocess.run(["bash", str(ENSURE)], env=self.env, cwd=str(ROOT),
+                           capture_output=True, text=True, timeout=180)
+            pid_file = ROOT / f".server-{self.PORT}.pid"
+            self.assertTrue(pid_file.exists(), "健康实例必须写下 PID 文件")
+            old = pid_file.read_text().strip()
+            os.kill(int(old), 9)
+            seen = []
+            healed = False
+            for _ in range(90):                      # 最多 45 秒
+                time.sleep(0.5)
+                cur = pid_file.read_text().strip() if pid_file.exists() else ""
+                if cur and (not seen or seen[-1] != cur):
+                    seen.append(cur)
+                if cur and cur != old and self._healthy():
+                    healed = True
+                    break
+            self.assertTrue(healed, f"45 秒内未自愈（观察到的 PID 序列：{seen}）")
+            self.assertLessEqual(len(seen), 2,
+                                 f"抖动：恢复期间出现过多实例 {seen}（宽限期未生效）")
         finally:
             subprocess.run(["bash", str(STOP)], env=self.env, cwd=str(ROOT),
                            capture_output=True, text=True, timeout=120)

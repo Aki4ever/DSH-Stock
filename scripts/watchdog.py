@@ -67,7 +67,38 @@ def is_server_healthy() -> bool:
         pass
     return False
 
+# 需求REQ-128: 冷启动宽限期。
+# 实测根因（2026-10-08 终局验收抓到的抖动死循环）：旧实现拉起服务端后只 sleep(1.5)
+# 就交回主循环，而主循环 2 秒一探、连续失败 2 次即重启 —— 本机服务端要全量加载 SQLite
+# 底册（4,601 只）后才 bind，实测首次可服务约 5~10 秒，于是看门狗**反复 SIGKILL 自己
+# 刚刚拉起的实例**，watchdog.log 实证：19450 → 19473 … 每次存活不到 7 秒，服务永远起不来。
+# 修法：拉起后带**有界宽限期**等待就绪，且宽限期内既不判失败也不重启。
+SPAWN_GRACE_SECONDS = 30.0
+_last_proc = None
+_last_spawn_at = 0.0
+
+
+def child_starting() -> bool:
+    """是否处于"刚拉起、仍在冷启动"的宽限期内（此时绝不允许再杀、再拉）。"""
+    global _last_proc, _last_spawn_at
+    if _last_proc is None:
+        return False
+    if _last_proc.poll() is not None:      # 进程已退出 → 不是"在启动"，走正常失败/重启判定
+        return False
+    return (time.time() - _last_spawn_at) < SPAWN_GRACE_SECONDS
+
+
+def wait_ready(timeout: float = SPAWN_GRACE_SECONDS) -> bool:
+    """有界等待服务端就绪；期间响应停止信号。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline and not STOP_REQUESTED:
+        if is_server_healthy():
+            return True
+        time.sleep(0.5)
+    return is_server_healthy()
+
 def restart_server():
+    global _last_proc, _last_spawn_at
     log("⚠️ 探测到 Web 服务端未响应或进程退出，正在执行自动自愈重启...")
     # 1. 尝试清理残留进程或占用端口
     if os.path.exists(PID_FILE):
@@ -99,8 +130,16 @@ def restart_server():
     )
     with open(PID_FILE, "w") as f:
         f.write(str(proc.pid))
+    _last_proc = proc
+    _last_spawn_at = time.time()
     log(f"✅ 服务端已成功重新拉起 (新 PID: {proc.pid})，正在等待就绪...")
-    time.sleep(1.5)
+
+    # 3. 有界等待真正就绪（需求REQ-128：旧实现只 sleep(1.5) 就交回主循环 → 抖动死循环）
+    if wait_ready(SPAWN_GRACE_SECONDS):
+        log(f"✅ 服务端已在宽限期内就绪 (PID: {proc.pid}，用时 {time.time() - _last_spawn_at:.1f}s)")
+    else:
+        alive = proc.poll() is None
+        log(f"⚠️ 服务端在 {SPAWN_GRACE_SECONDS:.0f} 秒宽限期内未就绪（进程存活={alive}），交由下一轮判定")
 
 def main():
     signal.signal(signal.SIGINT, handle_exit)
@@ -117,6 +156,10 @@ def main():
         time.sleep(2.0)
         if is_server_healthy():
             consecutive_failures = 0
+        elif child_starting():
+            # 需求REQ-128: 冷启动宽限期内**不判失败、不重启** ——
+            # 旧实现在这里连续失败 2 次就 SIGKILL 掉自己刚拉起的实例（抖动死循环）。
+            continue
         else:
             consecutive_failures += 1
             log(f"⚠️ 健康探针未通过 (连续失败 {consecutive_failures} 次)")
